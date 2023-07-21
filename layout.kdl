@@ -1,0 +1,18 @@
+layout {
+  pane size=1 borderless=true {
+    plugin location="zellij:tab-bar"
+  }
+  pane split_direction="vertical" {
+    pane name="neo4j-gorm" focus=true size="60%"
+    pane split_direction="horizontal" {
+      pane name="test" cwd="internal/tests" command="gotestsum" size="65%" {
+        args "."
+      };
+      pane name="grammar" edit="cypher.ebnf"
+    }
+  }
+  pane size=1 borderless=true {
+    plugin location="zellij:status-bar"
+  }
+}
+

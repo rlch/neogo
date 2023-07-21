@@ -1,0 +1,731 @@
+package tests
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/rlch/neo4j-gorm/db"
+	"github.com/rlch/neo4j-gorm/internal"
+)
+
+func TestWhere(t *testing.T) {
+	t.Run("Basic usage", func(t *testing.T) {
+		t.Run("Node pattern predicates", func(t *testing.T) {
+			var b Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				With(db.Qual("30", "minAge")).
+				Match(
+					c.Node(db.Qual(Person{}, "a", db.Where(db.Cond("name", "=", "'Andy'")))).
+						To(Knows{}, db.Qual(&b, "b", db.Where(db.Cond("age", ">", "minAge")))),
+				).Find(&b.Name).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					WITH 30 AS minAge
+					MATCH (a:Person WHERE a.name = 'Andy')-[:KNOWS]->(b:Person WHERE b.age > minAge)
+					RETURN b.name
+					`,
+				Bindings: map[string]reflect.Value{
+					"b.name": reflect.ValueOf(&b.Name),
+				},
+			})
+
+			var names []string
+			c = internal.NewCypherClient()
+			cy, err = c.
+				Match(
+					c.Node(db.Qual(Person{}, "a", db.Props{"name": "'Andy'"})),
+				).
+				Find(db.Qual(&names, "[(a)-->(b WHERE b:Person) | b.name]", db.Name("friends"))).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (a:Person {name: 'Andy'})
+					RETURN [(a)-->(b WHERE b:Person) | b.name] AS friends
+					`,
+				Bindings: map[string]reflect.Value{
+					"friends": reflect.ValueOf(&names),
+				},
+			})
+		})
+
+		t.Run("Boolean operations", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(
+					db.Or(
+						db.Xor(
+							db.Cond(&n.Name, "=", "'Peter'"),
+							db.And(
+								db.Cond(&n.Age, "<", "30"),
+								db.Cond(&n.Name, "=", "'Timothy'"),
+							),
+						),
+						db.Not(db.Or(
+							db.Cond(&n.Name, "=", "'Timothy'"),
+							db.Cond(&n.Name, "=", "'Peter'"),
+						)),
+					),
+				).
+				Find(
+					db.Return(db.Qual(&n.Name, "name"), db.OrderBy("", true)),
+					db.Qual(&n.Age, "age"),
+				).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n:Person)
+					WHERE (n.name = 'Peter' XOR (n.age < 30 AND n.name = 'Timothy')) OR NOT (n.name = 'Timothy' OR n.name = 'Peter')
+					RETURN n.name AS name, n.age AS age
+					ORDER BY name
+					`,
+				Bindings: map[string]reflect.Value{
+					"name": reflect.ValueOf(&n.Name),
+					"age":  reflect.ValueOf(&n.Age),
+				},
+			})
+		})
+
+		t.Run("Filter on node label", func(t *testing.T) {
+			var (
+				name string
+				age  int
+			)
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node("n")).
+				Where(db.Expr("n:Swedish")).
+				Find(
+					db.Qual(&name, "n.name"),
+					db.Qual(&age, "n.age"),
+				).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n)
+					WHERE n:Swedish
+					RETURN n.name, n.age
+					`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&name),
+					"n.age":  reflect.ValueOf(&age),
+				},
+			})
+		})
+
+		t.Run("Filter on node property", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(db.Cond(&n.Age, "<", "30")).
+				Find(
+					&n.Name,
+					&n.Age,
+				).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n:Person)
+					WHERE n.age < 30
+					RETURN n.name, n.age
+					`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.age":  reflect.ValueOf(&n.Age),
+				},
+			})
+		})
+
+		t.Run("Filter on relationship property", func(t *testing.T) {
+			var (
+				name  string
+				age   int
+				email string
+			)
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(
+					c.Node(db.Qual(Person{}, "n")).
+						To(db.Qual(Knows{}, "k"), "f"),
+				).
+				Where(db.Cond("k.since", "<", "2000")).
+				Find(
+					db.Qual(&name, "f.name"),
+					db.Qual(&age, "f.age"),
+					db.Qual(&email, "f.email"),
+				).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n:Person)-[k:KNOWS]->(f)
+					WHERE k.since < 2000
+					RETURN f.name, f.age, f.email
+					`,
+				Bindings: map[string]reflect.Value{
+					"f.name":  reflect.ValueOf(&name),
+					"f.age":   reflect.ValueOf(&age),
+					"f.email": reflect.ValueOf(&email),
+				},
+			})
+		})
+
+		t.Run("Filter on dynamically-computed node property", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				With(db.Qual("'AGE'", "propname")).
+				Match(
+					c.Node(db.Qual(&n, "n")),
+				).
+				Where(db.Cond("n[toLower(propname)]", "<", "30")).
+				Find(
+					&n.Name,
+					&n.Age,
+				).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					WITH 'AGE' AS propname
+					MATCH (n:Person)
+					WHERE n[toLower(propname)] < 30
+					RETURN n.name, n.age
+					`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.age":  reflect.ValueOf(&n.Age),
+				},
+			})
+		})
+
+		t.Run("Property existence checking", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(
+					c.Node(db.Qual(&n, "n")),
+				).
+				Where(db.Cond(&n.Belt, "IS NOT", "NULL")).
+				Find(
+					&n.Name,
+					&n.Belt,
+				).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n:Person)
+					WHERE n.belt IS NOT NULL
+					RETURN n.name, n.belt
+					`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.belt": reflect.ValueOf(&n.Belt),
+				},
+			})
+		})
+
+		t.Run("Using WITH", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(
+					c.Node(db.Qual(&n, "n")),
+				).
+				With(db.With(
+					db.Qual(&n.Name, "name"),
+					db.Where(db.Cond(&n.Age, "=", "25")),
+				)).
+				Find(&n.Name).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n:Person)
+					WITH n.name AS name
+					WHERE n.age = 25
+					RETURN name
+					`,
+				Bindings: map[string]reflect.Value{
+					"name": reflect.ValueOf(&n.Name),
+				},
+			})
+		})
+	})
+
+	t.Run("String matching", func(t *testing.T) {
+		t.Run("Prefix string search using STARTS WITH", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(db.Cond(&n.Name, "STARTS WITH", "'Pet'")).
+				Find(&n.Name, &n.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n:Person)
+					WHERE n.name STARTS WITH 'Pet'
+					RETURN n.name, n.age
+					`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.age":  reflect.ValueOf(&n.Age),
+				},
+			})
+		})
+
+		t.Run("Suffix string search using ENDS WITH", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(db.Cond(&n.Name, "ENDS WITH", "'ter'")).
+				Find(&n.Name, &n.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n:Person)
+					WHERE n.name ENDS WITH 'ter'
+					RETURN n.name, n.age
+					`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.age":  reflect.ValueOf(&n.Age),
+				},
+			})
+		})
+
+		t.Run("Substring search using CONTAINS", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(db.Cond(&n.Name, "CONTAINS", "'ete'")).
+				Find(&n.Name, &n.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n:Person)
+					WHERE n.name CONTAINS 'ete'
+					RETURN n.name, n.age
+					`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.age":  reflect.ValueOf(&n.Age),
+				},
+			})
+		})
+
+		t.Run("String matching negation", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(db.Not(db.Cond(&n.Name, "ENDS WITH", "'y'"))).
+				Find(&n.Name, &n.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n:Person)
+					WHERE NOT n.name ENDS WITH 'y'
+					RETURN n.name, n.age
+					`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.age":  reflect.ValueOf(&n.Age),
+				},
+			})
+		})
+	})
+
+	t.Run("Regular expressions", func(t *testing.T) {
+		t.Run("Matching using regular expressions", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(db.Cond(&n.Name, "=~", "'Tim.*'")).
+				Find(&n.Name, &n.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n:Person)
+					WHERE n.name =~ 'Tim.*'
+					RETURN n.name, n.age
+					`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.age":  reflect.ValueOf(&n.Age),
+				},
+			})
+		})
+
+		t.Run("Escaping in regular expressions", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(db.Cond(&n.Email, "=~", "'.*\\\\.com'")).
+				Find(&n.Name, &n.Age, &n.Email).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n:Person)
+					WHERE n.email =~ '.*\\.com'
+					RETURN n.name, n.age, n.email
+					`,
+				Bindings: map[string]reflect.Value{
+					"n.name":  reflect.ValueOf(&n.Name),
+					"n.age":   reflect.ValueOf(&n.Age),
+					"n.email": reflect.ValueOf(&n.Email),
+				},
+			})
+		})
+
+		t.Run("Case-insensitive regular expressions", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(db.Cond(&n.Name, "=~", "'(?i)AND.*'")).
+				Find(&n.Name, &n.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH (n:Person)
+				WHERE n.name =~ '(?i)AND.*'
+				RETURN n.name, n.age
+				`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.age":  reflect.ValueOf(&n.Age),
+				},
+			})
+		})
+	})
+
+	t.Run("Using path patterns in WHERE", func(t *testing.T) {
+		t.Run("Filter on patterns", func(t *testing.T) {
+			var (
+				timothy Person
+				other   Person
+			)
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(
+					c.Paths(
+						c.Node(db.Qual(&timothy, "timothy", db.Props{"name": "'Timothy'"})),
+						c.Node(db.Qual(&other, "other")),
+					),
+				).
+				Where(db.And(
+					db.Cond(&other.Name, "IN", "['Andy', 'Peter']"),
+					c.Node(&other).To(nil, &timothy),
+				)).
+				Find(&other.Name, &other.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH
+				  (timothy:Person {name: 'Timothy'}),
+				  (other:Person)
+				WHERE other.name IN ['Andy', 'Peter'] AND (other)-->(timothy)
+				RETURN other.name, other.age
+				`,
+				Bindings: map[string]reflect.Value{
+					"other.name": reflect.ValueOf(&other.Name),
+					"other.age":  reflect.ValueOf(&other.Age),
+				},
+			})
+		})
+
+		t.Run("Filter on patterns using NOT", func(t *testing.T) {
+			var (
+				peter  Person
+				person Person
+			)
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(
+					c.Paths(
+						c.Node(db.Qual(&person, "person")),
+						c.Node(db.Qual(&peter, "peter", db.Props{"name": "'Peter'"})),
+					),
+				).
+				Where(db.Not(
+					c.Node(&person).To(nil, &peter),
+				)).
+				Find(&person.Name, &person.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH
+				  (person:Person),
+				  (peter:Person {name: 'Peter'})
+				WHERE NOT (person)-->(peter)
+				RETURN person.name, person.age
+				`,
+				Bindings: map[string]reflect.Value{
+					"person.name": reflect.ValueOf(&person.Name),
+					"person.age":  reflect.ValueOf(&person.Age),
+				},
+			})
+		})
+
+		t.Run("Filter on patterns with properties", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(
+					c.Node(&n).
+						Related(
+							Knows{},
+							db.Var(nil, db.Props{"name": "'Timothy'"}),
+						),
+				).
+				Find(&n.Name, &n.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH (n:Person)
+				WHERE (n)-[:KNOWS]-({name: 'Timothy'})
+				RETURN n.name, n.age
+				`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.age":  reflect.ValueOf(&n.Age),
+				},
+			})
+		})
+
+		t.Run("Filter on relationship type", func(t *testing.T) {
+			var (
+				n     Person
+				typeR string
+				since int
+			)
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(
+					c.Node(db.Qual(&n, "n")).
+						To("r", nil),
+				).
+				Where(
+					db.And(
+						db.Cond(&n.Name, "=", "'Andy'"),
+						db.Cond("type(r)", "=~", "'K.*'"),
+					),
+				).
+				Find(
+					db.Qual(&typeR, "type(r)"),
+					db.Qual(&since, "r.since"),
+				).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH (n:Person)-[r]->()
+				WHERE n.name = 'Andy' AND type(r) =~ 'K.*'
+				RETURN type(r), r.since
+				`,
+				Bindings: map[string]reflect.Value{
+					"type(r)": reflect.ValueOf(&typeR),
+					"r.since": reflect.ValueOf(&since),
+				},
+			})
+		})
+	})
+
+	t.Run("Lists", func(t *testing.T) {
+		t.Run("IN operator", func(t *testing.T) {
+			var a Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&a, "a"))).
+				Where(
+					db.Cond(&a.Name, "IN", "['Peter', 'Timothy']"),
+				).
+				Find(&a.Name, &a.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH (a:Person)
+				WHERE a.name IN ['Peter', 'Timothy']
+				RETURN a.name, a.age
+				`,
+				Bindings: map[string]reflect.Value{
+					"a.age":  reflect.ValueOf(&a.Age),
+					"a.name": reflect.ValueOf(&a.Name),
+				},
+			})
+		})
+	})
+
+	t.Run("Missing properties and values", func(t *testing.T) {
+		t.Run("Default to false if property is missing", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(
+					db.Cond(&n.Belt, "=", "'white'"),
+				).
+				Find(&n.Name, &n.Age, &n.Belt).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH (n:Person)
+				WHERE n.belt = 'white'
+				RETURN n.name, n.age, n.belt
+				`,
+				Bindings: map[string]reflect.Value{
+					"n.age":  reflect.ValueOf(&n.Age),
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.belt": reflect.ValueOf(&n.Belt),
+				},
+			})
+		})
+
+		t.Run("Default to true if property is missing", func(t *testing.T) {
+			var n Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&n, "n"))).
+				Where(
+					db.Or(
+						db.Cond(&n.Belt, "=", "'white'"),
+						db.Cond(&n.Belt, "IS", "NULL"),
+					),
+				).
+				Find(
+					db.Return(&n.Name, db.OrderBy("", true)),
+					&n.Age, &n.Belt,
+				).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH (n:Person)
+				WHERE n.belt = 'white' OR n.belt IS NULL
+				RETURN n.name, n.age, n.belt
+				ORDER BY n.name
+				`,
+				Bindings: map[string]reflect.Value{
+					"n.age":  reflect.ValueOf(&n.Age),
+					"n.name": reflect.ValueOf(&n.Name),
+					"n.belt": reflect.ValueOf(&n.Belt),
+				},
+			})
+		})
+
+		t.Run("Filter on null", func(t *testing.T) {
+			var person Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&person, "person"))).
+				Where(
+					db.And(
+						db.Cond(&person.Name, "=", "'Peter'"),
+						db.Cond(&person.Belt, "IS", "NULL"),
+					),
+				).
+				Find(&person.Name, &person.Age, &person.Belt).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH (person:Person)
+				WHERE person.name = 'Peter' AND person.belt IS NULL
+				RETURN person.name, person.age, person.belt
+				`,
+				Bindings: map[string]reflect.Value{
+					"person.age":  reflect.ValueOf(&person.Age),
+					"person.name": reflect.ValueOf(&person.Name),
+					"person.belt": reflect.ValueOf(&person.Belt),
+				},
+			})
+		})
+	})
+
+	t.Run("Using ranges", func(t *testing.T) {
+		t.Run("Simple range", func(t *testing.T) {
+			var a Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&a, "a"))).
+				Where(
+					db.Cond(&a.Name, ">=", "'Peter'"),
+				).
+				Find(&a.Name, &a.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH (a:Person)
+				WHERE a.name >= 'Peter'
+				RETURN a.name, a.age
+				`,
+				Bindings: map[string]reflect.Value{
+					"a.age":  reflect.ValueOf(&a.Age),
+					"a.name": reflect.ValueOf(&a.Name),
+				},
+			})
+		})
+
+		t.Run("Composite range", func(t *testing.T) {
+			var a Person
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(c.Node(db.Qual(&a, "a"))).
+				Where(
+					db.And(
+						db.Cond(&a.Name, ">", "'Andy'"),
+						db.Cond(&a.Name, "<", "'Timothy'"),
+					),
+				).
+				Find(&a.Name, &a.Age).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH (a:Person)
+				WHERE a.name > 'Andy' AND a.name < 'Timothy'
+				RETURN a.name, a.age
+				`,
+				Bindings: map[string]reflect.Value{
+					"a.age":  reflect.ValueOf(&a.Age),
+					"a.name": reflect.ValueOf(&a.Name),
+				},
+			})
+		})
+	})
+
+	t.Run("Pattern element predicates", func(t *testing.T) {
+		t.Run("Relationship pattern predicates", func(t *testing.T) {
+			var (
+				a Person
+				r Knows
+			)
+			c := internal.NewCypherClient()
+			cy, err := c.
+				With(db.Qual("2000", "minYear")).
+				Match(
+					c.Node(db.Qual(&a, "a")).
+						To(
+							db.Qual(&r, "r", db.Where(db.Cond("since", "<", "minYear"))),
+							db.Qual(Person{}, "b"),
+						),
+				).
+				Find(&r.Since).Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				WITH 2000 AS minYear
+				MATCH (a:Person)-[r:KNOWS WHERE r.since < minYear]->(b:Person)
+				RETURN r.since
+				`,
+				Bindings: map[string]reflect.Value{
+					"r.since": reflect.ValueOf(&r.Since),
+				},
+			})
+		})
+	})
+}
