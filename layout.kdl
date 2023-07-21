@@ -1,0 +1,18 @@
+layout {
+  pane size=1 borderless=true {
+    plugin location="zellij:tab-bar"
+  }
+  pane split_direction="vertical" {
+    pane name="neogo" focus=true size="60%"
+    pane split_direction="horizontal" {
+      pane name="test" command="gotestsum" size="65%" {
+        args "./..." "-skip" "TestIntegration"
+      };
+      pane name="grammar" edit="cypher.ebnf"
+    }
+  }
+  pane size=1 borderless=true {
+    plugin location="zellij:status-bar"
+  }
+}
+

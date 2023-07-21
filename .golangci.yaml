@@ -1,0 +1,15 @@
+linters:
+  enable:
+    # Defaults
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    # Extras
+    - containedctx
+    - wastedassign
+run:
+  modules-download-mode: vendor
