@@ -6,21 +6,17 @@ import (
 
 type Client interface {
 	reader
-	updater
-
-	Node(match any) Path
-	Paths(nodes ...Path) Patterns
+	updater[querier]
 }
 
-type Path interface {
+type Pattern interface {
 	Patterns
-	// A path can be used in a WHERE condition
 	ICondition
 
 	node() *node
-	Related(edgeMatch, nodeMatch any) Path
-	From(edgeMatch, nodeMatch any) Path
-	To(edgeMatch, nodeMatch any) Path
+	Related(edgeMatch, nodeMatch any) Pattern
+	From(edgeMatch, nodeMatch any) Pattern
+	To(edgeMatch, nodeMatch any) Pattern
 }
 
 type Patterns interface {
@@ -58,18 +54,20 @@ type reader interface {
 type querier interface {
 	reader
 	runner
-	updater
+	updater[querier]
 
+	Subquery(subquery runner) querier
 	Where(opts ...WhereOption) querier
-	Find(matches ...any) runner
+	Return(matches ...any) runner
 }
 
-type updater interface {
-	Subquery(subquery runner) querier
-	Create(paths ...Path) querier
-	Merge(payload any) querier
-	Update(payload any) querier
-	Delete(paths ...Path) querier
+type updater[To any] interface {
+	Create(patterns Patterns) To
+	Merge(payload any) To
+	Delete(variables ...any) To
+	Set(items ...SetItem) To
+	Remove(items ...RemoveItem) To
+	ForEach(entity, inList any, do func(c updater[any])) To
 }
 
 type runner interface {

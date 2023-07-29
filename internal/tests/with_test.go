@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rlch/neo4j-gorm/db"
-	"github.com/rlch/neo4j-gorm/internal"
+	"github.com/rlch/neogo/db"
+	"github.com/rlch/neogo/internal"
 )
 
 func TestWith(t *testing.T) {
@@ -14,12 +14,12 @@ func TestWith(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Match(
-				c.Node(db.Var("george", db.Props{"name": "'George'"})).
+				db.Node(db.Var("george", db.Props{"name": "'George'"})).
 					From(nil, "otherPerson"),
 			).
 			With("otherPerson", db.Qual(db.Expr("toUpper(otherPerson.name)"), "upperCaseName")).
 			Where(db.Cond("upperCaseName", "STARTS WITH", "'C'")).
-			Find(db.Qual(&otherPersonName, "otherPerson.name")).Compile()
+			Return(db.Qual(&otherPersonName, "otherPerson.name")).Compile()
 
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
@@ -42,9 +42,9 @@ func TestWith(t *testing.T) {
 		)
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node("person").To("r", "otherPerson")).
+			Match(db.Node("person").To("r", "otherPerson")).
 			With("*", db.Qual("type(r)", "connectionType")).
-			Find(
+			Return(
 				db.Qual(&personName, "person.name"),
 				db.Qual(&otherPersonName, "otherPerson.name"),
 				db.Qual(&connectionType, "connectionType"),
@@ -70,12 +70,12 @@ func TestWith(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Match(
-				c.Node(db.Var("david", db.Props{"name": "'David'"})).
+				db.Node(db.Var("david", db.Props{"name": "'David'"})).
 					Related(nil, "otherPerson").To(nil, nil),
 			).
 			With("otherPerson", db.Qual("count(*)", "foaf")).
 			Where(db.Cond("foaf", ">", "1")).
-			Find(
+			Return(
 				db.Qual(&otherPersonName, "otherPerson.name"),
 			).Compile()
 
@@ -97,11 +97,11 @@ func TestWith(t *testing.T) {
 
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node("n")).
+			Match(db.Node("n")).
 			With(
 				db.With("n", db.OrderBy("name", false), db.Limit("3")),
 			).
-			Find(
+			Return(
 				db.Qual(names, "collect(n.name)"),
 			).Compile()
 
@@ -125,14 +125,14 @@ func TestWith(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Match(
-				c.Node(db.Var("n", db.Props{"name": "'Anders'"})).
+				db.Node(db.Var("n", db.Props{"name": "'Anders'"})).
 					Related(nil, "m"),
 			).
 			With(
 				db.With("m", db.OrderBy("name", false), db.Limit("1")),
 			).
-			Match(c.Node("m").Related(nil, "o")).
-			Find(
+			Match(db.Node("m").Related(nil, "o")).
+			Return(
 				db.Qual(names, "o.name"),
 			).Compile()
 
@@ -157,7 +157,7 @@ func TestWith(t *testing.T) {
 		cy, err := c.
 			Unwind("[1, 2, 3, 4, 5, 6]", "x").
 			With(db.With("x", db.Limit("5"), db.Where(db.Cond(db.Expr("x"), ">", "2")))).
-			Find(db.Bind("x", &x)).Compile()
+			Return(db.Bind("x", &x)).Compile()
 
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `

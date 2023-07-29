@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rlch/neo4j-gorm/db"
-	"github.com/rlch/neo4j-gorm/internal"
+	"github.com/rlch/neogo/db"
+	"github.com/rlch/neogo/internal"
 )
 
 func TestWhere(t *testing.T) {
@@ -16,9 +16,9 @@ func TestWhere(t *testing.T) {
 			cy, err := c.
 				With(db.Qual("30", "minAge")).
 				Match(
-					c.Node(db.Qual(Person{}, "a", db.Where(db.Cond("name", "=", "'Andy'")))).
+					db.Node(db.Qual(Person{}, "a", db.Where(db.Cond("name", "=", "'Andy'")))).
 						To(Knows{}, db.Qual(&b, "b", db.Where(db.Cond("age", ">", "minAge")))),
-				).Find(&b.Name).Compile()
+				).Return(&b.Name).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -35,9 +35,9 @@ func TestWhere(t *testing.T) {
 			c = internal.NewCypherClient()
 			cy, err = c.
 				Match(
-					c.Node(db.Qual(Person{}, "a", db.Props{"name": "'Andy'"})),
+					db.Node(db.Qual(Person{}, "a", db.Props{"name": "'Andy'"})),
 				).
-				Find(db.Qual(&names, "[(a)-->(b WHERE b:Person) | b.name]", db.Name("friends"))).Compile()
+				Return(db.Qual(&names, "[(a)-->(b WHERE b:Person) | b.name]", db.Name("friends"))).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -54,7 +54,7 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(
 					db.Or(
 						db.Xor(
@@ -70,7 +70,7 @@ func TestWhere(t *testing.T) {
 						)),
 					),
 				).
-				Find(
+				Return(
 					db.Return(db.Qual(&n.Name, "name"), db.OrderBy("", true)),
 					db.Qual(&n.Age, "age"),
 				).Compile()
@@ -96,9 +96,9 @@ func TestWhere(t *testing.T) {
 			)
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node("n")).
+				Match(db.Node("n")).
 				Where(db.Expr("n:Swedish")).
-				Find(
+				Return(
 					db.Qual(&name, "n.name"),
 					db.Qual(&age, "n.age"),
 				).Compile()
@@ -120,9 +120,9 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Age, "<", "30")).
-				Find(
+				Return(
 					&n.Name,
 					&n.Age,
 				).Compile()
@@ -149,11 +149,11 @@ func TestWhere(t *testing.T) {
 			c := internal.NewCypherClient()
 			cy, err := c.
 				Match(
-					c.Node(db.Qual(Person{}, "n")).
+					db.Node(db.Qual(Person{}, "n")).
 						To(db.Qual(Knows{}, "k"), "f"),
 				).
 				Where(db.Cond("k.since", "<", "2000")).
-				Find(
+				Return(
 					db.Qual(&name, "f.name"),
 					db.Qual(&age, "f.age"),
 					db.Qual(&email, "f.email"),
@@ -179,10 +179,10 @@ func TestWhere(t *testing.T) {
 			cy, err := c.
 				With(db.Qual("'AGE'", "propname")).
 				Match(
-					c.Node(db.Qual(&n, "n")),
+					db.Node(db.Qual(&n, "n")),
 				).
 				Where(db.Cond("n[toLower(propname)]", "<", "30")).
-				Find(
+				Return(
 					&n.Name,
 					&n.Age,
 				).Compile()
@@ -206,10 +206,10 @@ func TestWhere(t *testing.T) {
 			c := internal.NewCypherClient()
 			cy, err := c.
 				Match(
-					c.Node(db.Qual(&n, "n")),
+					db.Node(db.Qual(&n, "n")),
 				).
 				Where(db.Cond(&n.Belt, "IS NOT", "NULL")).
-				Find(
+				Return(
 					&n.Name,
 					&n.Belt,
 				).Compile()
@@ -232,13 +232,13 @@ func TestWhere(t *testing.T) {
 			c := internal.NewCypherClient()
 			cy, err := c.
 				Match(
-					c.Node(db.Qual(&n, "n")),
+					db.Node(db.Qual(&n, "n")),
 				).
 				With(db.With(
 					db.Qual(&n.Name, "name"),
 					db.Where(db.Cond(&n.Age, "=", "25")),
 				)).
-				Find(&n.Name).Compile()
+				Return(&n.Name).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -259,9 +259,9 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Name, "STARTS WITH", "'Pet'")).
-				Find(&n.Name, &n.Age).Compile()
+				Return(&n.Name, &n.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -280,9 +280,9 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Name, "ENDS WITH", "'ter'")).
-				Find(&n.Name, &n.Age).Compile()
+				Return(&n.Name, &n.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -301,9 +301,9 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Name, "CONTAINS", "'ete'")).
-				Find(&n.Name, &n.Age).Compile()
+				Return(&n.Name, &n.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -322,9 +322,9 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Not(db.Cond(&n.Name, "ENDS WITH", "'y'"))).
-				Find(&n.Name, &n.Age).Compile()
+				Return(&n.Name, &n.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -345,9 +345,9 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Name, "=~", "'Tim.*'")).
-				Find(&n.Name, &n.Age).Compile()
+				Return(&n.Name, &n.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -366,9 +366,9 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Email, "=~", "'.*\\\\.com'")).
-				Find(&n.Name, &n.Age, &n.Email).Compile()
+				Return(&n.Name, &n.Age, &n.Email).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -388,9 +388,9 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Name, "=~", "'(?i)AND.*'")).
-				Find(&n.Name, &n.Age).Compile()
+				Return(&n.Name, &n.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -415,16 +415,16 @@ func TestWhere(t *testing.T) {
 			c := internal.NewCypherClient()
 			cy, err := c.
 				Match(
-					c.Paths(
-						c.Node(db.Qual(&timothy, "timothy", db.Props{"name": "'Timothy'"})),
-						c.Node(db.Qual(&other, "other")),
+					db.Patterns(
+						db.Node(db.Qual(&timothy, "timothy", db.Props{"name": "'Timothy'"})),
+						db.Node(db.Qual(&other, "other")),
 					),
 				).
 				Where(db.And(
 					db.Cond(&other.Name, "IN", "['Andy', 'Peter']"),
-					c.Node(&other).To(nil, &timothy),
+					db.Node(&other).To(nil, &timothy),
 				)).
-				Find(&other.Name, &other.Age).Compile()
+				Return(&other.Name, &other.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -449,15 +449,15 @@ func TestWhere(t *testing.T) {
 			c := internal.NewCypherClient()
 			cy, err := c.
 				Match(
-					c.Paths(
-						c.Node(db.Qual(&person, "person")),
-						c.Node(db.Qual(&peter, "peter", db.Props{"name": "'Peter'"})),
+					db.Patterns(
+						db.Node(db.Qual(&person, "person")),
+						db.Node(db.Qual(&peter, "peter", db.Props{"name": "'Peter'"})),
 					),
 				).
 				Where(db.Not(
-					c.Node(&person).To(nil, &peter),
+					db.Node(&person).To(nil, &peter),
 				)).
-				Find(&person.Name, &person.Age).Compile()
+				Return(&person.Name, &person.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -478,15 +478,14 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(
-					c.Node(&n).
-						Related(
-							Knows{},
-							db.Var(nil, db.Props{"name": "'Timothy'"}),
-						),
+					db.Node(&n).Related(
+						Knows{},
+						db.Var(nil, db.Props{"name": "'Timothy'"}),
+					),
 				).
-				Find(&n.Name, &n.Age).Compile()
+				Return(&n.Name, &n.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -510,7 +509,7 @@ func TestWhere(t *testing.T) {
 			c := internal.NewCypherClient()
 			cy, err := c.
 				Match(
-					c.Node(db.Qual(&n, "n")).
+					db.Node(db.Qual(&n, "n")).
 						To("r", nil),
 				).
 				Where(
@@ -519,7 +518,7 @@ func TestWhere(t *testing.T) {
 						db.Cond("type(r)", "=~", "'K.*'"),
 					),
 				).
-				Find(
+				Return(
 					db.Qual(&typeR, "type(r)"),
 					db.Qual(&since, "r.since"),
 				).Compile()
@@ -543,11 +542,11 @@ func TestWhere(t *testing.T) {
 			var a Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&a, "a"))).
+				Match(db.Node(db.Qual(&a, "a"))).
 				Where(
 					db.Cond(&a.Name, "IN", "['Peter', 'Timothy']"),
 				).
-				Find(&a.Name, &a.Age).Compile()
+				Return(&a.Name, &a.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -568,11 +567,11 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(
 					db.Cond(&n.Belt, "=", "'white'"),
 				).
-				Find(&n.Name, &n.Age, &n.Belt).Compile()
+				Return(&n.Name, &n.Age, &n.Belt).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -592,14 +591,14 @@ func TestWhere(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&n, "n"))).
+				Match(db.Node(db.Qual(&n, "n"))).
 				Where(
 					db.Or(
 						db.Cond(&n.Belt, "=", "'white'"),
 						db.Cond(&n.Belt, "IS", "NULL"),
 					),
 				).
-				Find(
+				Return(
 					db.Return(&n.Name, db.OrderBy("", true)),
 					&n.Age, &n.Belt,
 				).Compile()
@@ -623,14 +622,14 @@ func TestWhere(t *testing.T) {
 			var person Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&person, "person"))).
+				Match(db.Node(db.Qual(&person, "person"))).
 				Where(
 					db.And(
 						db.Cond(&person.Name, "=", "'Peter'"),
 						db.Cond(&person.Belt, "IS", "NULL"),
 					),
 				).
-				Find(&person.Name, &person.Age, &person.Belt).Compile()
+				Return(&person.Name, &person.Age, &person.Belt).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -652,11 +651,11 @@ func TestWhere(t *testing.T) {
 			var a Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&a, "a"))).
+				Match(db.Node(db.Qual(&a, "a"))).
 				Where(
 					db.Cond(&a.Name, ">=", "'Peter'"),
 				).
-				Find(&a.Name, &a.Age).Compile()
+				Return(&a.Name, &a.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -675,14 +674,14 @@ func TestWhere(t *testing.T) {
 			var a Person
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(db.Qual(&a, "a"))).
+				Match(db.Node(db.Qual(&a, "a"))).
 				Where(
 					db.And(
 						db.Cond(&a.Name, ">", "'Andy'"),
 						db.Cond(&a.Name, "<", "'Timothy'"),
 					),
 				).
-				Find(&a.Name, &a.Age).Compile()
+				Return(&a.Name, &a.Age).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -708,13 +707,13 @@ func TestWhere(t *testing.T) {
 			cy, err := c.
 				With(db.Qual("2000", "minYear")).
 				Match(
-					c.Node(db.Qual(&a, "a")).
+					db.Node(db.Qual(&a, "a")).
 						To(
 							db.Qual(&r, "r", db.Where(db.Cond("since", "<", "minYear"))),
 							db.Qual(Person{}, "b"),
 						),
 				).
-				Find(&r.Since).Compile()
+				Return(&r.Since).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `

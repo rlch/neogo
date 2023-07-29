@@ -1,4 +1,4 @@
-package neo4jgorm
+package neogo
 
 import _ "github.com/sanity-io/litter"
 

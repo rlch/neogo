@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rlch/neo4j-gorm/db"
-	"github.com/rlch/neo4j-gorm/internal"
+	"github.com/rlch/neogo/db"
+	"github.com/rlch/neogo/internal"
 )
 
 func TestLimit(t *testing.T) {
@@ -13,8 +13,8 @@ func TestLimit(t *testing.T) {
 		var name string
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node("n")).
-			Find(
+			Match(db.Node("n")).
+			Return(
 				db.Return(db.Qual(&name, "n.name"), db.OrderBy("", true), db.Limit("3")),
 			).
 			Compile()
@@ -36,8 +36,8 @@ func TestLimit(t *testing.T) {
 		var name string
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node("n")).
-			Find(
+			Match(db.Node("n")).
+			Return(
 				db.Return(
 					db.Qual(&name, "n.name"),
 					db.OrderBy("", true),
@@ -63,8 +63,8 @@ func TestLimit(t *testing.T) {
 		var name string
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node("n")).
-			Find(
+			Match(db.Node("n")).
+			Return(
 				db.Return(db.Qual(&name, "n.name"), db.OrderBy("", true), db.Limit("3")),
 			).
 			Compile()

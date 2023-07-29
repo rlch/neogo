@@ -4,9 +4,9 @@ import (
 	"reflect"
 	"testing"
 
-	neo4jgorm "github.com/rlch/neo4j-gorm"
-	"github.com/rlch/neo4j-gorm/db"
-	"github.com/rlch/neo4j-gorm/internal"
+	neogo "github.com/rlch/neogo"
+	"github.com/rlch/neogo/db"
+	"github.com/rlch/neogo/internal"
 )
 
 func TestCreate(t *testing.T) {
@@ -14,7 +14,7 @@ func TestCreate(t *testing.T) {
 		t.Run("Create single node", func(t *testing.T) {
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Create(c.Node("n")).
+				Create(db.Node("n")).
 				Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
@@ -28,9 +28,9 @@ func TestCreate(t *testing.T) {
 			c := internal.NewCypherClient()
 			cy, err := c.
 				Create(
-					c.Paths(
-						c.Node("n"),
-						c.Node("m"),
+					db.Patterns(
+						db.Node("n"),
+						db.Node("m"),
 					),
 				).
 				Compile()
@@ -47,7 +47,7 @@ func TestCreate(t *testing.T) {
 		t.Run("Create a node with a label", func(t *testing.T) {
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Create(c.Node(db.Qual(Person{}, "n"))).
+				Create(db.Node(db.Qual(Person{}, "n"))).
 				Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
@@ -63,7 +63,7 @@ func TestCreate(t *testing.T) {
 				Person `neo4j:"Swedish"`
 			}
 			cy, err := c.
-				Create(c.Node(db.Qual(SwedishPerson{}, "n"))).
+				Create(db.Node(db.Qual(SwedishPerson{}, "n"))).
 				Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
@@ -77,10 +77,10 @@ func TestCreate(t *testing.T) {
 			c := internal.NewCypherClient()
 			var name string
 			cy, err := c.
-				Create(c.Node(db.Var("a", db.Props{
+				Create(db.Node(db.Var("a", db.Props{
 					"name": "'Andy'",
 				}))).
-				Find(db.Qual(&name, "a.name")).
+				Return(db.Qual(&name, "a.name")).
 				Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
@@ -104,12 +104,12 @@ func TestCreate(t *testing.T) {
 				typeR string
 			)
 			type Reltype struct {
-				neo4jgorm.Relationship `neo4j:"RELTYPE"`
+				neogo.Relationship `neo4j:"RELTYPE"`
 			}
 			cy, err := c.
-				Match(c.Paths(
-					c.Node(db.Qual(&a, "a")),
-					c.Node(db.Qual(&b, "b")),
+				Match(db.Patterns(
+					db.Node(db.Qual(&a, "a")),
+					db.Node(db.Qual(&b, "b")),
 				)).
 				Where(
 					db.And(
@@ -118,9 +118,9 @@ func TestCreate(t *testing.T) {
 					),
 				).
 				Create(
-					c.Node(&a).To(db.Qual(Reltype{}, "r"), &b),
+					db.Node(&a).To(db.Qual(Reltype{}, "r"), &b),
 				).
-				Find(db.Qual(&typeR, "type(r)")).
+				Return(db.Qual(&typeR, "type(r)")).
 				Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
@@ -141,7 +141,7 @@ func TestCreate(t *testing.T) {
 		t.Run("Create a relationship and set properties", func(t *testing.T) {
 			c := internal.NewCypherClient()
 			type Reltype struct {
-				neo4jgorm.Relationship `neo4j:"RELTYPE"`
+				neogo.Relationship `neo4j:"RELTYPE"`
 
 				Name string `json:"name"`
 			}
@@ -152,9 +152,9 @@ func TestCreate(t *testing.T) {
 				typeR string
 			)
 			cy, err := c.
-				Match(c.Paths(
-					c.Node(db.Qual(&a, "a")),
-					c.Node(db.Qual(&b, "b")),
+				Match(db.Patterns(
+					db.Node(db.Qual(&a, "a")),
+					db.Node(db.Qual(&b, "b")),
 				)).
 				Where(
 					db.And(
@@ -163,14 +163,14 @@ func TestCreate(t *testing.T) {
 					),
 				).
 				Create(
-					c.Node(&a).To(
+					db.Node(&a).To(
 						db.Qual(&r, "r", db.Props{
 							&r.Name: "a.name + '<->' + b.name",
 						}),
 						&b,
 					),
 				).
-				Find(
+				Return(
 					db.Qual(&typeR, "type(r)"),
 					&r.Name,
 				).
@@ -188,6 +188,87 @@ func TestCreate(t *testing.T) {
 				Bindings: map[string]reflect.Value{
 					"type(r)": reflect.ValueOf(&typeR),
 					"r.name":  reflect.ValueOf(&r.Name),
+				},
+			})
+		})
+
+		t.Run("Create a full path", func(t *testing.T) {
+			c := internal.NewCypherClient()
+			var p any
+			cy, err := c.
+				Create(db.Path(
+					db.Node(db.Var(Person{}, db.Props{"name": "'Andy'"})).
+						To(WorksAt{}, db.Var(Company{}, db.Props{"name": "'Neo4j'"})).
+						From(WorksAt{}, db.Var(Person{}, db.Props{"name": "'Michael'"})),
+					"p",
+				)).
+				Return(db.Qual(&p, "p")).
+				Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					CREATE p = (:Person {name: 'Andy'})-[:WORKS_AT]->(:Company {name: 'Neo4j'})<-[:WORKS_AT]-(:Person {name: 'Michael'})
+					RETURN p
+					`,
+				Bindings: map[string]reflect.Value{
+					"p": reflect.ValueOf(&p),
+				},
+			})
+		})
+	})
+
+	t.Run("Use parameters with CREATE", func(t *testing.T) {
+		t.Run("Create node with a parameter for the properties", func(t *testing.T) {
+			c := internal.NewCypherClient()
+			n := Person{
+				Name:     "Andy",
+				Position: "Developer",
+			}
+			cy, err := c.
+				Create(db.Node(db.Qual(&n, "n"))).
+				Return(&n).
+				Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					CREATE (n:Person $n)
+					RETURN n
+					`,
+				Parameters: map[string]any{
+					"n": &n,
+				},
+				Bindings: map[string]reflect.Value{
+					"n": reflect.ValueOf(&n),
+				},
+			})
+		})
+
+		t.Run("Create multiple nodes with a parameter for their properties", func(t *testing.T) {
+			c := internal.NewCypherClient()
+			people := []Person{
+				{
+					Name:     "Andy",
+					Position: "Developer",
+				},
+				{
+					Name:     "Michael",
+					Position: "Developer",
+				},
+			}
+			cy, err := c.
+				Unwind(db.Qual(&people, "props"), "map").
+				Create(db.Node("n")).
+				Set(db.SetPropValue("n", "map")).
+				Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					UNWIND $props AS map
+					CREATE (n)
+					SET n = map
+					`,
+				Parameters: map[string]any{
+					"props": &people,
 				},
 			})
 		})

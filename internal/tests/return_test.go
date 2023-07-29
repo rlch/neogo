@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rlch/neo4j-gorm/db"
-	"github.com/rlch/neo4j-gorm/internal"
+	"github.com/rlch/neogo/db"
+	"github.com/rlch/neogo/internal"
 )
 
 func TestReturn(t *testing.T) {
@@ -13,13 +13,13 @@ func TestReturn(t *testing.T) {
 		var p Person
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Qual(
+			Match(db.Node(db.Qual(
 				&p, "p",
 				db.Props{
 					"name": "'Keanu Reeves'",
 				},
 			))).
-			Find(&p).Compile()
+			Return(&p).Compile()
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Keanu Reeves'})
@@ -36,7 +36,7 @@ func TestReturn(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Match(
-				c.Node(db.Qual(
+				db.Node(db.Qual(
 					Person{},
 					"p",
 					db.Props{
@@ -44,7 +44,7 @@ func TestReturn(t *testing.T) {
 					},
 				)).To(db.Qual(ActedIn{}, "r"), db.Var("m")),
 			).
-			Find(db.Qual(&r, "type(r)")).Compile()
+			Return(db.Qual(&r, "type(r)")).Compile()
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Keanu Reeves'})-[r:ACTED_IN]->(m)
@@ -60,13 +60,13 @@ func TestReturn(t *testing.T) {
 		var p Person
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Qual(
+			Match(db.Node(db.Qual(
 				&p, "p",
 				db.Props{
 					"name": "'Keanu Reeves'",
 				},
 			))).
-			Find(&p.BornIn).Compile()
+			Return(&p.BornIn).Compile()
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Keanu Reeves'})
@@ -91,8 +91,8 @@ func TestReturn(t *testing.T) {
 		var p Person
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Qual(&p, "p", db.Props{"name": "'Keanu Reeves'"}))).
-			Find(db.Qual(&p.Nationality, "citizenship")).Compile()
+			Match(db.Node(db.Qual(&p, "p", db.Props{"name": "'Keanu Reeves'"}))).
+			Return(db.Qual(&p.Nationality, "citizenship")).Compile()
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Keanu Reeves'})
@@ -108,8 +108,8 @@ func TestReturn(t *testing.T) {
 		var bornIn any
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Var("n"))).
-			Find(db.Qual(&bornIn, "n.bornIn")).Compile()
+			Match(db.Node(db.Var("n"))).
+			Return(db.Qual(&bornIn, "n.bornIn")).Compile()
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n)
@@ -130,10 +130,10 @@ func TestReturn(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Match(
-				c.Node(db.Qual(Person{}, "p", db.Props{"name": "'Keanu Reeves'"})).
+				db.Node(db.Qual(Person{}, "p", db.Props{"name": "'Keanu Reeves'"})).
 					To(nil, db.Qual(m, "m")),
 			).
-			Find(db.Return(m, db.Distinct)).Compile()
+			Return(db.Return(m, db.Distinct)).Compile()
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Keanu Reeves'})-->(m)

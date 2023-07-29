@@ -1,12 +1,12 @@
 package db
 
-import "github.com/rlch/neo4j-gorm/internal"
+import "github.com/rlch/neogo/internal"
 
 func With(entity any, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
 	m := &internal.ProjectionBody{}
 	m.Entity = entity
 	for _, opt := range opts {
-		opt.ConfigureProjectionBody(m)
+		internal.ConfigureProjectionBody(m, opt)
 	}
 	return m
 }

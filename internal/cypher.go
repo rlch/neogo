@@ -13,20 +13,6 @@ type cypher struct {
 	*strings.Builder
 }
 
-func (c *cypher) Compile() (*CompiledCypher, error) {
-	out := c.String()
-	out = strings.TrimRight(out, "\n")
-	cy := &CompiledCypher{
-		Cypher:     out,
-		Parameters: c.parameters,
-		Bindings:   c.bindings,
-	}
-	if c.err != nil {
-		return nil, c.err
-	}
-	return cy, nil
-}
-
 type CompiledCypher struct {
 	Cypher     string
 	Parameters map[string]any
@@ -51,7 +37,7 @@ func (c *cypher) Bindings() map[string]reflect.Value {
 var (
 	errMergingReturnSubclause = errors.New("cannot merge multiple RETURN sub-clauses (ORDER BY, LIMIT, SKIP, ...)")
 	errWhereReturnSubclause   = errors.New("WHERE clause in RETURN sub-clause is not allowed")
-	errInvalidPropsKey        = errors.New("invalid property key. Property keys must be strings or an identifier")
+	errInvalidPropExpr        = errors.New("invalid property expression. Property expressions must be strings or an identifier of some entity")
 )
 
 const indent = "  "
@@ -86,16 +72,7 @@ func (cy *cypher) writeNode(m *member) {
 				if padProps {
 					cy.WriteRune(' ')
 				}
-				cy.WriteString("{")
-				var i int
-				for k, v := range m.variable.Props {
-					if i > 0 {
-						cy.WriteString(", ")
-					}
-					fmt.Fprintf(cy, "%s: %s", k, v)
-					i++
-				}
-				cy.WriteString("}")
+				cy.writeProps(m.variable.Props)
 			} else if m.props != "" {
 				if padProps {
 					cy.WriteRune(' ')
@@ -142,28 +119,13 @@ func (cy *cypher) writeRelationship(m *member, rs *relationship) {
 			if m.name != "" {
 				inner = m.name + inner
 			}
+			if m.variable != nil && m.variable.Quantifier != "" {
+				inner = inner + string(m.variable.Quantifier)
+			}
 			if m.variable != nil && m.variable.Props != nil {
-				inner = inner + " {"
-				var i int
-				for k, v := range m.variable.Props {
-					if i > 0 {
-						inner = inner + ", "
-					}
-					var key string
-					if v, ok := k.(string); ok {
-						key = v
-					} else {
-						key = cy.entityName(k)
-						// Get field name
-						key = strings.Split(key, ".")[1]
-						if key == "" {
-							panic(errInvalidPropsKey)
-						}
-					}
-					inner = inner + key + ": " + string(v)
-					i++
-				}
-				inner = inner + "}"
+				inner = inner + " " + cy.writeToString(func(cy *cypher) {
+					cy.writeProps(m.variable.Props)
+				})
 			} else if m.props != "" {
 				inner = inner + " " + m.props
 			}
@@ -194,6 +156,43 @@ func (cy *cypher) writeRelationship(m *member, rs *relationship) {
 			cy.WriteString("--")
 		}
 	}
+}
+
+func (cy *cypher) writeProps(props Props) {
+	cy.WriteString("{")
+	keys := make([]struct {
+		Key  string
+		Prop any
+	}, len(props))
+	i := 0
+	for k := range props {
+		name := cy.propertyExpression(nil)(k)
+		accessors := strings.Split(name, ".")
+		if len(accessors) == 2 {
+			name = accessors[1]
+		} else if len(accessors) > 2 || name == "" {
+			panic(errInvalidPropExpr)
+		}
+		keys[i] = struct {
+			Key  string
+			Prop any
+		}{
+			Key:  name,
+			Prop: k,
+		}
+		i++
+	}
+	sort.Slice(keys, func(u, v int) bool {
+		return keys[u].Key < keys[v].Key
+	})
+	for i, k := range keys {
+		if i > 0 {
+			cy.WriteString(", ")
+		}
+		v := props[k.Prop]
+		fmt.Fprintf(cy, "%s: %s", k.Key, v)
+	}
+	cy.WriteString("}")
 }
 
 func (cy *cypher) writeCondition(c *Condition, parseKey, parseValue func(any) string) {
@@ -251,10 +250,13 @@ func (cy *cypher) writeCondition(c *Condition, parseKey, parseValue func(any) st
 
 func (cy *cypher) writePattern(pattern *node) {
 	cy.catch(func() {
+		if pattern.pathName != "" {
+			fmt.Fprintf(cy, "%s = ", pattern.pathName)
+		}
 		for {
 			nodeM := cy.registerNode(pattern)
 			cy.writeNode(nodeM)
-			edge := pattern.edge
+			edge := pattern.relationship
 			if edge == nil {
 				break
 			}
@@ -294,26 +296,50 @@ func (cy *cypher) writeReadingClause(patterns []*node) {
 	})
 }
 
-func (cy *cypher) writeUpdatingClause(
-	clause string,
+func (cy *cypher) writeCreateClause(
 	nodes []*node,
 ) {
-	cy.catch(func() {
-		cy.WriteString(clause)
-		n := len(nodes)
-		if n > 1 {
-			cy.WriteString("\n" + indent)
-		} else {
-			cy.WriteString(" ")
-		}
-		for i, pattern := range nodes {
-			if i > 0 {
-				cy.WriteString(",\n" + indent)
-			}
-			cy.writePattern(pattern)
-		}
-		cy.newline()
+	cy.writeMultilineQuery("CREATE", len(nodes), func(i int) {
+		cy.writePattern(nodes[i])
 	})
+}
+
+func (cy *cypher) writeMergeClause(
+	node *node,
+	opts ...MergeOption,
+) {
+	merge := &MergeOptions{}
+	for _, opt := range opts {
+		opt.configureMergeOptions(merge)
+	}
+	cy.catch(func() {
+		cy.WriteString("MERGE ")
+		cy.writePattern(node)
+		cy.newline()
+
+		if merge.OnCreate != nil {
+			cy.WriteString("ON CREATE\n")
+			cy.writeIndented("  ", func(cy *cypher) {
+				cy.writeSetClause(merge.OnCreate...)
+			})
+		}
+		if merge.OnMatch != nil {
+			cy.WriteString("ON MATCH\n")
+			cy.writeIndented("  ", func(cy *cypher) {
+				cy.writeSetClause(merge.OnMatch...)
+			})
+		}
+	})
+}
+
+func (cy *cypher) writeDeleteClause(detach bool, variables ...any) {
+	if detach {
+		cy.WriteString("DETACH ")
+	}
+	cy.writeSinglelineQuery("DELETE", len(variables), func(i int) {
+		cy.WriteString(cy.propertyExpression(nil)(variables[i]))
+	})
+	cy.newline()
 }
 
 func (cy *cypher) writeWhereClause(where *Where, inline bool) {
@@ -328,12 +354,22 @@ func (cy *cypher) writeWhereClause(where *Where, inline bool) {
 			} else if len(where.Conds) > 1 {
 				cond = &Condition{And: where.Conds}
 			}
-			cy.writeCondition(cond, cy.key(where.Entity), cy.value)
+			cy.writeCondition(cond, cy.propertyExpression(where.Entity), cy.valueExpression)
 		}
 		if !inline {
 			cy.newline()
 		}
 	})
+}
+
+func (cy *cypher) writeUnwindClause(expr any, as string) {
+	cy.WriteString("UNWIND ")
+	m := cy.register(expr, nil)
+	fmt.Fprintf(cy, "%s AS %s", m.name, as)
+	// Replace name with alias
+	m.alias = as
+	cy.replaceBinding(m)
+	cy.newline()
 }
 
 // ProjectionBody = [[SP], (D,I,S,T,I,N,C,T)], SP, ProjectionItems, [SP, Order], [SP, Skip], [SP, Limit] ;
@@ -468,4 +504,117 @@ func (cy *cypher) writeProjectionBodyClause(clause string, vars ...any) {
 			delete(cy.names, v)
 		}
 	})
+}
+
+func (cy *cypher) writeSetClause(items ...SetItem) {
+	cy.writeMultilineQuery("SET", len(items), func(i int) {
+		item := items[i]
+		prop := cy.propertyExpression(nil)(item.Entity)
+		cy.WriteString(prop)
+		if len(item.Labels) > 0 {
+			cy.WriteString(":" + strings.Join(item.Labels, ":"))
+			return
+		}
+		if item.Merge {
+			cy.WriteString(" += ")
+		} else {
+			cy.WriteString(" = ")
+		}
+		cy.WriteString(cy.valueExpression(item.Value))
+	})
+}
+
+func (cy *cypher) writeRemoveClause(items ...RemoveItem) {
+	cy.writeMultilineQuery("REMOVE", len(items), func(i int) {
+		item := items[i]
+		prop := cy.propertyExpression(nil)(item.Entity)
+		cy.WriteString(prop)
+		if len(item.Labels) > 0 {
+			cy.WriteString(":" + strings.Join(item.Labels, ":"))
+			return
+		}
+	})
+}
+
+func (cy *cypher) writeForEachClause(entity, elementsExpr any, do func(c *CypherUpdater[any])) {
+	cy.catch(func() {
+		cy.WriteString("FOREACH (")
+		value := cy.valueExpression(elementsExpr)
+
+		foreach := newCypher()
+		m := foreach.register(entity, nil)
+		fmt.Fprintf(cy, "%s IN %s | ", m.name, value)
+
+		b := &strings.Builder{}
+		foreach.Builder = b
+		updater := &CypherUpdater[any]{
+			cypher: foreach,
+			To:     func(c *cypher) any { return nil },
+		}
+		do(updater)
+		if updater.err != nil {
+			panic(updater.err)
+		}
+		cy.WriteString(strings.TrimRight(b.String(), "\n") + ")")
+		cy.newline()
+	})
+}
+
+func (cy *cypher) writeSinglelineQuery(clause string, n int, each func(i int)) {
+	cy.catch(func() {
+		cy.WriteString(clause + " ")
+		for i := 0; i < n; i++ {
+			if i > 0 {
+				cy.WriteString(", ")
+			}
+			each(i)
+		}
+		cy.newline()
+	})
+}
+
+func (cy *cypher) writeMultilineQuery(clause string, n int, each func(i int)) {
+	cy.catch(func() {
+		cy.WriteString(clause)
+		if n > 1 {
+			cy.WriteString("\n" + indent)
+		} else {
+			cy.WriteString(" ")
+		}
+		for i := 0; i < n; i++ {
+			if i > 0 {
+				cy.WriteString(",\n" + indent)
+			}
+			each(i)
+		}
+		cy.newline()
+	})
+}
+
+func (cy *cypher) writeIndented(indent string, write func(cy *cypher)) {
+	cy.catch(func() {
+		prevBuilder := cy.Builder
+		indentBuilder := &strings.Builder{}
+		cy.Builder = indentBuilder
+		write(cy)
+		cy.Builder = prevBuilder
+		for i, line := range strings.Split(indentBuilder.String(), "\n") {
+			if i > 0 {
+				cy.WriteString("\n")
+			}
+			if line == "" {
+				continue
+			}
+			cy.WriteString(indent + line)
+		}
+	})
+}
+
+func (cy *cypher) writeToString(write func(cy *cypher)) string {
+	prevBuilder := cy.Builder
+	stringBuilder := &strings.Builder{}
+	cy.Builder = stringBuilder
+	write(cy)
+	cy.Builder = prevBuilder
+	return stringBuilder.String()
 }

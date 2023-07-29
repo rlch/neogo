@@ -1,6 +1,6 @@
 package db
 
-import "github.com/rlch/neo4j-gorm/internal"
+import "github.com/rlch/neogo/internal"
 
 var Optional internal.MatchOption = &internal.Configurer{
 	MatchOptions: func(v *internal.MatchOptions) {

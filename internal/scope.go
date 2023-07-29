@@ -1,14 +1,17 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
+	"github.com/goccy/go-json"
 	"github.com/iancoleman/strcase"
 
-	neo4jgorm "github.com/rlch/neo4j-gorm"
+	neogo "github.com/rlch/neogo"
 )
 
 func newScope() *scope {
@@ -29,20 +32,43 @@ type (
 		names    map[reflect.Value]string
 		fields   map[uintptr]struct{ name, entity string }
 
-		paramCounter int
-		parameters   map[string]any
-		paramAddrs   map[uintptr]string
+		paramCounter     int
+		parameters       map[string]any
+		parameterFilters map[string]*json.FieldQuery
+		paramAddrs       map[uintptr]string
+	}
+	// An instance of a node/relationship in the cypher query
+	member struct {
+		// The entity that was registered
+		entity any
+		// Whether the entity was added to the scope by the query that returned this
+		// member.
+		isNew bool
+		// The name of the variable in the cypher query
+		name  string
+		alias string
+		// The name of the property in the cypher query
+		props string
+
+		variable *Variable
+
+		// The where clause that this member is associated with.
+		where *Where
+
+		// The projection body that this member is associated with.
+		projectionBody *ProjectionBody
 	}
 )
 
 var (
-	nodeType         = reflect.TypeOf((*neo4jgorm.INode)(nil)).Elem()
-	relationshipType = reflect.TypeOf((*neo4jgorm.IRelationship)(nil)).Elem()
+	nodeType         = reflect.TypeOf((*neogo.INode)(nil)).Elem()
+	relationshipType = reflect.TypeOf((*neogo.IRelationship)(nil)).Elem()
 )
 
 func (s *scope) catch(op func()) {
 	defer func() {
 		if r := recover(); r != nil {
+			debug.PrintStack()
 			err, ok := r.(error)
 			if !ok {
 				panic(err)
@@ -86,11 +112,11 @@ func (s *scope) unfoldEntity(value any) (
 		if variable.Pattern == "" {
 			variable.Pattern = v.Pattern
 		}
-		if variable.Select != nil {
-			variable.Select = append(variable.Select, v.Select...)
+		if variable.Quantifier == "" {
+			variable.Quantifier = v.Quantifier
 		}
-		if variable.Omit != nil {
-			variable.Omit = append(variable.Omit, v.Omit...)
+		if variable.Select == nil {
+			variable.Select = v.Select
 		}
 	}
 RecurseToEntity:
@@ -124,7 +150,7 @@ func (s *scope) replaceBinding(m *member) {
 	if m.variable != nil && m.variable.Bind != nil {
 		bind := reflect.ValueOf(m.variable.Bind)
 		if bind.Kind() != reflect.Ptr {
-			panic(fmt.Sprintf("cannot bind to non-pointer value %s", bind))
+			panic(fmt.Errorf("cannot bind to non-pointer value %s", bind))
 		}
 		name := m.alias
 		if name == "" {
@@ -188,7 +214,7 @@ func (s *scope) register(value any, isNode *bool) *member {
 	// Find the name of the entity
 	if m.name != "" {
 		if exst, ok := s.bindings[m.name]; ok && exst != v {
-			panic(fmt.Sprintf("(%s) already bound to different value. want: %s, have: %s.", m.name, v, s.bindings[m.name]))
+			panic(fmt.Errorf("(%s) already bound to different value. want: %s, have: %s", m.name, v, s.bindings[m.name]))
 		} else if ok {
 			m.isNew = false
 			currentName := s.names[exst]
@@ -266,20 +292,26 @@ func (s *scope) register(value any, isNode *bool) *member {
 	for inner.Kind() == reflect.Ptr {
 		inner = inner.Elem()
 	}
-	if inner.IsValid() && !inner.IsZero() && m.isNew {
+	if inner.IsValid() && m.isNew {
 		switch inner.Kind() {
 		case reflect.Struct, reflect.Array, reflect.Slice:
-			params := s.addParameter(v, m.name)
+			if inner.IsZero() {
+				break
+			}
+			param := s.addParameter(v, m.name)
+			if m.variable != nil && m.variable.Select != nil {
+				s.parameterFilters[param] = m.variable.Select
+			}
 			if canHaveProps {
-				m.props = params
+				m.props = param
 			} else {
 				m.alias = m.name
-				m.name = params
+				m.name = param
 			}
 		case reflect.Map:
-			params := s.addParameter(v, m.name)
+			param := s.addParameter(v, m.name)
 			m.alias = m.name
-			m.name = params
+			m.name = param
 		}
 	}
 
@@ -327,7 +359,8 @@ func (s *scope) entityName(entity any) string {
 	return s.names[reflect.ValueOf(entity)]
 }
 
-func (s *scope) key(entity any) func(v any) string {
+func (s *scope) propertyExpression(entity any) func(v any) string {
+	entity, _, _ = s.unfoldEntity(entity)
 	entityName := s.entityName(entity)
 	return func(v any) string {
 		if v == entity && entityName != "" {
@@ -344,7 +377,7 @@ func (s *scope) key(entity any) func(v any) string {
 		}
 		vv := reflect.ValueOf(v)
 		if vv.Kind() != reflect.Ptr {
-			panic("the key in a condition must be addressable.")
+			panic(errors.New("the key in a condition must be addressable"))
 		}
 		ptr := vv.Pointer()
 		if name, ok := s.names[vv]; ok {
@@ -353,11 +386,11 @@ func (s *scope) key(entity any) func(v any) string {
 		if field, ok := s.fields[ptr]; ok {
 			return fmt.Sprintf("%s.%s", field.entity, field.name)
 		}
-		panic(fmt.Sprintf("could not find a key-representation for %v.", v))
+		panic(fmt.Errorf("could not find a property-representation for %v", v))
 	}
 }
 
-func (s *scope) value(v any) string {
+func (s *scope) valueExpression(v any) string {
 	vv := reflect.ValueOf(v)
 	switch vv.Kind() {
 	case reflect.Bool:
@@ -377,7 +410,11 @@ func (s *scope) value(v any) string {
 		reflect.Uint64, reflect.Float32, reflect.Float64,
 		reflect.Array, reflect.Interface, reflect.Map,
 		reflect.Slice, reflect.Struct:
-		return s.addParameter(vv, "")
+		if param, ok := v.(Param); ok {
+			return s.addParameter(reflect.ValueOf(*param.Value), param.Name)
+		} else {
+			return s.addParameter(vv, "")
+		}
 	case reflect.Pointer:
 		ptr := vv.Pointer()
 		if name, ok := s.names[vv]; ok {
@@ -387,9 +424,9 @@ func (s *scope) value(v any) string {
 			return fmt.Sprintf("%s.%s", field.entity, field.name)
 		}
 	default:
-		panic(fmt.Sprintf("unsupported value-type %T.", v))
+		panic(fmt.Errorf("unsupported value-type %T", v))
 	}
-	panic(fmt.Sprintf("could not find a value-representation for %v.", v))
+	panic(fmt.Errorf("could not find a value-representation for %v", v))
 }
 
 func (s *scope) addParameter(v reflect.Value, optName string) (name string) {

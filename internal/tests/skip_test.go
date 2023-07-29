@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rlch/neo4j-gorm/db"
-	"github.com/rlch/neo4j-gorm/internal"
+	"github.com/rlch/neogo/db"
+	"github.com/rlch/neogo/internal"
 )
 
 func TestSkip(t *testing.T) {
@@ -13,8 +13,8 @@ func TestSkip(t *testing.T) {
 		var n Person
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Qual(&n, "n"))).
-			Find(
+			Match(db.Node(db.Qual(&n, "n"))).
+			Return(
 				db.Return(&n.Name, db.OrderBy("", true), db.Skip("3")),
 			).
 			Compile()
@@ -36,8 +36,8 @@ func TestSkip(t *testing.T) {
 		var n Person
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Qual(&n, "n"))).
-			Find(
+			Match(db.Node(db.Qual(&n, "n"))).
+			Return(
 				db.Return(&n.Name, db.OrderBy("", true), db.Skip("1"), db.Limit("2")),
 			).
 			Compile()
@@ -60,8 +60,8 @@ func TestSkip(t *testing.T) {
 		var n Person
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Qual(&n, "n"))).
-			Find(
+			Match(db.Node(db.Qual(&n, "n"))).
+			Return(
 				db.Return(&n.Name, db.OrderBy("", true), db.Skip("1 + toInteger(3*rand())")),
 			).
 			Compile()

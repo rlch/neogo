@@ -1,184 +1,161 @@
 package internal
 
-func NewCypherClient() *cypherClient {
+import (
+	"reflect"
+	"strings"
+)
+
+func NewCypherClient() *CypherClient {
 	cy := newCypher()
-	return &cypherClient{
-		cypherReader:  *newCypherReader(cy),
-		cypherUpdater: *newCypherUpdater(cy),
+	return &CypherClient{
+		CypherReader:  *newCypherReader(cy),
+		CypherUpdater: *newCypherUpdater(cy),
 	}
 }
 
 type (
-	cypherPath struct {
+	CypherPath struct {
 		n *node
 	}
-	cypherPattern struct {
+	CypherPattern struct {
 		ns []*node
 	}
-	cypherClient struct {
-		cypherReader
-		cypherUpdater
+	CypherClient struct {
+		CypherReader
+		CypherUpdater[*CypherQuerier]
 	}
-	cypherQuerier struct {
-		cypherReader
-		cypherRunner
-		cypherUpdater
+	CypherQuerier struct {
+		CypherReader
+		CypherRunner
+		CypherUpdater[*CypherQuerier]
 		*cypher
 	}
-	cypherReader struct {
+	CypherReader struct {
 		*cypher
 	}
-	cypherUpdater struct {
+	CypherUpdater[To any] struct {
 		*cypher
+		To func(*cypher) To
 	}
-	cypherRunner struct {
+	CypherRunner struct {
 		*cypher
+		isReturn bool
 	}
 )
 
-func newCypherQuerier(cy *cypher) *cypherQuerier {
-	q := &cypherQuerier{
+func newCypherQuerier(cy *cypher) *CypherQuerier {
+	q := &CypherQuerier{
 		cypher:        cy,
-		cypherReader:  *newCypherReader(cy),
-		cypherUpdater: *newCypherUpdater(cy),
-		cypherRunner:  *newCypherRunner(cy),
+		CypherReader:  *newCypherReader(cy),
+		CypherUpdater: *newCypherUpdater(cy),
+		CypherRunner:  *newCypherRunner(cy, false),
 	}
 	return q
 }
 
-func newCypherReader(cy *cypher) *cypherReader {
-	return &cypherReader{cypher: cy}
+func newCypherReader(cy *cypher) *CypherReader {
+	return &CypherReader{cypher: cy}
 }
 
-func newCypherUpdater(cy *cypher) *cypherUpdater {
-	return &cypherUpdater{cypher: cy}
-}
-
-func newCypherRunner(cy *cypher) *cypherRunner {
-	return &cypherRunner{cypher: cy}
-}
-
-var (
-	_ Path     = (*cypherPath)(nil)
-	_ Patterns = (*cypherPattern)(nil)
-)
-
-type (
-	node struct {
-		data any
-		edge *relationship
-		MatchOptions
-	}
-	relationship struct {
-		data    any
-		to      *node
-		from    *node
-		related *node
-	}
-	// An instance of a node/relationship in the cypher query
-	member struct {
-		// The entity that was registered
-		entity any
-		// Whether the entity was added to the scope by the query that returned this
-		// member.
-		isNew bool
-		// The name of the variable in the cypher query
-		name  string
-		alias string
-		// The name of the property in the cypher query
-		props string
-
-		variable *Variable
-
-		// The where clause that this member is associated with.
-		where *Where
-
-		// The projection body that this member is associated with.
-		projectionBody *ProjectionBody
-	}
-)
-
-func (n *node) next() *node {
-	if n.edge == nil {
-		return n
-	}
-	if n.edge.from != nil {
-		return n.edge.from
-	} else if n.edge.to != nil {
-		return n.edge.to
-	} else if n.edge.related != nil {
-		return n.edge.related
-	} else {
-		panic("edge has no target")
+func newCypherUpdater(cy *cypher) *CypherUpdater[*CypherQuerier] {
+	return &CypherUpdater[*CypherQuerier]{
+		cypher: cy,
+		To: func(c *cypher) *CypherQuerier {
+			return newCypherQuerier(c)
+		},
 	}
 }
 
-func (n *node) tail() *node {
-	tail := n
-	if tail == nil {
-		panic("head is nil")
+func newCypherRunner(cy *cypher, isReturn bool) *CypherRunner {
+	return &CypherRunner{cypher: cy, isReturn: isReturn}
+}
+
+func (c *CypherReader) Match(patterns Patterns, options ...MatchOption) *CypherQuerier {
+	for _, pattern := range patterns.nodes() {
+		for _, option := range options {
+			option.configureMatchOptions(&pattern.MatchOptions)
+		}
 	}
-	for tail != nil && tail.edge != nil {
-		tail = tail.next()
+	c.writeReadingClause(patterns.nodes())
+	return newCypherQuerier(c.cypher)
+}
+
+func (c *CypherReader) With(variables ...any) *CypherQuerier {
+	c.writeProjectionBodyClause("WITH", variables...)
+	return newCypherQuerier(c.cypher)
+}
+
+func (c *CypherReader) Unwind(expr any, as string) *CypherQuerier {
+	c.writeUnwindClause(expr, as)
+	return newCypherQuerier(c.cypher)
+}
+
+func (c *CypherQuerier) Where(opts ...WhereOption) *CypherQuerier {
+	where := &Where{}
+	for _, opt := range opts {
+		opt.configureWhere(where)
 	}
-	return tail
+	c.writeWhereClause(where, false)
+	return newCypherQuerier(c.cypher)
 }
 
-func (c *cypherClient) Node(match any) Path {
-	return &cypherPath{n: &node{data: match}}
+func (c *CypherQuerier) Return(matches ...any) *CypherRunner {
+	c.writeProjectionBodyClause("RETURN", matches...)
+	return newCypherRunner(c.cypher, true)
 }
 
-func (c *cypherClient) Paths(paths ...Path) Patterns {
-	if len(paths) == 0 {
-		panic("no paths")
+func (c *CypherQuerier) Subquery(subquery *CypherRunner) *CypherQuerier {
+	return nil
+}
+
+func (c *CypherUpdater[To]) Create(pattern Patterns) To {
+	c.writeCreateClause(pattern.nodes())
+	return c.To(c.cypher)
+}
+
+func (c *CypherUpdater[To]) Merge(pattern Pattern, opts ...MergeOption) To {
+	c.writeMergeClause(pattern.node(), opts...)
+	return c.To(c.cypher)
+}
+
+func (c *CypherUpdater[To]) DetachDelete(variables ...any) To {
+	c.writeDeleteClause(true, variables...)
+	return c.To(c.cypher)
+}
+
+func (c *CypherUpdater[To]) Delete(variables ...any) To {
+	c.writeDeleteClause(false, variables...)
+	return c.To(c.cypher)
+}
+
+func (c *CypherUpdater[To]) Set(items ...SetItem) To {
+	c.writeSetClause(items...)
+	return c.To(c.cypher)
+}
+
+func (c *CypherUpdater[To]) Remove(items ...RemoveItem) To {
+	c.writeRemoveClause(items...)
+	return c.To(c.cypher)
+}
+
+func (c *CypherUpdater[To]) ForEach(entity, elementsExpr any, do func(c *CypherUpdater[any])) To {
+	c.writeForEachClause(entity, elementsExpr, do)
+	return c.To(c.cypher)
+}
+
+func (c *CypherRunner) Compile() (*CompiledCypher, error) {
+	out := c.String()
+	out = strings.TrimRight(out, "\n")
+	if !c.isReturn {
+		c.bindings = map[string]reflect.Value{}
 	}
-	ns := make([]*node, len(paths))
-	for i, path := range paths {
-		ns[i] = path.node()
+	cy := &CompiledCypher{
+		Cypher:     out,
+		Parameters: c.parameters,
+		Bindings:   c.bindings,
 	}
-	return &cypherPattern{ns: ns}
-}
-
-func (c *cypherPath) Related(edgeMatch, nodeMatch any) Path {
-	c.n.tail().edge = &relationship{
-		data:    edgeMatch,
-		related: &node{data: nodeMatch},
+	if c.err != nil {
+		return nil, c.err
 	}
-	return c
-}
-
-func (c *cypherPath) From(edgeMatch, nodeMatch any) Path {
-	c.n.tail().edge = &relationship{
-		data: edgeMatch,
-		from: &node{data: nodeMatch},
-	}
-	return c
-}
-
-func (c *cypherPath) To(edgeMatch, nodeMatch any) Path {
-	c.n.tail().edge = &relationship{
-		data: edgeMatch,
-		to:   &node{data: nodeMatch},
-	}
-	return c
-}
-
-func (c *cypherPath) node() *node {
-	return c.n
-}
-
-func (c *cypherPath) nodes() []*node {
-	return []*node{c.n}
-}
-
-func (c *cypherPath) Condition() *Condition {
-	return &Condition{Path: c}
-}
-
-func (c *cypherPath) ConfigureWhere(w *Where) {
-	c.Condition().ConfigureWhere(w)
-}
-
-func (c *cypherPattern) nodes() []*node {
-	return c.ns
+	return cy, nil
 }

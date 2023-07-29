@@ -1,6 +1,6 @@
 package db
 
-import "github.com/rlch/neo4j-gorm/internal"
+import "github.com/rlch/neogo/internal"
 
 // Can be used for nodes + relationship patterns, WITH clauses and WHERE
 // clauses.
@@ -12,19 +12,19 @@ func Where(opts ...internal.WhereOption) interface {
 	return &internal.Configurer{
 		Where: func(w *internal.Where) {
 			for _, opt := range opts {
-				opt.ConfigureWhere(w)
+				internal.ConfigureWhere(w, opt)
 			}
 		},
 		Variable: func(v *internal.Variable) {
 			v.Where = &internal.Where{}
 			for _, opt := range opts {
-				opt.ConfigureWhere(v.Where)
+				internal.ConfigureWhere(v.Where, opt)
 			}
 		},
 		ProjectionBody: func(pb *internal.ProjectionBody) {
 			pb.Where = &internal.Where{}
 			for _, opt := range opts {
-				opt.ConfigureWhere(pb.Where)
+				internal.ConfigureWhere(pb.Where, opt)
 			}
 		},
 	}

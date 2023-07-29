@@ -1,4 +1,4 @@
-package neo4jgorm
+package neogo
 
 type IAbstract interface {
 	INode

@@ -3,7 +3,7 @@ layout {
     plugin location="zellij:tab-bar"
   }
   pane split_direction="vertical" {
-    pane name="neo4j-gorm" focus=true size="60%"
+    pane name="neogo" focus=true size="60%"
     pane split_direction="horizontal" {
       pane name="test" cwd="internal/tests" command="gotestsum" size="65%" {
         args "."

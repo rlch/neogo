@@ -3,7 +3,7 @@ package db
 import (
 	"strconv"
 
-	"github.com/rlch/neo4j-gorm/internal"
+	"github.com/rlch/neogo/internal"
 )
 
 func Expr(expr string) internal.Expr {

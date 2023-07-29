@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rlch/neo4j-gorm/db"
-	"github.com/rlch/neo4j-gorm/internal"
+	"github.com/rlch/neogo/db"
+	"github.com/rlch/neogo/internal"
 )
 
 func TestMatch(t *testing.T) {
@@ -13,7 +13,7 @@ func TestMatch(t *testing.T) {
 		t.Run("Get all nodes", func(t *testing.T) {
 			var n []any
 			c := internal.NewCypherClient()
-			cy, err := c.Match(c.Node(db.Var(n, db.Name("n")))).Find(n).Compile()
+			cy, err := c.Match(db.Node(db.Var(n, db.Name("n")))).Return(n).Compile()
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n)
@@ -27,7 +27,7 @@ func TestMatch(t *testing.T) {
 			var m Movie
 			var mts []string
 			c := internal.NewCypherClient()
-			cy, err := c.Match(c.Node(&m)).Find(db.Bind(&m.Title, &mts)).Compile()
+			cy, err := c.Match(db.Node(&m)).Return(db.Bind(&m.Title, &mts)).Compile()
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (movie:Movie)
@@ -44,14 +44,14 @@ func TestMatch(t *testing.T) {
 			c := internal.NewCypherClient()
 			cy, err := c.
 				Match(
-					c.Node(db.Var(
+					db.Node(db.Var(
 						"director",
 						db.Props{
 							"name": "'Oliver Stone'",
 						},
 					)).
 						Related(nil, db.Var("movie"))).
-				Find(db.Var(
+				Return(db.Var(
 					&m.Title,
 					db.Name("movie.title"),
 				)).Compile()
@@ -69,12 +69,12 @@ func TestMatch(t *testing.T) {
 		t.Run("Match with labels", func(t *testing.T) {
 			c := internal.NewCypherClient()
 			var m Movie
-			cy, err := c.Match(c.Node(db.Var(
+			cy, err := c.Match(db.Node(db.Var(
 				Person{},
 				db.Props{
 					"name": "'Oliver Stone'",
 				},
-			)).Related(nil, &m)).Find(&m.Title).Compile()
+			)).Related(nil, &m)).Return(&m.Title).Compile()
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (:Person {name: 'Oliver Stone'})--(movie:Movie)
@@ -90,8 +90,8 @@ func TestMatch(t *testing.T) {
 			c := internal.NewCypherClient()
 			var name, title string
 			cy, err := c.Match(
-				c.Node(db.Var("n", db.Pattern("Movie|Person"))),
-			).Find(
+				db.Node(db.Var("n", db.Label("Movie|Person"))),
+			).Return(
 				db.Qual(&name, "n.name", db.Name("name")),
 				db.Qual(&title, "n.title", db.Name("title")),
 			).Compile()
@@ -114,14 +114,14 @@ func TestMatch(t *testing.T) {
 			var m Movie
 			cy, err := c.
 				Match(
-					c.Node(db.Var(
+					db.Node(db.Var(
 						Person{},
 						db.Props{
 							"name": "'Oliver Stone'",
 						},
 					)).
 						To(nil, db.Var("movie"))).
-				Find(db.Qual(
+				Return(db.Qual(
 					&m.Title,
 					"movie.title",
 				)).Compile()
@@ -140,13 +140,13 @@ func TestMatch(t *testing.T) {
 			c := internal.NewCypherClient()
 			var out any
 			cy, err := c.
-				Match(c.Node(db.Var(
+				Match(db.Node(db.Var(
 					Person{},
 					db.Props{
 						"name": "'Oliver Stone'",
 					},
 				)).To(db.Var("r"), db.Var("movie"))).
-				Find(db.Qual(
+				Return(db.Qual(
 					&out,
 					"type(r)",
 				)).Compile()
@@ -166,7 +166,7 @@ func TestMatch(t *testing.T) {
 			var a, b any
 			cy, err := c.
 				Match(
-					c.Node(db.Qual(&a, "a")).
+					db.Node(db.Qual(&a, "a")).
 						Related(
 							db.Var(
 								ActedIn{},
@@ -176,7 +176,7 @@ func TestMatch(t *testing.T) {
 							),
 							db.Var(&b, db.Name("b")),
 						)).
-				Find(&a, &b).Compile()
+				Return(&a, &b).Compile()
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (a)-[:ACTED_IN {role: 'Bud Fox'}]-(b)
@@ -193,14 +193,14 @@ func TestMatch(t *testing.T) {
 			c := internal.NewCypherClient()
 			var name string
 			cy, err := c.
-				Match(c.Node(db.Qual(
+				Match(db.Node(db.Qual(
 					Movie{},
 					"wallstreet",
 					db.Props{
 						"title": "'Wall Street'",
 					},
 				)).From(ActedIn{}, db.Var("actor"))).
-				Find(db.Qual(&name, "actor.name")).Compile()
+				Return(db.Qual(&name, "actor.name")).Compile()
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (wallstreet:Movie {title: 'Wall Street'})<-[:ACTED_IN]-(actor)
@@ -215,15 +215,15 @@ func TestMatch(t *testing.T) {
 		t.Run("Match on multiple relationship types", func(t *testing.T) {
 			c := internal.NewCypherClient()
 			var name string
-			cy, err := c.Match(c.Node(
+			cy, err := c.Match(db.Node(
 				db.Var(
 					"wallstreet",
 					db.Props{"title": "'Wall Street'"},
 				),
 			).From(
-				db.Var("", db.Pattern("ACTED_IN|DIRECTED")),
+				db.Var("", db.Label("ACTED_IN|DIRECTED")),
 				db.Var("person"),
-			)).Find(db.Qual(&name, "person.name")).Compile()
+			)).Return(db.Qual(&name, "person.name")).Compile()
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 		MATCH (wallstreet {title: 'Wall Street'})<-[:ACTED_IN|DIRECTED]-(person)
@@ -239,13 +239,13 @@ func TestMatch(t *testing.T) {
 			c := internal.NewCypherClient()
 			var r ActedIn
 			cy, err := c.
-				Match(c.Node(db.Var(
+				Match(db.Node(db.Var(
 					"wallstreet",
 					db.Props{
 						"title": "'Wall Street'",
 					},
 				)).From(db.Qual(&r, "r"), db.Var("actor"))).
-				Find(&r.Role).Compile()
+				Return(&r.Role).Compile()
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (wallstreet {title: 'Wall Street'})<-[r:ACTED_IN]-(actor)
@@ -264,15 +264,15 @@ func TestMatch(t *testing.T) {
 			var martin, rob Person
 			cy, err := c.
 				Match(
-					c.Paths(
-						c.Node(db.Qual(
+					db.Patterns(
+						db.Node(db.Qual(
 							&martin,
 							"martin",
 							db.Props{
 								"name": "'Martin Sheen'",
 							},
 						)),
-						c.Node(db.Qual(
+						db.Node(db.Qual(
 							&rob,
 							"rob",
 							db.Props{
@@ -282,9 +282,9 @@ func TestMatch(t *testing.T) {
 					),
 				).
 				Create(
-					c.Node(&rob).
+					db.Node(&rob).
 						To(
-							db.Var(nil, db.Pattern("`OLD FRIENDS`")),
+							db.Var(nil, db.Label("`OLD FRIENDS`")),
 							&martin,
 						),
 				).Compile()
@@ -295,10 +295,6 @@ func TestMatch(t *testing.T) {
 		  (rob:Person {name: 'Rob Reiner'})
 		CREATE (rob)-[:` + "`OLD FRIENDS`" + `]->(martin)
 		`,
-				Bindings: map[string]reflect.Value{
-					"martin": reflect.ValueOf(&martin),
-					"rob":    reflect.ValueOf(&rob),
-				},
 			})
 		})
 
@@ -307,7 +303,7 @@ func TestMatch(t *testing.T) {
 			var mTitle, dName string
 			cy, err := c.
 				Match(
-					c.Node(db.Var(
+					db.Node(db.Var(
 						"charlie",
 						db.Props{
 							"name": "'Charlie Sheen'",
@@ -316,7 +312,7 @@ func TestMatch(t *testing.T) {
 						To(ActedIn{}, db.Var("movie")).
 						From(Directed{}, db.Var("director")),
 				).
-				Find(
+				Return(
 					db.Qual(&mTitle, "movie.title"),
 					db.Qual(&dName, "director.name"),
 				).Compile()
@@ -340,7 +336,7 @@ func TestMatch(t *testing.T) {
 			r := Directed{}
 			cy, err := c.
 				Match(
-					c.Node(db.Qual(
+					db.Node(db.Qual(
 						&a,
 						"a",
 						db.Props{
@@ -349,9 +345,9 @@ func TestMatch(t *testing.T) {
 					)),
 				).
 				Match(
-					c.Node(&a).To(db.Qual(&r, "r"), nil),
+					db.Node(&a).To(db.Qual(&r, "r"), nil),
 					db.Optional,
-				).Find(&a.Name, &r).Compile()
+				).Return(&a.Name, &r).Compile()
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 		MATCH (a:Person {name: 'Martin Sheen'})
@@ -372,14 +368,14 @@ func TestMatch(t *testing.T) {
 			)
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(
+				Match(db.Node(
 					db.Qual(
 						&a, "a",
 						db.Props{"name": "'Charlie Sheen'"},
 					),
 				)).
-				Match(c.Node(&a).To(nil, db.Qual(&x, "x")), db.Optional).
-				Find(&x).Compile()
+				Match(db.Node(&a).To(nil, db.Qual(&x, "x")), db.Optional).
+				Return(&x).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -401,14 +397,14 @@ func TestMatch(t *testing.T) {
 			)
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(
+				Match(db.Node(
 					db.Qual(
 						&a, "a",
 						db.Props{"name": "'Martin Sheen'"},
 					),
 				)).
-				Match(c.Node(&a).To(nil, db.Qual(&x, "x")), db.Optional).
-				Find(&x, db.Qual(&name, "x.name")).Compile()
+				Match(db.Node(&a).To(nil, db.Qual(&x, "x")), db.Optional).
+				Return(&x, db.Qual(&name, "x.name")).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -431,14 +427,14 @@ func TestMatch(t *testing.T) {
 			)
 			c := internal.NewCypherClient()
 			cy, err := c.
-				Match(c.Node(
+				Match(db.Node(
 					db.Qual(
 						&a, "a",
 						db.Props{"title": "'Wall Street'"},
 					),
 				)).
-				Match(c.Node(db.Var("x")).To(db.Qual(ActedIn{}, "r"), &a), db.Optional).
-				Find(&a.Title, db.Qual(&name, "x.name"), db.Qual(&typeR, "type(r)")).Compile()
+				Match(db.Node(db.Var("x")).To(db.Qual(ActedIn{}, "r"), &a), db.Optional).
+				Return(&a.Title, db.Qual(&name, "x.name"), db.Qual(&typeR, "type(r)")).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `

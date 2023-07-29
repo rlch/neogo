@@ -4,9 +4,9 @@ import (
 	"reflect"
 	"testing"
 
-	neo4jgorm "github.com/rlch/neo4j-gorm"
-	"github.com/rlch/neo4j-gorm/db"
-	"github.com/rlch/neo4j-gorm/internal"
+	neogo "github.com/rlch/neogo"
+	"github.com/rlch/neogo/db"
+	"github.com/rlch/neogo/internal"
 )
 
 func TestUnwind(t *testing.T) {
@@ -18,7 +18,7 @@ func TestUnwind(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Unwind(db.Expr("[1, 2, 3, null]"), "x").
-			Find(db.Bind("x", &x), db.Qual(db.Bind(db.Expr("'val'"), &y), "y")).Compile()
+			Return(db.Bind("x", &x), db.Qual(db.Bind(db.Expr("'val'"), &y), "y")).Compile()
 
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
@@ -39,7 +39,7 @@ func TestUnwind(t *testing.T) {
 			With(db.Qual("[1, 1, 2, 2]", "coll")).
 			Unwind("coll", "x").
 			With(db.With("x", db.Distinct)).
-			Find(db.Qual(&setOfVals, "collect(x)", db.Name("setOfVals"))).Compile()
+			Return(db.Qual(&setOfVals, "collect(x)", db.Name("setOfVals"))).Compile()
 
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
@@ -63,7 +63,7 @@ func TestUnwind(t *testing.T) {
 				db.Qual("[3, 4]", "b"),
 			).
 			Unwind("(a + b)", "x").
-			Find(db.Qual(&x, "x")).Compile()
+			Return(db.Qual(&x, "x")).Compile()
 
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
@@ -84,7 +84,7 @@ func TestUnwind(t *testing.T) {
 			With(db.Qual("[[1, 2], [3, 4], 5]", "nested")).
 			Unwind("nested", "x").
 			Unwind("x", "y").
-			Find(db.Qual(&y, "y")).Compile()
+			Return(db.Qual(&y, "y")).Compile()
 
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
@@ -103,7 +103,7 @@ func TestUnwind(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Unwind("[]", "empty").
-			Find("'literal_that_is_not_returned'").Compile()
+			Return("'literal_that_is_not_returned'").Compile()
 
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
@@ -118,7 +118,7 @@ func TestUnwind(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Unwind("null", "x").
-			Find("x", "'some_literal'").Compile()
+			Return("x", "'some_literal'").Compile()
 
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
@@ -143,18 +143,18 @@ func TestUnwind(t *testing.T) {
 			},
 		}
 		type Year struct {
-			neo4jgorm.Node `neo4j:"Year"`
+			neogo.Node `neo4j:"Year"`
 
 			Year int `json:"year"`
 		}
 		type Event struct {
-			neo4jgorm.Node `neo4j:"Event"`
+			neogo.Node `neo4j:"Event"`
 
 			ID   int `json:"id"`
 			Year int `json:"year"`
 		}
 		type In struct {
-			neo4jgorm.Relationship `neo4j:"IN"`
+			neogo.Relationship `neo4j:"IN"`
 		}
 		var (
 			y Year
@@ -164,13 +164,13 @@ func TestUnwind(t *testing.T) {
 		cy, err := c.
 			Unwind(db.Qual(&events, "events"), "event").
 			Merge(
-				c.Node(db.Qual(&y, "y", db.Props{"year": "event.year"})),
+				db.Node(db.Qual(&y, "y", db.Props{"year": "event.year"})),
 			).
 			Merge(
-				c.Node(&y).
+				db.Node(&y).
 					From(In{}, db.Qual(&e, "e", db.Props{"id": "event.id"})),
 			).
-			Find(db.Return(db.Qual(&e.ID, "x"), db.OrderBy("", true))).
+			Return(db.Return(db.Qual(&e.ID, "x"), db.OrderBy("", true))).
 			Compile()
 
 		check(t, cy, err, internal.CompiledCypher{

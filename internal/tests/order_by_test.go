@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rlch/neo4j-gorm/db"
-	"github.com/rlch/neo4j-gorm/internal"
+	"github.com/rlch/neogo/db"
+	"github.com/rlch/neogo/internal"
 )
 
 func TestOrderBy(t *testing.T) {
@@ -14,9 +14,9 @@ func TestOrderBy(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Match(
-				c.Node(db.Bind("n", &n)),
+				db.Node(db.Bind("n", &n)),
 			).
-			Find(
+			Return(
 				db.Return(db.Qual(&n.Name, "n.name"), db.OrderBy("", true)),
 				db.Qual(&n.Age, "n.age"),
 			).
@@ -39,8 +39,8 @@ func TestOrderBy(t *testing.T) {
 		var n Person
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Bind("n", &n))).
-			Find(
+			Match(db.Node(db.Bind("n", &n))).
+			Return(
 				db.Return(db.Qual(&n.Name, "n.name"), db.OrderBy("", true)),
 				db.Return(db.Qual(&n.Age, "n.age"), db.OrderBy("", true)),
 			).
@@ -63,8 +63,8 @@ func TestOrderBy(t *testing.T) {
 		var n Person
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Qual(&n, "n"))).
-			Find(
+			Match(db.Node(db.Qual(&n, "n"))).
+			Return(
 				&n.Name,
 				&n.Age,
 				db.Return(nil, db.OrderBy("elementId(n)", true)),
@@ -88,8 +88,8 @@ func TestOrderBy(t *testing.T) {
 		var n Person
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Qual(&n, "n"))).
-			Find(
+			Match(db.Node(db.Qual(&n, "n"))).
+			Return(
 				&n.Name,
 				&n.Age,
 				db.Return(nil, db.OrderBy("elementId(n)", true)),
@@ -113,8 +113,8 @@ func TestOrderBy(t *testing.T) {
 		var n Person
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Qual(&n, "n"))).
-			Find(
+			Match(db.Node(db.Qual(&n, "n"))).
+			Return(
 				db.Return(&n.Name, db.OrderBy("", false)),
 				&n.Age,
 			).
@@ -137,8 +137,8 @@ func TestOrderBy(t *testing.T) {
 		var n Person
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node(db.Qual(&n, "n"))).
-			Find(
+			Match(db.Node(db.Qual(&n, "n"))).
+			Return(
 				db.Return("n.length", db.OrderBy("", true)),
 				&n.Name,
 				&n.Age,
@@ -162,9 +162,9 @@ func TestOrderBy(t *testing.T) {
 		var names []string
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Match(c.Node("n")).
+			Match(db.Node("n")).
 			With(db.With("n", db.OrderBy("age", true))).
-			Find(
+			Return(
 				db.Qual(&names, "collect(n.name)", db.Name("names")),
 			).
 			Compile()
