@@ -29,10 +29,13 @@ type Scope interface {
 
 type reader interface {
 	Match(pattern Patterns, options ...MatchOption) querier
+	Return(matches ...any) runner
 
 	// The WITH clause allows query parts to be chained together, piping the
 	// results from one to be used as starting points or criteria in the next.
 	With(variables ...any) querier
+
+	Subquery(func(c Client) runner) querier
 
 	// Cypher allows you to inject a raw Cypher query into the query.
 	// The function is passed a Scope, which can be used to obtain the information
@@ -56,9 +59,7 @@ type querier interface {
 	runner
 	updater[querier]
 
-	Subquery(subquery runner) querier
 	Where(opts ...WhereOption) querier
-	Return(matches ...any) runner
 }
 
 type updater[To any] interface {

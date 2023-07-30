@@ -42,18 +42,20 @@ type (
 	Person struct {
 		neogo.Node `neo4j:"Person"`
 
-		Name        string  `json:"name"`
-		Surname     string  `json:"surname"`
-		Position    string  `json:"position"`
-		Email       string  `json:"email"`
-		Belt        *string `json:"belt"`
-		Nationality string  `json:"nationality"`
-		Age         int     `json:"age"`
-		BornIn      int     `json:"bornIn"`
-		Created     int     `json:"created"`
+		Name         string  `json:"name"`
+		Surname      string  `json:"surname"`
+		Position     string  `json:"position"`
+		Email        string  `json:"email"`
+		Belt         *string `json:"belt"`
+		Nationality  string  `json:"nationality"`
+		Age          int     `json:"age"`
+		BornIn       int     `json:"bornIn"`
+		Created      int     `json:"created"`
 		LastSeen     int     `json:"lastSeen"`
-		Found       bool    `json:"found"`
+		Found        bool    `json:"found"`
+		ChauffeurName string  `json:"chauffeurName"`
 	}
+
 	Company struct {
 		neogo.Node `neo4j:"Company"`
 
@@ -90,6 +92,9 @@ type (
 		neogo.Relationship `neo4j:"KNOWS"`
 
 		Since int `json:"since"`
+	}
+	BornIn struct {
+		neogo.Relationship `neo4j:"BORN_IN"`
 	}
 	WorksAt struct {
 		neogo.Relationship `neo4j:"WORKS_AT"`

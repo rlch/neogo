@@ -86,7 +86,7 @@ type (
 		Expr       Expr
 		Where      *Where
 		Select     *json.FieldQuery
-		Props      map[any]Expr
+		Props      Props
 		Pattern    Expr
 		Quantifier Expr
 	}
@@ -113,7 +113,7 @@ type (
 	}
 	selectionSubClause struct {
 		// Field name -> true if ascending
-		OrderBy map[string]bool
+		OrderBy map[any]bool
 		Skip    Expr
 		Limit   Expr
 		Where   *Where
@@ -151,7 +151,7 @@ type (
 )
 
 var (
-	_ WhereOption = (Expr)("")
+	_ ICondition = (Expr)("")
 	_ interface {
 		WhereOption
 		ICondition
@@ -162,6 +162,10 @@ func (e Expr) configureWhere(w *Where) {
 	w.Expr = string(e)
 }
 
+func (e Expr) Condition() *Condition {
+	return &Condition{Key: e}
+}
+
 func (c *Condition) configureWhere(w *Where) {
 	w.Conds = append(w.Conds, c)
 }
@@ -170,7 +174,7 @@ func (c *Condition) Condition() *Condition {
 	return c
 }
 
-type Props map[any]Expr
+type Props map[any]any
 
 func (p Props) configureVariable(v *Variable) {
 	v.Props = p

@@ -8,7 +8,7 @@ import (
 func NewCypherClient() *CypherClient {
 	cy := newCypher()
 	return &CypherClient{
-		CypherReader:  *newCypherReader(cy),
+		CypherReader:  *newCypherReader(cy, nil),
 		CypherUpdater: *newCypherUpdater(cy),
 	}
 }
@@ -31,6 +31,7 @@ type (
 		*cypher
 	}
 	CypherReader struct {
+		Parent *scope
 		*cypher
 	}
 	CypherUpdater[To any] struct {
@@ -46,14 +47,14 @@ type (
 func newCypherQuerier(cy *cypher) *CypherQuerier {
 	q := &CypherQuerier{
 		cypher:        cy,
-		CypherReader:  *newCypherReader(cy),
+		CypherReader:  *newCypherReader(cy, nil),
 		CypherUpdater: *newCypherUpdater(cy),
 		CypherRunner:  *newCypherRunner(cy, false),
 	}
 	return q
 }
 
-func newCypherReader(cy *cypher) *CypherReader {
+func newCypherReader(cy *cypher, parent *scope) *CypherReader {
 	return &CypherReader{cypher: cy}
 }
 
@@ -80,14 +81,24 @@ func (c *CypherReader) Match(patterns Patterns, options ...MatchOption) *CypherQ
 	return newCypherQuerier(c.cypher)
 }
 
+func (c *CypherReader) Subquery(subquery func(c *CypherClient) *CypherRunner) *CypherQuerier {
+	c.writeSubqueryClause(subquery)
+	return newCypherQuerier(c.cypher)
+}
+
 func (c *CypherReader) With(variables ...any) *CypherQuerier {
-	c.writeProjectionBodyClause("WITH", variables...)
+	c.writeProjectionBodyClause("WITH", c.Parent, variables...)
 	return newCypherQuerier(c.cypher)
 }
 
 func (c *CypherReader) Unwind(expr any, as string) *CypherQuerier {
 	c.writeUnwindClause(expr, as)
 	return newCypherQuerier(c.cypher)
+}
+
+func (c *CypherReader) Return(matches ...any) *CypherRunner {
+	c.writeProjectionBodyClause("RETURN", nil, matches...)
+	return newCypherRunner(c.cypher, true)
 }
 
 func (c *CypherQuerier) Where(opts ...WhereOption) *CypherQuerier {
@@ -97,15 +108,6 @@ func (c *CypherQuerier) Where(opts ...WhereOption) *CypherQuerier {
 	}
 	c.writeWhereClause(where, false)
 	return newCypherQuerier(c.cypher)
-}
-
-func (c *CypherQuerier) Return(matches ...any) *CypherRunner {
-	c.writeProjectionBodyClause("RETURN", matches...)
-	return newCypherRunner(c.cypher, true)
-}
-
-func (c *CypherQuerier) Subquery(subquery *CypherRunner) *CypherQuerier {
-	return nil
 }
 
 func (c *CypherUpdater[To]) Create(pattern Patterns) To {

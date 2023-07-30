@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -16,11 +15,12 @@ import (
 
 func newScope() *scope {
 	return &scope{
-		bindings:   make(map[string]reflect.Value),
-		names:      make(map[reflect.Value]string),
-		fields:     make(map[uintptr]struct{ name, entity string }),
-		parameters: map[string]any{},
-		paramAddrs: map[uintptr]string{},
+		bindings:       make(map[string]reflect.Value),
+		names:          make(map[reflect.Value]string),
+		generatedNames: map[string]struct{}{},
+		fields:         make(map[uintptr]struct{ name, entity string }),
+		parameters:     map[string]any{},
+		paramAddrs:     map[uintptr]string{},
 	}
 }
 
@@ -28,9 +28,10 @@ type (
 	scope struct {
 		err error
 
-		bindings map[string]reflect.Value
-		names    map[reflect.Value]string
-		fields   map[uintptr]struct{ name, entity string }
+		bindings       map[string]reflect.Value
+		generatedNames map[string]struct{}
+		names          map[reflect.Value]string
+		fields         map[uintptr]struct{ name, entity string }
 
 		paramCounter     int
 		parameters       map[string]any
@@ -65,20 +66,46 @@ var (
 	relationshipType = reflect.TypeOf((*neogo.IRelationship)(nil)).Elem()
 )
 
-func (s *scope) catch(op func()) {
-	defer func() {
-		if r := recover(); r != nil {
-			debug.PrintStack()
-			err, ok := r.(error)
-			if !ok {
-				panic(err)
-			}
-			if s.err == nil {
-				s.err = err
-			}
-		}
-	}()
-	op()
+func (child *scope) mergeParentScope(parent *scope) {
+	// We merge the param counter for avoiding parameter name collisions; and
+	// bindings to ensure variables cannot be overridden in the child scope.
+	// We assume people that aren't using generated names know what they're
+	// doing (and therefore delegate potential errors to Neo4J).
+	child.paramCounter = parent.paramCounter
+	for generatedName := range parent.generatedNames {
+		v := parent.bindings[generatedName]
+		child.bindings[generatedName] = v
+		child.names[v] = generatedName
+	}
+	for k, v := range parent.fields {
+		child.fields[k] = v
+	}
+}
+
+func (s *scope) mergeChildScope(child *scope) {
+	for k, v := range child.bindings {
+		fmt.Println(k, v)
+		s.bindings[k] = v
+	}
+	for k, v := range child.names {
+		s.names[k] = v
+	}
+	for k, v := range child.generatedNames {
+		s.generatedNames[k] = v
+	}
+	for k, v := range child.fields {
+		s.fields[k] = v
+	}
+	for k, v := range child.parameters {
+		s.parameters[k] = v
+	}
+	for k, v := range child.paramAddrs {
+		s.paramAddrs[k] = v
+	}
+	for k, v := range child.parameterFilters {
+		s.parameterFilters[k] = v
+	}
+	s.paramCounter = child.paramCounter
 }
 
 func (s *scope) unfoldEntity(value any) (
@@ -147,14 +174,15 @@ func (s *scope) replaceBinding(m *member) {
 	canElem := vT.Kind() == reflect.Ptr ||
 		vT.Kind() == reflect.Slice ||
 		vT.Kind() == reflect.Array
+
+	name := m.alias
+	if name == "" {
+		name = m.name
+	}
 	if m.variable != nil && m.variable.Bind != nil {
 		bind := reflect.ValueOf(m.variable.Bind)
 		if bind.Kind() != reflect.Ptr {
 			panic(fmt.Errorf("cannot bind to non-pointer value %s", bind))
-		}
-		name := m.alias
-		if name == "" {
-			name = m.name
 		}
 		s.bindings[name] = bind
 		s.names[bind] = name
@@ -170,9 +198,43 @@ func (s *scope) replaceBinding(m *member) {
 			s.bindings[m.name] = v
 		}
 	}
+
+	// Bind field addresses to their names
+	inner := v
+	for inner.Kind() == reflect.Ptr {
+		inner = inner.Elem()
+	}
+	if canElem && inner.Kind() == reflect.Struct {
+		vsT := inner.Type()
+		for i := 0; i < vsT.NumField(); i++ {
+			vf := inner.Field(i)
+			jsTag, ok := vsT.Field(i).Tag.Lookup("json")
+			if !ok {
+				continue
+			}
+			accessor := strings.Split(jsTag, ",")[0]
+			ptr := uintptr(vf.Addr().UnsafePointer())
+			field := struct {
+				name   string
+				entity string
+			}{
+				name:   accessor,
+				entity: name,
+			}
+			s.fields[ptr] = field
+
+			fieldName := field.entity + "." + field.name
+			vfAddr := vf.Addr()
+			s.names[vfAddr] = fieldName
+		}
+	}
 }
 
-func (s *scope) register(value any, isNode *bool) *member {
+func (s *scope) lookup(value any) *member {
+	return s.register(value, true, nil)
+}
+
+func (s *scope) register(value any, lookup bool, isNode *bool) *member {
 	if value == nil {
 		return nil
 	}
@@ -224,6 +286,9 @@ func (s *scope) register(value any, isNode *bool) *member {
 				m.name = currentName
 			}
 		} else if !ok {
+			if lookup {
+				return nil
+			}
 			if canElem {
 				// Check if name needs to be replaced
 				if oldName, ok := s.names[v]; ok {
@@ -236,6 +301,8 @@ func (s *scope) register(value any, isNode *bool) *member {
 		if name, ok := s.names[v]; ok {
 			m.isNew = false
 			m.name = name
+		} else if lookup {
+			return nil
 		}
 		needsName := m.name == "" && (projBody != nil || m.where != nil || v.Kind() == reflect.Ptr)
 		if needsName {
@@ -264,8 +331,19 @@ func (s *scope) register(value any, isNode *bool) *member {
 				}
 				m.name = potentialName
 			}
+			s.generatedNames[m.name] = struct{}{}
 		}
 	}
+
+	// If we are looking up a member, we are done
+	if lookup {
+		if m.isNew {
+			return nil
+		} else {
+			return m
+		}
+	}
+
 	if expr, ok := m.entity.(Expr); ok {
 		// Allow strings to be used as names
 		if m.name != "" {
@@ -298,7 +376,17 @@ func (s *scope) register(value any, isNode *bool) *member {
 			if inner.IsZero() {
 				break
 			}
-			param := s.addParameter(v, m.name)
+			effProp := v
+			effName := m.alias
+			if effName == "" {
+				effName = m.name
+			}
+			if p, ok := inner.Interface().(Param); ok {
+				effName = p.Name
+				prop := *p.Value
+				effProp = reflect.ValueOf(prop)
+			}
+			param := s.addParameter(effProp, effName)
 			if m.variable != nil && m.variable.Select != nil {
 				s.parameterFilters[param] = m.variable.Select
 			}
@@ -314,54 +402,27 @@ func (s *scope) register(value any, isNode *bool) *member {
 			m.name = param
 		}
 	}
-
-	// Bind field addresses to their names
-	if canElem && inner.Kind() == reflect.Struct {
-		vsT := inner.Type()
-		for i := 0; i < vsT.NumField(); i++ {
-			vf := inner.Field(i)
-			jsTag, ok := vsT.Field(i).Tag.Lookup("json")
-			if !ok {
-				continue
-			}
-			fieldName := strings.Split(jsTag, ",")[0]
-			ptr := uintptr(vf.Addr().UnsafePointer())
-			field := struct {
-				name   string
-				entity string
-			}{
-				name:   fieldName,
-				entity: m.name,
-			}
-			s.fields[ptr] = field
-
-			name := field.entity + "." + field.name
-			vfAddr := vf.Addr()
-			s.names[vfAddr] = name
-		}
-	}
-
 	return m
 }
 
 func (s *scope) registerNode(n *node) *member {
 	t := true
-	return s.register(n.data, &t)
+	return s.register(n.data, false, &t)
 }
 
 func (s *scope) registerEdge(n *relationship) *member {
 	f := false
-	return s.register(n.data, &f)
+	return s.register(n.data, false, &f)
 }
 
-func (s *scope) entityName(entity any) string {
+func (s *scope) lookupName(entity any) string {
 	entity, _, _ = s.unfoldEntity(entity)
 	return s.names[reflect.ValueOf(entity)]
 }
 
 func (s *scope) propertyExpression(entity any) func(v any) string {
 	entity, _, _ = s.unfoldEntity(entity)
-	entityName := s.entityName(entity)
+	entityName := s.lookupName(entity)
 	return func(v any) string {
 		if v == entity && entityName != "" {
 			return entityName
@@ -431,7 +492,12 @@ func (s *scope) valueExpression(v any) string {
 
 func (s *scope) addParameter(v reflect.Value, optName string) (name string) {
 	defer func() {
-		s.parameters[name] = v.Interface()
+		if v.IsValid() && v.CanInterface() {
+			s.parameters[name] = v.Interface()
+		} else {
+			fmt.Printf("[WARNING] invalid paramter: %s\n", name)
+			s.parameters[name] = nil
+		}
 		name = "$" + name
 	}()
 	if v.CanAddr() {

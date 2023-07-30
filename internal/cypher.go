@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime/debug"
 	"sort"
 	"strings"
 )
@@ -38,7 +39,25 @@ var (
 	errMergingReturnSubclause = errors.New("cannot merge multiple RETURN sub-clauses (ORDER BY, LIMIT, SKIP, ...)")
 	errWhereReturnSubclause   = errors.New("WHERE clause in RETURN sub-clause is not allowed")
 	errInvalidPropExpr        = errors.New("invalid property expression. Property expressions must be strings or an identifier of some entity")
+	errSubqueryImportAlias    = errors.New("aliasing or expressions are not supported in importing WITH clauses")
 )
+
+func (s *cypher) catch(op func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Panicked while building the following query:\n%s", s.String())
+			debug.PrintStack()
+			err, ok := r.(error)
+			if !ok {
+				panic(err)
+			}
+			if s.err == nil {
+				s.err = err
+			}
+		}
+	}()
+	op()
+}
 
 const indent = "  "
 
@@ -189,7 +208,7 @@ func (cy *cypher) writeProps(props Props) {
 		if i > 0 {
 			cy.WriteString(", ")
 		}
-		v := props[k.Prop]
+		v := cy.valueExpression(props[k.Prop])
 		fmt.Fprintf(cy, "%s: %s", k.Key, v)
 	}
 	cy.WriteString("}")
@@ -364,12 +383,32 @@ func (cy *cypher) writeWhereClause(where *Where, inline bool) {
 
 func (cy *cypher) writeUnwindClause(expr any, as string) {
 	cy.WriteString("UNWIND ")
-	m := cy.register(expr, nil)
+	m := cy.register(expr, false, nil)
 	fmt.Fprintf(cy, "%s AS %s", m.name, as)
 	// Replace name with alias
 	m.alias = as
 	cy.replaceBinding(m)
 	cy.newline()
+}
+
+func (cy *cypher) writeSubqueryClause(subquery func(c *CypherClient) *CypherRunner) {
+	cy.catch(func() {
+		child := NewCypherClient()
+		child.Parent = cy.scope
+		child.CypherReader.mergeParentScope(child.Parent)
+		runSubquery := subquery(child)
+
+		fmt.Fprintf(cy, "CALL {\n")
+		cy.writeIndented("  ", func(cy *cypher) {
+			compiled, err := runSubquery.Compile()
+			if err != nil {
+				panic(err)
+			}
+			cy.WriteString(compiled.Cypher)
+			cy.mergeChildScope(runSubquery.scope)
+		})
+		cy.WriteString("\n}\n")
+	})
 }
 
 // ProjectionBody = [[SP], (D,I,S,T,I,N,C,T)], SP, ProjectionItems, [SP, Order], [SP, Skip], [SP, Limit] ;
@@ -378,7 +417,21 @@ func (cy *cypher) writeUnwindClause(expr any, as string) {
 //
 // It should be noted that any projection body constrains the variables within
 // the scope of the query to that which is projected.
-func (cy *cypher) writeProjectionBodyClause(clause string, vars ...any) {
+func (cy *cypher) writeProjectionBodyClause(clause string, parent *scope, vars ...any) {
+	isWith := clause == "WITH"
+	register := func(v any) (m *member, allowAlias bool) {
+		if isWith && parent != nil {
+			// WITH is a special case, as it allows for reusing variables from the
+			// parent scope.
+			m := parent.lookup(v)
+			if m != nil {
+				// Bind the variable from the parent scope to the child scope.
+				cy.replaceBinding(m)
+				return m, false
+			}
+		}
+		return cy.register(v, false, nil), true
+	}
 	cy.catch(func() {
 		cy.WriteString(clause + " ")
 		var (
@@ -386,13 +439,16 @@ func (cy *cypher) writeProjectionBodyClause(clause string, vars ...any) {
 			registeredNames = make(map[string]struct{}, len(vars))
 		)
 		for i, v := range vars {
-			m := cy.register(v, nil)
+			m, allowAlias := register(v)
 			if m.name != "" {
 				if i > 0 {
 					cy.WriteString(", ")
 				}
 			}
 			if m.alias != "" {
+				if !allowAlias {
+					panic(errSubqueryImportAlias)
+				}
 				registeredNames[m.alias] = struct{}{}
 			} else {
 				registeredNames[m.name] = struct{}{}
@@ -402,12 +458,8 @@ func (cy *cypher) writeProjectionBodyClause(clause string, vars ...any) {
 					// Merge subclauses
 					if subclause == nil {
 						subclause = &selectionSubClause{
-							OrderBy: map[string]bool{},
+							OrderBy: map[any]bool{},
 						}
-					}
-					name := m.alias
-					if name == "" {
-						name = m.name
 					}
 					if m.projectionBody.Limit != "" {
 						if subclause.Limit != "" {
@@ -437,13 +489,14 @@ func (cy *cypher) writeProjectionBodyClause(clause string, vars ...any) {
 						subclause.Where = m.projectionBody.Where
 					}
 					for ob, asc := range m.projectionBody.OrderBy {
-						if ob == "" {
-							subclause.OrderBy[name] = asc
-						} else if name != "" {
-							subclause.OrderBy[name+"."+ob] = asc
+						getKey := cy.propertyExpression(m.entity)
+						var key string
+						if ob == "" || ob == nil {
+							key = getKey(m.entity)
 						} else {
-							subclause.OrderBy[ob] = asc
+							key = getKey(ob)
 						}
+						subclause.OrderBy[key] = asc
 					}
 				}
 				if m.projectionBody.Distinct {
@@ -464,7 +517,7 @@ func (cy *cypher) writeProjectionBodyClause(clause string, vars ...any) {
 			orderByKeys := make([]string, len(subclause.OrderBy))
 			i := 0
 			for key := range subclause.OrderBy {
-				orderByKeys[i] = key
+				orderByKeys[i] = key.(string)
 				i++
 			}
 			sort.Slice(orderByKeys, func(u, v int) bool {
@@ -490,11 +543,14 @@ func (cy *cypher) writeProjectionBodyClause(clause string, vars ...any) {
 				fmt.Fprintf(cy, "LIMIT %s\n", subclause.Limit)
 			}
 			if subclause.Where != nil {
-				if clause == "RETURN" {
+				if !isWith {
 					panic(errWhereReturnSubclause)
 				}
 				cy.writeWhereClause(subclause.Where, false)
 			}
+		}
+		if _, hasWildcard := registeredNames["*"]; hasWildcard {
+			return
 		}
 		for name, v := range cy.bindings {
 			if _, ok := registeredNames[name]; ok {
@@ -542,7 +598,7 @@ func (cy *cypher) writeForEachClause(entity, elementsExpr any, do func(c *Cypher
 		value := cy.valueExpression(elementsExpr)
 
 		foreach := newCypher()
-		m := foreach.register(entity, nil)
+		m := foreach.register(entity, false, nil)
 		fmt.Fprintf(cy, "%s IN %s | ", m.name, value)
 
 		b := &strings.Builder{}

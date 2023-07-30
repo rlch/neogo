@@ -15,11 +15,11 @@ func Return(entity any, opts ...internal.ProjectionBodyOption) *internal.Project
 	return With(entity, opts...)
 }
 
-func OrderBy(field string, asc bool) internal.ProjectionBodyOption {
+func OrderBy(field any, asc bool) internal.ProjectionBodyOption {
 	return &internal.Configurer{
 		ProjectionBody: func(m *internal.ProjectionBody) {
 			if m.OrderBy == nil {
-				m.OrderBy = map[string]bool{}
+				m.OrderBy = map[any]bool{}
 			}
 			m.OrderBy[field] = asc
 		},

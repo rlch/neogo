@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	neogo "github.com/rlch/neogo"
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 )
@@ -307,42 +308,123 @@ func TestMerge(t *testing.T) {
 
 		t.Run("Merge on an undirected relationship", func(t *testing.T) {
 			var (
-				oliver Person
-				reiner Person
-				movie  Movie
+				charlie Person
+				oliver  Person
+				r       Knows
 			)
 			c := internal.NewCypherClient()
 			cy, err := c.
 				Match(
 					db.Patterns(
+						db.Node(db.Qual(&charlie, "charlie", db.Props{
+							"name": "'Charlie Sheen'",
+						})),
 						db.Node(db.Qual(&oliver, "oliver", db.Props{
 							"name": "'Oliver Stone'",
-						})),
-						db.Node(db.Qual(&reiner, "reiner", db.Props{
-							"name": "'Rob Reiner'",
 						})),
 					),
 				).
 				Merge(
-					db.Node(&oliver).
-						To(Directed{}, &movie).
-						From(Directed{}, &reiner),
+					db.Node(&charlie).
+						Related(db.Qual(&r, "r"), &oliver),
 				).
-				Return(&movie).
+				Return(&r).
 				Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH
-					  (oliver:Person {name: 'Oliver Stone'}),
-					  (reiner:Person {name: 'Rob Reiner'})
-					MERGE (oliver)-[:DIRECTED]->(movie:Movie)<-[:DIRECTED]-(reiner)
-					RETURN movie
+					  (charlie:Person {name: 'Charlie Sheen'}),
+					  (oliver:Person {name: 'Oliver Stone'})
+					MERGE (charlie)-[r:KNOWS]-(oliver)
+					RETURN r
 					`,
 				Bindings: map[string]reflect.Value{
-					"movie": reflect.ValueOf(&movie),
+					"r": reflect.ValueOf(&r),
 				},
 			})
 		})
+
+		t.Run("Merge on a relationship between two existing nodes", func(t *testing.T) {
+			var (
+				person   Person
+				location Location
+			)
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(db.Node(db.Qual(&person, "person"))).
+				Merge(
+					db.Node(db.Qual(&location, "location", db.Props{
+						"name": "person.bornIn",
+					})),
+				).
+				Merge(
+					db.Node(&person).To(db.Qual(BornIn{}, "r"), &location),
+				).
+				Return(&person.Name, &person.BornIn, &location).
+				Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (person:Person)
+					MERGE (location:Location {name: person.bornIn})
+					MERGE (person)-[r:BORN_IN]->(location)
+					RETURN person.name, person.bornIn, location
+					`,
+				Bindings: map[string]reflect.Value{
+					"person.name":   reflect.ValueOf(&person.Name),
+					"person.bornIn": reflect.ValueOf(&person.BornIn),
+					"location":      reflect.ValueOf(&location),
+				},
+			})
+		})
+
+		t.Run("Merge on a relationship between an existing node and a merged node derived from a node property", func(t *testing.T) {
+			type Chaffeur struct {
+				neogo.Node `neo4j:"Chauffeur"`
+			}
+			type HasChauffeur struct {
+				neogo.Relationship `neo4j:"HAS_CHAUFFEUR"`
+			}
+			var (
+				person    Person
+				r         HasChauffeur
+				chauffeur Chaffeur
+			)
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(db.Node(db.Qual(&person, "person"))).
+				Merge(
+					db.Node(&person).To(
+						db.Qual(&r, "r"),
+						db.Qual(&chauffeur, "chauffeur", db.Props{
+							"name": &person.ChauffeurName,
+						}),
+					),
+				).
+				Return(&person.Name, &person.ChauffeurName, &chauffeur).
+				Compile()
+
+			check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (person:Person)
+					MERGE (person)-[r:HAS_CHAUFFEUR]->(chauffeur:Chauffeur {name: person.chauffeurName})
+					RETURN person.name, person.chauffeurName, chauffeur
+					`,
+				Bindings: map[string]reflect.Value{
+					"person.name":          reflect.ValueOf(&person.Name),
+					"person.chauffeurName": reflect.ValueOf(&person.ChauffeurName),
+					"chauffeur":            reflect.ValueOf(&chauffeur),
+				},
+			})
+		})
+	})
+
+	t.Run("Using node property uniqueness constraints with MERGE", func(t *testing.T) {
+		// TODO:
+	})
+
+	t.Run("Using relationship property uniqueness constraints with MERGE", func(t *testing.T) {
+		// TODO:
 	})
 }
