@@ -2,10 +2,6 @@ package internal
 
 import "github.com/goccy/go-json"
 
-func ConfigureMatchOptions(o *MatchOptions, configurer MatchOption) {
-	configurer.configureMatchOptions(o)
-}
-
 func ConfigureMergeOptions(o *MergeOptions, configurer MergeOption) {
 	configurer.configureMergeOptions(o)
 }
@@ -23,7 +19,6 @@ func ConfigureWhere(w *Where, configurer WhereOption) {
 }
 
 type Configurer struct {
-	MatchOptions   func(*MatchOptions)
 	MergeOptions   func(*MergeOptions)
 	Variable       func(*Variable)
 	ProjectionBody func(*ProjectionBody)
@@ -31,16 +26,11 @@ type Configurer struct {
 }
 
 var _ interface {
-	MatchOption
 	MergeOption
 	VariableOption
 	ProjectionBodyOption
 	WhereOption
 } = (*Configurer)(nil)
-
-func (c *Configurer) configureMatchOptions(o *MatchOptions) {
-	c.MatchOptions(o)
-}
 
 func (c *Configurer) configureMergeOptions(o *MergeOptions) {
 	c.MergeOptions(o)
@@ -59,12 +49,6 @@ func (c *Configurer) configureWhere(w *Where) {
 }
 
 type (
-	MatchOption interface {
-		configureMatchOptions(*MatchOptions)
-	}
-	MatchOptions struct {
-		Optional bool
-	}
 	MergeOption interface {
 		configureMergeOptions(*MergeOptions)
 	}

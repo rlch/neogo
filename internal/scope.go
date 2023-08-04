@@ -9,12 +9,10 @@ import (
 
 	"github.com/goccy/go-json"
 	"github.com/iancoleman/strcase"
-
-	neogo "github.com/rlch/neogo"
 )
 
-func newScope() *scope {
-	return &scope{
+func newScope() *Scope {
+	return &Scope{
 		bindings:       make(map[string]reflect.Value),
 		names:          make(map[reflect.Value]string),
 		generatedNames: map[string]struct{}{},
@@ -25,15 +23,18 @@ func newScope() *scope {
 }
 
 type (
-	scope struct {
+	Scope struct {
 		err error
 
+		isWrite        bool
 		bindings       map[string]reflect.Value
 		generatedNames map[string]struct{}
 		names          map[reflect.Value]string
 		fields         map[uintptr]struct{ name, entity string }
 
-		paramCounter     int
+		paramCounter int
+		paramPrefix  string
+
 		parameters       map[string]any
 		parameterFilters map[string]*json.FieldQuery
 		paramAddrs       map[uintptr]string
@@ -62,11 +63,53 @@ type (
 )
 
 var (
-	nodeType         = reflect.TypeOf((*neogo.INode)(nil)).Elem()
-	relationshipType = reflect.TypeOf((*neogo.IRelationship)(nil)).Elem()
+	nodeType         = reflect.TypeOf((*INode)(nil)).Elem()
+	relationshipType = reflect.TypeOf((*IRelationship)(nil)).Elem()
 )
 
-func (child *scope) mergeParentScope(parent *scope) {
+func (s *Scope) clone() *Scope {
+	bindings := make(map[string]reflect.Value, len(s.bindings))
+	for k, v := range s.bindings {
+		bindings[k] = v
+	}
+	generatedNames := make(map[string]struct{}, len(s.generatedNames))
+	for k, v := range s.generatedNames {
+		generatedNames[k] = v
+	}
+	names := make(map[reflect.Value]string, len(s.names))
+	for k, v := range s.names {
+		names[k] = v
+	}
+	fields := make(map[uintptr]struct{ name, entity string }, len(s.fields))
+	for k, v := range s.fields {
+		fields[k] = v
+	}
+	paramCounter := s.paramCounter
+	parameters := make(map[string]any, len(s.parameters))
+	for k, v := range s.parameters {
+		parameters[k] = v
+	}
+	parameterFilters := make(map[string]*json.FieldQuery, len(s.parameterFilters))
+	for k, v := range s.parameterFilters {
+		parameterFilters[k] = v
+	}
+	paramAddrs := make(map[uintptr]string, len(s.paramAddrs))
+	for k, v := range s.paramAddrs {
+		paramAddrs[k] = v
+	}
+	return &Scope{
+		bindings:         bindings,
+		generatedNames:   generatedNames,
+		names:            names,
+		fields:           fields,
+		paramCounter:     paramCounter,
+		parameters:       parameters,
+		parameterFilters: parameterFilters,
+		paramAddrs:       paramAddrs,
+	}
+}
+
+func (child *Scope) mergeParentScope(parent *Scope) {
 	// We merge the param counter for avoiding parameter name collisions; and
 	// bindings to ensure variables cannot be overridden in the child scope.
 	// We assume people that aren't using generated names know what they're
@@ -82,9 +125,18 @@ func (child *scope) mergeParentScope(parent *scope) {
 	}
 }
 
-func (s *scope) mergeChildScope(child *scope) {
+func (s *Scope) clear() {
+	s.bindings = map[string]reflect.Value{}
+	s.names = map[reflect.Value]string{}
+	s.generatedNames = map[string]struct{}{}
+	s.fields = map[uintptr]struct{ name, entity string }{}
+	s.parameters = map[string]any{}
+	s.paramAddrs = map[uintptr]string{}
+	s.parameterFilters = map[string]*json.FieldQuery{}
+}
+
+func (s *Scope) mergeChildScope(child *Scope) {
 	for k, v := range child.bindings {
-		fmt.Println(k, v)
 		s.bindings[k] = v
 	}
 	for k, v := range child.names {
@@ -108,7 +160,7 @@ func (s *scope) mergeChildScope(child *scope) {
 	s.paramCounter = child.paramCounter
 }
 
-func (s *scope) unfoldEntity(value any) (
+func (s *Scope) unfoldEntity(value any) (
 	entity any,
 	variable *Variable,
 	projBody *ProjectionBody,
@@ -168,12 +220,11 @@ RecurseToEntity:
 	return entity, variable, projBody
 }
 
-func (s *scope) replaceBinding(m *member) {
+func (s *Scope) replaceBinding(m *member) {
 	v := reflect.ValueOf(m.entity)
 	vT := v.Type()
 	canElem := vT.Kind() == reflect.Ptr ||
-		vT.Kind() == reflect.Slice ||
-		vT.Kind() == reflect.Array
+		vT.Kind() == reflect.Slice
 
 	name := m.alias
 	if name == "" {
@@ -230,11 +281,11 @@ func (s *scope) replaceBinding(m *member) {
 	}
 }
 
-func (s *scope) lookup(value any) *member {
+func (s *Scope) lookup(value any) *member {
 	return s.register(value, true, nil)
 }
 
-func (s *scope) register(value any, lookup bool, isNode *bool) *member {
+func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 	if value == nil {
 		return nil
 	}
@@ -270,8 +321,7 @@ func (s *scope) register(value any, lookup bool, isNode *bool) *member {
 	v := reflect.ValueOf(entity)
 	vT := v.Type()
 	canElem := vT.Kind() == reflect.Ptr ||
-		vT.Kind() == reflect.Slice ||
-		vT.Kind() == reflect.Array
+		vT.Kind() == reflect.Slice
 
 	// Find the name of the entity
 	if m.name != "" {
@@ -372,7 +422,7 @@ func (s *scope) register(value any, lookup bool, isNode *bool) *member {
 	}
 	if inner.IsValid() && m.isNew {
 		switch inner.Kind() {
-		case reflect.Struct, reflect.Array, reflect.Slice:
+		case reflect.Struct, reflect.Slice:
 			if inner.IsZero() {
 				break
 			}
@@ -405,22 +455,26 @@ func (s *scope) register(value any, lookup bool, isNode *bool) *member {
 	return m
 }
 
-func (s *scope) registerNode(n *node) *member {
+func (s *Scope) registerNode(n *node) *member {
 	t := true
 	return s.register(n.data, false, &t)
 }
 
-func (s *scope) registerEdge(n *relationship) *member {
+func (s *Scope) registerEdge(n *relationship) *member {
 	f := false
 	return s.register(n.data, false, &f)
 }
 
-func (s *scope) lookupName(entity any) string {
+func (s *Scope) Name(entity any) string {
+	return s.lookupName(entity)
+}
+
+func (s *Scope) lookupName(entity any) string {
 	entity, _, _ = s.unfoldEntity(entity)
 	return s.names[reflect.ValueOf(entity)]
 }
 
-func (s *scope) propertyExpression(entity any) func(v any) string {
+func (s *Scope) propertyExpression(entity any) func(v any) string {
 	entity, _, _ = s.unfoldEntity(entity)
 	entityName := s.lookupName(entity)
 	return func(v any) string {
@@ -451,7 +505,7 @@ func (s *scope) propertyExpression(entity any) func(v any) string {
 	}
 }
 
-func (s *scope) valueExpression(v any) string {
+func (s *Scope) valueExpression(v any) string {
 	vv := reflect.ValueOf(v)
 	switch vv.Kind() {
 	case reflect.Bool:
@@ -490,7 +544,7 @@ func (s *scope) valueExpression(v any) string {
 	panic(fmt.Errorf("could not find a value-representation for %v", v))
 }
 
-func (s *scope) addParameter(v reflect.Value, optName string) (name string) {
+func (s *Scope) addParameter(v reflect.Value, optName string) (name string) {
 	defer func() {
 		if v.IsValid() && v.CanInterface() {
 			s.parameters[name] = v.Interface()
@@ -512,6 +566,10 @@ func (s *scope) addParameter(v reflect.Value, optName string) (name string) {
 	if optName != "" {
 		return optName
 	}
+	paramPrefix := "v"
+	if s.paramPrefix != "" {
+		paramPrefix = s.paramPrefix
+	}
 	s.paramCounter++
-	return "v" + strconv.Itoa(s.paramCounter)
+	return paramPrefix + strconv.Itoa(s.paramCounter)
 }

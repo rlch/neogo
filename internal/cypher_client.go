@@ -7,9 +7,14 @@ import (
 
 func NewCypherClient() *CypherClient {
 	cy := newCypher()
+	return newCypherClient(cy)
+}
+
+func newCypherClient(cy *cypher) *CypherClient {
 	return &CypherClient{
-		CypherReader:  *newCypherReader(cy, nil),
-		CypherUpdater: *newCypherUpdater(cy),
+		cypher:        cy,
+		CypherReader:  newCypherReader(cy, nil),
+		CypherUpdater: newCypherUpdater(cy),
 	}
 }
 
@@ -21,18 +26,23 @@ type (
 		ns []*node
 	}
 	CypherClient struct {
-		CypherReader
-		CypherUpdater[*CypherQuerier]
+		*cypher
+		*CypherReader
+		*CypherUpdater[*CypherQuerier]
 	}
 	CypherQuerier struct {
-		CypherReader
-		CypherRunner
-		CypherUpdater[*CypherQuerier]
 		*cypher
+		*CypherReader
+		*CypherRunner
+		*CypherUpdater[*CypherQuerier]
 	}
 	CypherReader struct {
-		Parent *scope
 		*cypher
+		Parent *Scope
+	}
+	CypherYielder struct {
+		*cypher
+		*CypherQuerier
 	}
 	CypherUpdater[To any] struct {
 		*cypher
@@ -47,14 +57,14 @@ type (
 func newCypherQuerier(cy *cypher) *CypherQuerier {
 	q := &CypherQuerier{
 		cypher:        cy,
-		CypherReader:  *newCypherReader(cy, nil),
-		CypherUpdater: *newCypherUpdater(cy),
-		CypherRunner:  *newCypherRunner(cy, false),
+		CypherReader:  newCypherReader(cy, nil),
+		CypherUpdater: newCypherUpdater(cy),
+		CypherRunner:  newCypherRunner(cy, false),
 	}
 	return q
 }
 
-func newCypherReader(cy *cypher, parent *scope) *CypherReader {
+func newCypherReader(cy *cypher, parent *Scope) *CypherReader {
 	return &CypherReader{cypher: cy}
 }
 
@@ -62,8 +72,17 @@ func newCypherUpdater(cy *cypher) *CypherUpdater[*CypherQuerier] {
 	return &CypherUpdater[*CypherQuerier]{
 		cypher: cy,
 		To: func(c *cypher) *CypherQuerier {
+			// We know if this is executed, the query has some update clause.
+			c.isWrite = true
 			return newCypherQuerier(c)
 		},
+	}
+}
+
+func newCypherYielder(cy *cypher) *CypherYielder {
+	return &CypherYielder{
+		cypher:        cy,
+		CypherQuerier: newCypherQuerier(cy),
 	}
 }
 
@@ -71,13 +90,32 @@ func newCypherRunner(cy *cypher, isReturn bool) *CypherRunner {
 	return &CypherRunner{cypher: cy, isReturn: isReturn}
 }
 
-func (c *CypherReader) Match(patterns Patterns, options ...MatchOption) *CypherQuerier {
-	for _, pattern := range patterns.nodes() {
-		for _, option := range options {
-			option.configureMatchOptions(&pattern.MatchOptions)
-		}
-	}
-	c.writeReadingClause(patterns.nodes())
+func (c *CypherClient) Use(graphExpr string) *CypherQuerier {
+	c.writeUseClause(graphExpr)
+	return newCypherQuerier(c.cypher)
+}
+
+func (c *CypherClient) Union(unions ...func(c *CypherClient) *CypherRunner) *CypherQuerier {
+	c.writeUnionClause(unions, false, c.Parent)
+	q := newCypherQuerier(c.cypher)
+	q.isReturn = true
+	return q
+}
+
+func (c *CypherClient) UnionAll(unions ...func(c *CypherClient) *CypherRunner) *CypherQuerier {
+	c.writeUnionClause(unions, true, c.Parent)
+	q := newCypherQuerier(c.cypher)
+	q.isReturn = true
+	return q
+}
+
+func (c *CypherReader) OptionalMatch(patterns Patterns) *CypherQuerier {
+	c.writeReadingClause(patterns.nodes(), true)
+	return newCypherQuerier(c.cypher)
+}
+
+func (c *CypherReader) Match(patterns Patterns) *CypherQuerier {
+	c.writeReadingClause(patterns.nodes(), false)
 	return newCypherQuerier(c.cypher)
 }
 
@@ -96,9 +134,25 @@ func (c *CypherReader) Unwind(expr any, as string) *CypherQuerier {
 	return newCypherQuerier(c.cypher)
 }
 
+func (c *CypherReader) Call(procedure string) *CypherYielder {
+	c.writeCallClause(procedure)
+	return newCypherYielder(c.cypher)
+}
+
+func (c *CypherReader) Show(command string) *CypherYielder {
+	c.writeShowClause(command)
+	return newCypherYielder(c.cypher)
+}
+
 func (c *CypherReader) Return(matches ...any) *CypherRunner {
 	c.writeProjectionBodyClause("RETURN", nil, matches...)
 	return newCypherRunner(c.cypher, true)
+}
+
+func (c *CypherReader) Cypher(query func(scope *Scope) string) *CypherQuerier {
+	q := query(c.Scope)
+	c.WriteString(q + "\n")
+	return newCypherQuerier(c.cypher)
 }
 
 func (c *CypherQuerier) Where(opts ...WhereOption) *CypherQuerier {
@@ -145,6 +199,18 @@ func (c *CypherUpdater[To]) ForEach(entity, elementsExpr any, do func(c *CypherU
 	return c.To(c.cypher)
 }
 
+func (c *CypherYielder) Yield(variables ...any) *CypherQuerier {
+	c.writeYieldClause(variables...)
+	return newCypherQuerier(c.cypher)
+}
+
+func (c *CypherRunner) CompileWithParams(params map[string]any) (*CompiledCypher, error) {
+	for k, v := range params {
+		c.parameters[k] = v
+	}
+	return c.Compile()
+}
+
 func (c *CypherRunner) Compile() (*CompiledCypher, error) {
 	out := c.String()
 	out = strings.TrimRight(out, "\n")
@@ -155,6 +221,7 @@ func (c *CypherRunner) Compile() (*CompiledCypher, error) {
 		Cypher:     out,
 		Parameters: c.parameters,
 		Bindings:   c.bindings,
+		IsWrite:    c.isWrite,
 	}
 	if c.err != nil {
 		return nil, c.err

@@ -2,6 +2,22 @@ package internal
 
 import "errors"
 
+type (
+	Pattern interface {
+		Patterns
+		ICondition
+
+		node() *node
+		Related(edgeMatch, nodeMatch any) Pattern
+		From(edgeMatch, nodeMatch any) Pattern
+		To(edgeMatch, nodeMatch any) Pattern
+	}
+
+	Patterns interface {
+		nodes() []*node
+	}
+)
+
 var (
 	_ interface {
 		Pattern
@@ -16,7 +32,6 @@ type (
 		pathName     string
 		data         any
 		relationship *relationship
-		MatchOptions
 	}
 	relationship struct {
 		data    any

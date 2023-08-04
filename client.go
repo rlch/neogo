@@ -1,26 +1,20 @@
-package internal
+package neogo
 
 import (
 	"context"
+
+	_ "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	_ "github.com/sanity-io/litter"
+
+	"github.com/rlch/neogo/internal"
 )
 
 type Client interface {
 	reader
 	updater[querier]
-}
-
-type Pattern interface {
-	Patterns
-	ICondition
-
-	node() *node
-	Related(edgeMatch, nodeMatch any) Pattern
-	From(edgeMatch, nodeMatch any) Pattern
-	To(edgeMatch, nodeMatch any) Pattern
-}
-
-type Patterns interface {
-	nodes() []*node
+	Use(graphExpr string) querier
+	Union(unions ...func(c Client) runner) querier
+	UnionAll(unions ...func(c Client) runner) querier
 }
 
 type Scope interface {
@@ -28,19 +22,22 @@ type Scope interface {
 }
 
 type reader interface {
-	Match(pattern Patterns, options ...MatchOption) querier
+	OptionalMatch(pattern internal.Patterns) querier
+	Match(pattern internal.Patterns) querier
 	Return(matches ...any) runner
 
 	// The WITH clause allows query parts to be chained together, piping the
 	// results from one to be used as starting points or criteria in the next.
 	With(variables ...any) querier
 
+	Call(procedure string) yielder
+
 	Subquery(func(c Client) runner) querier
 
 	// Cypher allows you to inject a raw Cypher query into the query.
 	// The function is passed a Scope, which can be used to obtain the information
 	// about the querys current state.
-	Cypher(func(scope Scope) string) querier
+	Cypher(query func(scope Scope) string) querier
 
 	// Unwind expands a list into a sequence of rows.
 	//
@@ -54,20 +51,25 @@ type reader interface {
 	Unwind(expr any, as string) querier
 }
 
+type yielder interface {
+	querier
+	Yield(variables ...any) querier
+}
+
 type querier interface {
 	reader
 	runner
 	updater[querier]
 
-	Where(opts ...WhereOption) querier
+	Where(opts ...internal.WhereOption) querier
 }
 
 type updater[To any] interface {
-	Create(patterns Patterns) To
-	Merge(payload any) To
+	Create(patterns internal.Patterns) To
+	Merge(pattern internal.Pattern, opts ...internal.MergeOption) To
 	Delete(variables ...any) To
-	Set(items ...SetItem) To
-	Remove(items ...RemoveItem) To
+	Set(items ...internal.SetItem) To
+	Remove(items ...internal.RemoveItem) To
 	ForEach(entity, inList any, do func(c updater[any])) To
 }
 

@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rlch/neogo"
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 )
@@ -36,7 +35,7 @@ func TestCallSubquery(t *testing.T) {
 
 		c = internal.NewCypherClient()
 		type Counter struct {
-			neogo.Node `neo4j:"Counter"`
+			internal.NodeEntity `neo4j:"Counter"`
 
 			Count int `json:"count"`
 		}
@@ -167,15 +166,241 @@ func TestCallSubquery(t *testing.T) {
 					RETURN from.name AS name, from.age AS age, to.name AS closestOlderName, to.age AS closestOlderAge
 					`,
 			Bindings: map[string]reflect.Value{
-				"name": reflect.ValueOf(&from.Name),
-				"age":  reflect.ValueOf(&from.Age),
+				"name":             reflect.ValueOf(&from.Name),
+				"age":              reflect.ValueOf(&from.Age),
 				"closestOlderName": reflect.ValueOf(&next.Name),
 				"closestOlderAge":  reflect.ValueOf(&next.Age),
 			},
 		})
 	})
 
-	t.Run("Post-union processing", func(t *testing.T) {})
+	t.Run("Post-union processing", func(t *testing.T) {
+		c := internal.NewCypherClient()
+		var p Person
+		cy, err := c.
+			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
+				return c.Union(
+					func(c *internal.CypherClient) *internal.CypherRunner {
+						return c.
+							Match(db.Node(db.Qual(&p, "p"))).
+							Return(
+								db.Return(&p, db.OrderBy(&p.Age, true), db.Limit("1")),
+							)
+					},
+					func(c *internal.CypherClient) *internal.CypherRunner {
+						return c.
+							Match(db.Node(db.Qual(&p, "p"))).
+							Return(
+								db.Return(&p, db.OrderBy(&p.Age, false), db.Limit("1")),
+							)
+					},
+				).CypherRunner
+			}).
+			Return(db.Return(&p.Name, db.OrderBy("", true)), &p.Age).
+			Compile()
+
+			// TODO: Maybe expose db.Multiline as an option that can force multiline
+			// queries
+		check(t, cy, err, internal.CompiledCypher{
+			Cypher: `
+					CALL {
+					  MATCH (p:Person)
+					  RETURN p
+					  ORDER BY p.age
+					  LIMIT 1
+					UNION
+					  MATCH (p:Person)
+					  RETURN p
+					  ORDER BY p.age DESC
+					  LIMIT 1
+					}
+					RETURN p.name, p.age
+					ORDER BY p.name
+					`,
+			Bindings: map[string]reflect.Value{
+				"p.name": reflect.ValueOf(&p.Name),
+				"p.age":  reflect.ValueOf(&p.Age),
+			},
+		})
+
+		var (
+			other  any
+			cOther any
+		)
+		c = internal.NewCypherClient()
+		cy, err = c.
+			Match(db.Node(db.Qual(&p, "p"))).
+			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
+				return c.Union(
+					func(c *internal.CypherClient) *internal.CypherRunner {
+						return c.
+							With(&p).
+							OptionalMatch(
+								db.Node(&p).
+									To(
+										db.Var(nil, db.Label("FRIEND_OF")),
+										db.Qual(&other, "other", db.Label("Person")),
+									),
+							).
+							Return(&other)
+					},
+					func(c *internal.CypherClient) *internal.CypherRunner {
+						return c.
+							With(&p).
+							OptionalMatch(
+								db.Node(&p).
+									To(
+										db.Var(nil, db.Label("CHILD_OF")),
+										db.Qual(&other, "other", db.Label("Parent")),
+									),
+							).
+							Return(&other)
+					},
+				).CypherRunner
+			}).
+			Return(db.Return(&p.Name, db.Distinct), db.Qual(&cOther, "count(other)")).
+			Compile()
+
+			// TODO: Maybe expose db.Multiline as an option that can force multiline
+			// queries
+		check(t, cy, err, internal.CompiledCypher{
+			Cypher: `
+					MATCH (p:Person)
+					CALL {
+					  WITH p
+					  OPTIONAL MATCH (p)-[:FRIEND_OF]->(other:Person)
+					  RETURN other
+					UNION
+					  WITH p
+					  OPTIONAL MATCH (p)-[:CHILD_OF]->(other:Parent)
+					  RETURN other
+					}
+					RETURN DISTINCT p.name, count(other)
+					`,
+			Bindings: map[string]reflect.Value{
+				"p.name":       reflect.ValueOf(&p.Name),
+				"count(other)": reflect.ValueOf(&cOther),
+			},
+		})
+	})
+
+	t.Run("Aggregations", func(t *testing.T) {
+		c := internal.NewCypherClient()
+		var (
+			p       Person
+			numConn int
+		)
+		cy, err := c.
+			Match(db.Node(db.Qual(&p, "p"))).
+			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
+				return c.
+					With(&p).
+					Match(db.Node(&p).Related(nil, db.Var("c"))).
+					Return(
+						db.Qual(&numConn, "count(c)", db.Name("numberOfConnections")),
+					)
+			}).
+			Return(&p.Name, &numConn).
+			Compile()
+
+			// TODO: Maybe expose db.Multiline as an option that can force multiline
+			// queries
+		check(t, cy, err, internal.CompiledCypher{
+			Cypher: `
+					MATCH (p:Person)
+					CALL {
+					  WITH p
+					  MATCH (p)--(c)
+					  RETURN count(c) AS numberOfConnections
+					}
+					RETURN p.name, numberOfConnections
+					`,
+			Bindings: map[string]reflect.Value{
+				"p.name":              reflect.ValueOf(&p.Name),
+				"numberOfConnections": reflect.ValueOf(&numConn),
+			},
+		})
+	})
+
+	t.Run("Unit subqueries and side-effects", func(t *testing.T) {
+		c := internal.NewCypherClient()
+		var (
+			p     Person
+			count int
+		)
+		cy, err := c.
+			Match(db.Node(db.Qual(&p, "p"))).
+			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
+				return c.
+					With(&p).
+					Unwind("range (1, 5)", "i").
+					Create(
+						db.Node(db.Var(Person{}, db.Props{"name": &p.Name})),
+					).CypherRunner
+			}).
+			Return(db.Qual(&count, "count(*)")).
+			Compile()
+
+			// TODO: Maybe expose db.Multiline as an option that can force multiline
+			// queries
+		check(t, cy, err, internal.CompiledCypher{
+			Cypher: `
+					MATCH (p:Person)
+					CALL {
+					  WITH p
+					  UNWIND range (1, 5) AS i
+					  CREATE (:Person {name: p.name})
+					}
+					RETURN count(*)
+					`,
+			Bindings: map[string]reflect.Value{
+				"count(*)": reflect.ValueOf(&count),
+			},
+		})
+	})
+
+	t.Run("Aggregation on imported variables", func(t *testing.T) {
+		c := internal.NewCypherClient()
+		var (
+			p     Person
+			other Person
+			count int
+		)
+		cy, err := c.
+			Match(db.Node(db.Qual(&p, "p"))).
+			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
+				return c.
+					With(&p).
+					Match(db.Node(db.Qual(&other, "other"))).
+					Where(db.Cond(&other.Age, "<", &p.Age)).
+					Return(db.Qual(&count, "count(other)", db.Name("youngerPersonsCount")))
+			}).
+			Return(&p.Name, &count).
+			Compile()
+
+			// TODO: Maybe expose db.Multiline as an option that can force multiline
+			// queries
+		check(t, cy, err, internal.CompiledCypher{
+			Cypher: `
+					MATCH (p:Person)
+					CALL {
+					  WITH p
+					  MATCH (other:Person)
+					  WHERE other.age < p.age
+					  RETURN count(other) AS youngerPersonsCount
+					}
+					RETURN p.name, youngerPersonsCount
+					`,
+			Bindings: map[string]reflect.Value{
+				"youngerPersonsCount": reflect.ValueOf(&count),
+				"p.name":              reflect.ValueOf(&p.Name),
+			},
+		})
+	})
+
+	t.Run("Subqueries in transactions", func(t *testing.T) {
+		// TODO: is this possible with the driver? Skipping for now
+	})
 
 	t.Run("Variable collisions are avoided", func(t *testing.T) {
 		c := internal.NewCypherClient()
@@ -226,10 +451,10 @@ func TestCallSubquery(t *testing.T) {
 			With(db.Param(nil)).
 			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
 				// NOTE: In the public API runner will be returned as an interface.
-				return &c.With(db.Param(nil)).CypherRunner
+				return c.With(db.Param(nil)).CypherRunner
 			}).
 			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
-				return &c.With(db.Param(nil)).CypherRunner
+				return c.With(db.Param(nil)).CypherRunner
 			}).
 			With(db.Param(nil)).
 			Return(db.Param(nil)).Compile()
@@ -258,4 +483,87 @@ func TestCallSubquery(t *testing.T) {
 }
 
 func TestCallProcedure(t *testing.T) {
+	t.Run("Call a procedure using CALL", func(t *testing.T) {
+		var labels []string
+		c := internal.NewCypherClient()
+		cy, err := c.
+			Call("db.labels()").
+			Yield(db.Qual(&labels, "label")).
+			Return(&labels).
+			Compile()
+
+		check(t, cy, err, internal.CompiledCypher{
+			Cypher: `
+			CALL db.labels()
+			YIELD label
+			RETURN label
+					`,
+			Bindings: map[string]reflect.Value{
+				"label": reflect.ValueOf(&labels),
+			},
+		})
+	})
+
+	t.Run("View the signature for a procedure", func(t *testing.T) {
+		var (
+			name any
+			sig  string
+		)
+		c := internal.NewCypherClient()
+		cy, err := c.
+			Show("PROCEDURES").
+			Yield(
+				db.Qual(&name, "name"),
+				db.Qual(&sig, "signature"),
+			).
+			Where(db.Cond(&name, "=", "'dbms.listConfig'")).
+			Return(&sig).
+			Compile()
+
+		check(t, cy, err, internal.CompiledCypher{
+			Cypher: `
+					SHOW PROCEDURES
+					YIELD name, signature
+					WHERE name = 'dbms.listConfig'
+					RETURN signature
+					`,
+			Bindings: map[string]reflect.Value{
+				"signature": reflect.ValueOf(&sig),
+			},
+		})
+	})
+
+	t.Run("Call a procedure within a complex query and rename its outputs", func(t *testing.T) {
+		var (
+			prop     any
+			numNodes int
+		)
+		c := internal.NewCypherClient()
+		cy, err := c.
+			Call("db.propertyKeys()").
+			Yield(
+				db.Qual(&prop, "propertyKey", db.Name("prop")),
+			).
+			Match(db.Node("n")).
+			Where(db.Cond("n[prop]", "IS NOT", "NULL")).
+			Return(&prop, db.Qual(&numNodes, "count(n)", db.Name("numNodes"))).
+			Compile()
+
+			// ignore, just a bad tree-sitter query triggering a false-positive for
+			// sql lol
+		isNot := "IS NOT"
+		check(t, cy, err, internal.CompiledCypher{
+			Cypher: `
+					CALL db.propertyKeys()
+					YIELD propertyKey AS prop
+					MATCH (n)
+					WHERE n[prop] ` + isNot + ` NULL
+					RETURN prop, count(n) AS numNodes
+					`,
+			Bindings: map[string]reflect.Value{
+				"prop":     reflect.ValueOf(&prop),
+				"numNodes": reflect.ValueOf(&numNodes),
+			},
+		})
+	})
 }

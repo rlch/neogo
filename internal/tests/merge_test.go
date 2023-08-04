@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	neogo "github.com/rlch/neogo"
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 )
@@ -381,10 +380,10 @@ func TestMerge(t *testing.T) {
 
 		t.Run("Merge on a relationship between an existing node and a merged node derived from a node property", func(t *testing.T) {
 			type Chaffeur struct {
-				neogo.Node `neo4j:"Chauffeur"`
+				internal.NodeEntity `neo4j:"Chauffeur"`
 			}
 			type HasChauffeur struct {
-				neogo.Relationship `neo4j:"HAS_CHAUFFEUR"`
+				internal.RelationshipEntity `neo4j:"HAS_CHAUFFEUR"`
 			}
 			var (
 				person    Person

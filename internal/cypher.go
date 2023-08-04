@@ -10,7 +10,7 @@ import (
 )
 
 type cypher struct {
-	*scope
+	*Scope
 	*strings.Builder
 }
 
@@ -18,11 +18,12 @@ type CompiledCypher struct {
 	Cypher     string
 	Parameters map[string]any
 	Bindings   map[string]reflect.Value
+	IsWrite    bool
 }
 
 func newCypher() *cypher {
 	return &cypher{
-		scope:   newScope(),
+		Scope:   newScope(),
 		Builder: &strings.Builder{},
 	}
 }
@@ -291,28 +292,51 @@ func (cy *cypher) writePattern(pattern *node) {
 	})
 }
 
-func (cy *cypher) writeReadingClause(patterns []*node) {
-	cy.catch(func() {
-		n := len(patterns)
-		for i, pattern := range patterns {
-			if i == 0 || (i < n-1 && pattern.Optional != patterns[i+1].Optional) {
-				if pattern.Optional {
-					cy.WriteString("OPTIONAL ")
-				}
-				cy.WriteString("MATCH")
-				if i < n-1 {
-					cy.WriteString("\n" + indent)
-				} else {
-					cy.WriteString(" ")
-				}
-			}
-			if i > 0 {
-				cy.WriteString(",\n" + indent)
-			}
-			cy.writePattern(pattern)
-		}
-		cy.newline()
+func (cy *cypher) writeReadingClause(patterns []*node, optional bool) {
+	clause := "MATCH"
+	if optional {
+		clause = "OPTIONAL " + clause
+	}
+	cy.writeMultilineQuery(clause, len(patterns), func(i int) {
+		pattern := patterns[i]
+		cy.writePattern(pattern)
 	})
+}
+
+func (cy *cypher) writeUseClause(graphExpr string) {
+	cy.WriteString("USE " + graphExpr)
+	cy.newline()
+}
+
+func (cy *cypher) writeUnionClause(unions []func(*CypherClient) *CypherRunner, all bool, parent *Scope) {
+	clause := "UNION"
+	if all {
+		clause += " ALL"
+	}
+	runners := make([]*CypherRunner, len(unions))
+	for i, union := range unions {
+		rootScope := cy.clone()
+		rootCy := newCypher()
+		rootCy.Scope = rootScope
+		childCy := newCypherClient(rootCy)
+		// Parent scope of CALL should be propagated to UNION if exists
+		childCy.Parent = parent
+		runners[i] = union(childCy)
+	}
+	cy.clear()
+	// TODO: Potentially perform a check to ensure bindings and names are
+	// equivalent from compiled runner. We assume they are and let Neo4J handle
+	// errors.
+	queries := make([]string, len(runners))
+	for i, runner := range runners {
+		comp, err := runner.Compile()
+		if err != nil {
+			panic(err)
+		}
+		queries[i] = comp.Cypher
+		cy.mergeChildScope(runner.Scope)
+	}
+	cy.WriteString(strings.Join(queries, "\n"+clause+"\n"))
 }
 
 func (cy *cypher) writeCreateClause(
@@ -394,8 +418,8 @@ func (cy *cypher) writeUnwindClause(expr any, as string) {
 func (cy *cypher) writeSubqueryClause(subquery func(c *CypherClient) *CypherRunner) {
 	cy.catch(func() {
 		child := NewCypherClient()
-		child.Parent = cy.scope
-		child.CypherReader.mergeParentScope(child.Parent)
+		child.Parent = cy.Scope
+		child.mergeParentScope(child.Parent)
 		runSubquery := subquery(child)
 
 		fmt.Fprintf(cy, "CALL {\n")
@@ -405,7 +429,7 @@ func (cy *cypher) writeSubqueryClause(subquery func(c *CypherClient) *CypherRunn
 				panic(err)
 			}
 			cy.WriteString(compiled.Cypher)
-			cy.mergeChildScope(runSubquery.scope)
+			cy.mergeChildScope(runSubquery.Scope)
 		})
 		cy.WriteString("\n}\n")
 	})
@@ -417,7 +441,7 @@ func (cy *cypher) writeSubqueryClause(subquery func(c *CypherClient) *CypherRunn
 //
 // It should be noted that any projection body constrains the variables within
 // the scope of the query to that which is projected.
-func (cy *cypher) writeProjectionBodyClause(clause string, parent *scope, vars ...any) {
+func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars ...any) {
 	isWith := clause == "WITH"
 	register := func(v any) (m *member, allowAlias bool) {
 		if isWith && parent != nil {
@@ -616,6 +640,27 @@ func (cy *cypher) writeForEachClause(entity, elementsExpr any, do func(c *Cypher
 	})
 }
 
+func (cy *cypher) writeCallClause(procedure string) {
+	cy.WriteString("CALL " + procedure)
+	cy.newline()
+}
+
+func (cy *cypher) writeShowClause(procedure string) {
+	cy.WriteString("SHOW " + procedure)
+	cy.newline()
+}
+
+func (cy *cypher) writeYieldClause(variables ...any) {
+	cy.writeSinglelineQuery("YIELD", len(variables), func(i int) {
+		v := variables[i]
+		m := cy.register(v, false, nil)
+		cy.WriteString(m.name)
+		if m.alias != "" {
+			fmt.Fprintf(cy, " AS %s", m.alias)
+		}
+	})
+}
+
 func (cy *cypher) writeSinglelineQuery(clause string, n int, each func(i int)) {
 	cy.catch(func() {
 		cy.WriteString(clause + " ")
@@ -659,6 +704,10 @@ func (cy *cypher) writeIndented(indent string, write func(cy *cypher)) {
 				cy.WriteString("\n")
 			}
 			if line == "" {
+				continue
+			}
+			if strings.HasPrefix(line, "UNION") {
+				cy.WriteString(line)
 				continue
 			}
 			cy.WriteString(indent + line)

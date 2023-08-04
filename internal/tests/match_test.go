@@ -344,9 +344,8 @@ func TestMatch(t *testing.T) {
 						},
 					)),
 				).
-				Match(
+				OptionalMatch(
 					db.Node(&a).To(db.Qual(&r, "r"), nil),
-					db.Optional,
 				).Return(&a.Name, &r).Compile()
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -374,7 +373,7 @@ func TestMatch(t *testing.T) {
 						db.Props{"name": "'Charlie Sheen'"},
 					),
 				)).
-				Match(db.Node(&a).To(nil, db.Qual(&x, "x")), db.Optional).
+				OptionalMatch(db.Node(&a).To(nil, db.Qual(&x, "x"))).
 				Return(&x).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
@@ -403,7 +402,7 @@ func TestMatch(t *testing.T) {
 						db.Props{"name": "'Martin Sheen'"},
 					),
 				)).
-				Match(db.Node(&a).To(nil, db.Qual(&x, "x")), db.Optional).
+				OptionalMatch(db.Node(&a).To(nil, db.Qual(&x, "x"))).
 				Return(&x, db.Qual(&name, "x.name")).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{
@@ -433,7 +432,7 @@ func TestMatch(t *testing.T) {
 						db.Props{"title": "'Wall Street'"},
 					),
 				)).
-				Match(db.Node(db.Var("x")).To(db.Qual(ActedIn{}, "r"), &a), db.Optional).
+				OptionalMatch(db.Node(db.Var("x")).To(db.Qual(ActedIn{}, "r"), &a)).
 				Return(&a.Title, db.Qual(&name, "x.name"), db.Qual(&typeR, "type(r)")).Compile()
 
 			check(t, cy, err, internal.CompiledCypher{

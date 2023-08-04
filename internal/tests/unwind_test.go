@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	neogo "github.com/rlch/neogo"
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 )
@@ -143,18 +142,18 @@ func TestUnwind(t *testing.T) {
 			},
 		}
 		type Year struct {
-			neogo.Node `neo4j:"Year"`
+			internal.NodeEntity `neo4j:"Year"`
 
 			Year int `json:"year"`
 		}
 		type Event struct {
-			neogo.Node `neo4j:"Event"`
+			internal.NodeEntity `neo4j:"Event"`
 
 			ID   int `json:"id"`
 			Year int `json:"year"`
 		}
 		type In struct {
-			neogo.Relationship `neo4j:"IN"`
+			internal.RelationshipEntity `neo4j:"IN"`
 		}
 		var (
 			y Year
