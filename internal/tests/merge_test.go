@@ -380,10 +380,10 @@ func TestMerge(t *testing.T) {
 
 		t.Run("Merge on a relationship between an existing node and a merged node derived from a node property", func(t *testing.T) {
 			type Chaffeur struct {
-				internal.NodeEntity `neo4j:"Chauffeur"`
+				internal.Node `neo4j:"Chauffeur"`
 			}
 			type HasChauffeur struct {
-				internal.RelationshipEntity `neo4j:"HAS_CHAUFFEUR"`
+				internal.Relationship `neo4j:"HAS_CHAUFFEUR"`
 			}
 			var (
 				person    Person

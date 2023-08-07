@@ -2,37 +2,37 @@ package db
 
 import "github.com/rlch/neogo/internal"
 
-func SetPropValue(entity, value any) internal.SetItem {
+func SetPropValue(identifier, value any) internal.SetItem {
 	return internal.SetItem{
-		Entity: entity,
+		Identifier: identifier,
 		Value:  value,
 	}
 }
 
-func SetMerge(entity, properties any) internal.SetItem {
+func SetMerge(identifier, properties any) internal.SetItem {
 	return internal.SetItem{
-		Entity: entity,
+		Identifier: identifier,
 		Value:  properties,
 		Merge:  true,
 	}
 }
 
-func SetLabels(entity any, labels ...string) internal.SetItem {
+func SetLabels(identifier any, labels ...string) internal.SetItem {
 	return internal.SetItem{
-		Entity: entity,
+		Identifier: identifier,
 		Labels: labels,
 	}
 }
 
-func RemoveProp(entity any) internal.RemoveItem {
+func RemoveProp(identifier any) internal.RemoveItem {
 	return internal.RemoveItem{
-		Entity: entity,
+		Identifier: identifier,
 	}
 }
 
-func RemoveLabels(entity any, labels ...string) internal.RemoveItem {
+func RemoveLabels(identifier any, labels ...string) internal.RemoveItem {
 	return internal.RemoveItem{
-		Entity: entity,
+		Identifier: identifier,
 		Labels: labels,
 	}
 }

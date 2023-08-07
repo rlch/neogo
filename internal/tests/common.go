@@ -32,14 +32,14 @@ func check(t *testing.T, cy *internal.CompiledCypher, err error, want internal.C
 
 type (
 	Movie struct {
-		internal.NodeEntity `neo4j:"Movie"`
+		internal.Node `neo4j:"Movie"`
 
 		Title    string `json:"title"`
 		Released int    `json:"released"`
 		Tagline  string `json:"tagline"`
 	}
 	Person struct {
-		internal.NodeEntity `neo4j:"Person"`
+		internal.Node `neo4j:"Person"`
 
 		Name          string  `json:"name"`
 		Surname       string  `json:"surname"`
@@ -56,12 +56,12 @@ type (
 	}
 
 	Company struct {
-		internal.NodeEntity `neo4j:"Company"`
+		internal.Node `neo4j:"Company"`
 
 		Name string `json:"name"`
 	}
 	Location struct {
-		internal.NodeEntity `neo4j:"Location"`
+		internal.Node `neo4j:"Location"`
 
 		Name string `json:"name"`
 	}
@@ -69,34 +69,34 @@ type (
 
 type (
 	ActedIn struct {
-		internal.RelationshipEntity `neo4j:"ACTED_IN"`
+		internal.Relationship `neo4j:"ACTED_IN"`
 
 		Role string `json:"role"`
 	}
 	Directed struct {
-		internal.RelationshipEntity `neo4j:"DIRECTED"`
+		internal.Relationship `neo4j:"DIRECTED"`
 	}
 	Produced struct {
-		internal.RelationshipEntity `neo4j:"PRODUCED"`
+		internal.Relationship `neo4j:"PRODUCED"`
 	}
 	Wrote struct {
-		internal.RelationshipEntity `neo4j:"WROTE"`
+		internal.Relationship `neo4j:"WROTE"`
 	}
 	Reviewed struct {
-		internal.RelationshipEntity `neo4j:"REVIEWED"`
+		internal.Relationship `neo4j:"REVIEWED"`
 
 		Rating float64 `json:"rating"`
 	}
 	Knows struct {
-		internal.RelationshipEntity `neo4j:"KNOWS"`
+		internal.Relationship `neo4j:"KNOWS"`
 
 		Since int `json:"since"`
 	}
 	BornIn struct {
-		internal.RelationshipEntity `neo4j:"BORN_IN"`
+		internal.Relationship `neo4j:"BORN_IN"`
 	}
 	WorksAt struct {
-		internal.RelationshipEntity `neo4j:"WORKS_AT"`
+		internal.Relationship `neo4j:"WORKS_AT"`
 	}
 )
 
@@ -105,8 +105,8 @@ type Organism interface {
 }
 
 type BaseOrganism struct {
-	internal.AbstractEntity `neo4j:"Organism"`
-	internal.NodeEntity
+	internal.Abstract `neo4j:"Organism"`
+	internal.Node
 	Alive bool `json:"alive"`
 }
 

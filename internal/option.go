@@ -63,9 +63,9 @@ type (
 		configureVariable(*Variable)
 	}
 	Variable struct {
-		Entity any
-		Bind   any
-		Name   string
+		Identifier any
+		Bind       any
+		Name       string
 		// If both name and expr are provided, name is used as an alias
 		Expr       Expr
 		Where      *Where
@@ -83,7 +83,7 @@ type (
 	ProjectionBody struct {
 		selectionSubClause
 
-		Entity     any
+		Identifier any
 		Pagination PaginationOptions
 		Distinct   bool
 	}
@@ -117,9 +117,9 @@ type (
 		Condition() *Condition
 	}
 	Where struct {
-		Entity any
-		Expr   string
-		Conds  []*Condition
+		Identifier any
+		Expr       string
+		Conds      []*Condition
 	}
 	Condition struct {
 		Xor   []*Condition
@@ -166,14 +166,14 @@ func (p Props) configureVariable(v *Variable) {
 
 type (
 	SetItem struct {
-		Entity any
-		Value  any
-		Merge  bool
-		Labels []string
+		Identifier any
+		Value      any
+		Merge      bool
+		Labels     []string
 	}
 	RemoveItem struct {
-		Entity any
-		Labels []string
+		Identifier any
+		Labels     []string
 	}
 )
 

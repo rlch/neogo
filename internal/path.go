@@ -7,14 +7,14 @@ type (
 		Patterns
 		ICondition
 
-		node() *node
+		nodePattern() *nodePattern
 		Related(edgeMatch, nodeMatch any) Pattern
 		From(edgeMatch, nodeMatch any) Pattern
 		To(edgeMatch, nodeMatch any) Pattern
 	}
 
 	Patterns interface {
-		nodes() []*node
+		nodes() []*nodePattern
 	}
 )
 
@@ -28,20 +28,20 @@ var (
 )
 
 type (
-	node struct {
+	nodePattern struct {
 		pathName     string
 		data         any
-		relationship *relationship
+		relationship *relationshipPattern
 	}
-	relationship struct {
+	relationshipPattern struct {
 		data    any
-		to      *node
-		from    *node
-		related *node
+		to      *nodePattern
+		from    *nodePattern
+		related *nodePattern
 	}
 )
 
-func (n *node) next() *node {
+func (n *nodePattern) next() *nodePattern {
 	if n.relationship == nil {
 		return n
 	}
@@ -56,7 +56,7 @@ func (n *node) next() *node {
 	}
 }
 
-func (n *node) tail() *node {
+func (n *nodePattern) tail() *nodePattern {
 	tail := n
 	if tail == nil {
 		panic(errors.New("head is nil"))
@@ -67,57 +67,57 @@ func (n *node) tail() *node {
 	return tail
 }
 
-func Node(match any) Pattern {
-	return &CypherPath{n: &node{data: match}}
+func NewNode(match any) Pattern {
+	return &CypherPath{n: &nodePattern{data: match}}
 }
 
 func NewPath(path Pattern, name string) Pattern {
-	n := path.node()
+	n := path.nodePattern()
 	n.pathName = name
-	return &CypherPath{n: path.node()}
+	return &CypherPath{n: path.nodePattern()}
 }
 
 func Paths(paths ...Pattern) Patterns {
 	if len(paths) == 0 {
 		panic(errors.New("no paths"))
 	}
-	ns := make([]*node, len(paths))
+	ns := make([]*nodePattern, len(paths))
 	for i, path := range paths {
-		ns[i] = path.node()
+		ns[i] = path.nodePattern()
 	}
 	return &CypherPattern{ns: ns}
 }
 
 func (c *CypherPath) Related(edgeMatch, nodeMatch any) Pattern {
-	c.n.tail().relationship = &relationship{
+	c.n.tail().relationship = &relationshipPattern{
 		data:    edgeMatch,
-		related: &node{data: nodeMatch},
+		related: &nodePattern{data: nodeMatch},
 	}
 	return c
 }
 
 func (c *CypherPath) From(edgeMatch, nodeMatch any) Pattern {
-	c.n.tail().relationship = &relationship{
+	c.n.tail().relationship = &relationshipPattern{
 		data: edgeMatch,
-		from: &node{data: nodeMatch},
+		from: &nodePattern{data: nodeMatch},
 	}
 	return c
 }
 
 func (c *CypherPath) To(edgeMatch, nodeMatch any) Pattern {
-	c.n.tail().relationship = &relationship{
+	c.n.tail().relationship = &relationshipPattern{
 		data: edgeMatch,
-		to:   &node{data: nodeMatch},
+		to:   &nodePattern{data: nodeMatch},
 	}
 	return c
 }
 
-func (c *CypherPath) node() *node {
+func (c *CypherPath) nodePattern() *nodePattern {
 	return c.n
 }
 
-func (c *CypherPath) nodes() []*node {
-	return []*node{c.n}
+func (c *CypherPath) nodes() []*nodePattern {
+	return []*nodePattern{c.n}
 }
 
 func (c *CypherPath) Condition() *Condition {
@@ -128,6 +128,6 @@ func (c *CypherPath) configureWhere(w *Where) {
 	c.Condition().configureWhere(w)
 }
 
-func (c *CypherPattern) nodes() []*node {
+func (c *CypherPattern) nodes() []*nodePattern {
 	return c.ns
 }

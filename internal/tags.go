@@ -37,7 +37,7 @@ func ExtractRelationshipType(relationship any) string {
 		}
 		return ""
 	}
-	tags, err := extractNeo4JName(relationship, "Relationship", "RelationshipEntity")
+	tags, err := extractNeo4JName(relationship)
 	if err != nil {
 		return ""
 	}

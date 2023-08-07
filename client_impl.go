@@ -23,7 +23,7 @@ type (
 		*session
 		cy *internal.CypherQuerier
 		Reader
-		runner
+		Runner
 		Updater[Querier]
 	}
 	readerImpl struct {
@@ -66,7 +66,7 @@ func (s *session) newQuerier(cy *internal.CypherQuerier) *querierImpl {
 		session: s,
 		cy:      cy,
 		Reader:  s.newReader(cy.CypherReader),
-		runner:  s.newRunner(cy.CypherRunner),
+		Runner:  s.newRunner(cy.CypherRunner),
 		Updater: newUpdater[Querier, *internal.CypherQuerier](
 			s,
 			cy.CypherUpdater,
@@ -111,7 +111,7 @@ func (c *clientImpl) Use(graphExpr string) Querier {
 	return c.newQuerier(c.cy.Use(graphExpr))
 }
 
-func (c *clientImpl) Union(unions ...func(c Client) runner) Querier {
+func (c *clientImpl) Union(unions ...func(c Client) Runner) Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
 		inUnions[i] = func(cc *internal.CypherClient) *internal.CypherRunner {
@@ -121,7 +121,7 @@ func (c *clientImpl) Union(unions ...func(c Client) runner) Querier {
 	return c.newQuerier(c.cy.Union(inUnions...))
 }
 
-func (c *clientImpl) UnionAll(unions ...func(c Client) runner) Querier {
+func (c *clientImpl) UnionAll(unions ...func(c Client) Runner) Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
 		inUnions[i] = func(cc *internal.CypherClient) *internal.CypherRunner {
@@ -139,7 +139,7 @@ func (c *readerImpl) Match(patterns internal.Patterns) Querier {
 	return c.newQuerier(c.cy.Match(patterns))
 }
 
-func (c *readerImpl) Subquery(subquery func(c Client) runner) Querier {
+func (c *readerImpl) Subquery(subquery func(c Client) Runner) Querier {
 	inSubquery := func(cc *internal.CypherClient) *internal.CypherRunner {
 		return subquery(c.newClient(cc)).(*runnerImpl).cy
 	}
@@ -154,15 +154,15 @@ func (c *readerImpl) Unwind(expr any, as string) Querier {
 	return c.newQuerier(c.cy.Unwind(expr, as))
 }
 
-func (c *readerImpl) Call(procedure string) yielder {
+func (c *readerImpl) Call(procedure string) Yielder {
 	return c.newYielder(c.cy.Call(procedure))
 }
 
-func (c *readerImpl) Show(command string) yielder {
+func (c *readerImpl) Show(command string) Yielder {
 	return c.newYielder(c.cy.Show(command))
 }
 
-func (c *readerImpl) Return(matches ...any) runner {
+func (c *readerImpl) Return(matches ...any) Runner {
 	return c.newRunner(c.cy.Return(matches...))
 }
 

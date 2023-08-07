@@ -12,8 +12,8 @@ var (
 	_ interface {
 		INode
 		IDSetter
-	} = (*NodeEntity)(nil)
-	_ IRelationship = (*RelationshipEntity)(nil)
+	} = (*Node)(nil)
+	_ IRelationship = (*Relationship)(nil)
 )
 
 func init() {
@@ -30,19 +30,19 @@ type IDSetter interface {
 	GenerateID()
 }
 
-type NodeEntity struct {
+type Node struct {
 	ID string `json:"id"`
 }
 
-func (NodeEntity) IsNode() {}
+func (Node) IsNode() {}
 
-func (n *NodeEntity) SetID(id any) {
+func (n *Node) SetID(id any) {
 	if s, ok := id.(string); ok {
 		n.ID = s
 	}
 }
 
-func (n *NodeEntity) GenerateID() {
+func (n *Node) GenerateID() {
 	n.ID = ulid.MustNew(ulid.Now(), defaultEntropySource).String()
 }
 
@@ -52,14 +52,14 @@ type IAbstract interface {
 	Implementers() []IAbstract
 }
 
-type AbstractEntity struct{}
+type Abstract struct{}
 
-func (*AbstractEntity) IsAbstract() {}
+func (*Abstract) IsAbstract() {}
 
 type IRelationship interface {
 	IsRelationship()
 }
 
-type RelationshipEntity struct{}
+type Relationship struct{}
 
-func (RelationshipEntity) IsRelationship() {}
+func (Relationship) IsRelationship() {}

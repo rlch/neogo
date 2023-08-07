@@ -35,7 +35,7 @@ func TestCallSubquery(t *testing.T) {
 
 		c = internal.NewCypherClient()
 		type Counter struct {
-			internal.NodeEntity `neo4j:"Counter"`
+			internal.Node `neo4j:"Counter"`
 
 			Count int `json:"count"`
 		}

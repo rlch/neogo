@@ -74,7 +74,7 @@ func (cy *cypher) writeNode(m *member) {
 		if !m.isNew {
 			fmt.Fprintf(cy, "(%s)", m.name)
 		} else {
-			nodeLabels := ExtractNodeLabels(m.entity)
+			nodeLabels := ExtractNodeLabels(m.identifier)
 			cy.WriteString("(")
 			padProps := false
 			if m.name != "" {
@@ -101,7 +101,7 @@ func (cy *cypher) writeNode(m *member) {
 			}
 			if m.where != nil {
 				cy.WriteRune(' ')
-				m.where.Entity = m.entity
+				m.where.Identifier = m.identifier
 				cy.writeWhereClause(m.where, true)
 			}
 			cy.WriteString(")")
@@ -122,7 +122,7 @@ func (cy *cypher) writeNode(m *member) {
 // patternFiller ::= [ relationshipVariable ] [ typeExpression ]
 //
 //	[ propertyKeyValueExpression ] [ "WHERE" booleanExpression ]
-func (cy *cypher) writeRelationship(m *member, rs *relationship) {
+func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
 	if m != nil {
 		var inner string
 		if !m.isNew {
@@ -130,7 +130,7 @@ func (cy *cypher) writeRelationship(m *member, rs *relationship) {
 				inner = m.name + inner
 			}
 		} else {
-			label := ExtractRelationshipType(m.entity)
+			label := ExtractRelationshipType(m.identifier)
 			if m.variable != nil && m.variable.Pattern != "" {
 				inner = ":" + string(m.variable.Pattern)
 			} else if label != "" {
@@ -150,7 +150,7 @@ func (cy *cypher) writeRelationship(m *member, rs *relationship) {
 				inner = inner + " " + m.props
 			}
 			if m.where != nil {
-				m.where.Entity = m.entity
+				m.where.Identifier = m.identifier
 				prevBuilder := cy.Builder
 				cy.Builder = &strings.Builder{}
 				cy.WriteRune(' ')
@@ -231,7 +231,7 @@ func (cy *cypher) writeCondition(c *Condition, parseKey, parseValue func(any) st
 			if c.Path != nil {
 				prevBuilder := cy.Builder
 				cy.Builder = &strings.Builder{}
-				cy.writePattern(c.Path.node())
+				cy.writePattern(c.Path.nodePattern())
 				s += cy.String()
 				cy.Builder = prevBuilder
 			} else if n := len(c.Xor); n > 0 {
@@ -268,7 +268,7 @@ func (cy *cypher) writeCondition(c *Condition, parseKey, parseValue func(any) st
 	})
 }
 
-func (cy *cypher) writePattern(pattern *node) {
+func (cy *cypher) writePattern(pattern *nodePattern) {
 	cy.catch(func() {
 		if pattern.pathName != "" {
 			fmt.Fprintf(cy, "%s = ", pattern.pathName)
@@ -292,7 +292,7 @@ func (cy *cypher) writePattern(pattern *node) {
 	})
 }
 
-func (cy *cypher) writeReadingClause(patterns []*node, optional bool) {
+func (cy *cypher) writeReadingClause(patterns []*nodePattern, optional bool) {
 	clause := "MATCH"
 	if optional {
 		clause = "OPTIONAL " + clause
@@ -340,7 +340,7 @@ func (cy *cypher) writeUnionClause(unions []func(*CypherClient) *CypherRunner, a
 }
 
 func (cy *cypher) writeCreateClause(
-	nodes []*node,
+	nodes []*nodePattern,
 ) {
 	cy.writeMultilineQuery("CREATE", len(nodes), func(i int) {
 		cy.writePattern(nodes[i])
@@ -348,7 +348,7 @@ func (cy *cypher) writeCreateClause(
 }
 
 func (cy *cypher) writeMergeClause(
-	node *node,
+	node *nodePattern,
 	opts ...MergeOption,
 ) {
 	merge := &MergeOptions{}
@@ -397,7 +397,7 @@ func (cy *cypher) writeWhereClause(where *Where, inline bool) {
 			} else if len(where.Conds) > 1 {
 				cond = &Condition{And: where.Conds}
 			}
-			cy.writeCondition(cond, cy.propertyExpression(where.Entity), cy.valueExpression)
+			cy.writeCondition(cond, cy.propertyExpression(where.Identifier), cy.valueExpression)
 		}
 		if !inline {
 			cy.newline()
@@ -514,10 +514,10 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 						subclause.Where = m.projectionBody.Where
 					}
 					for ob, asc := range m.projectionBody.OrderBy {
-						getKey := cy.propertyExpression(m.entity)
+						getKey := cy.propertyExpression(m.identifier)
 						var key string
 						if ob == "" || ob == nil {
-							key = getKey(m.entity)
+							key = getKey(m.identifier)
 						} else {
 							key = getKey(ob)
 						}
@@ -590,7 +590,7 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 func (cy *cypher) writeSetClause(items ...SetItem) {
 	cy.writeMultilineQuery("SET", len(items), func(i int) {
 		item := items[i]
-		prop := cy.propertyExpression(nil)(item.Entity)
+		prop := cy.propertyExpression(nil)(item.Identifier)
 		cy.WriteString(prop)
 		if len(item.Labels) > 0 {
 			cy.WriteString(":" + strings.Join(item.Labels, ":"))
@@ -608,7 +608,7 @@ func (cy *cypher) writeSetClause(items ...SetItem) {
 func (cy *cypher) writeRemoveClause(items ...RemoveItem) {
 	cy.writeMultilineQuery("REMOVE", len(items), func(i int) {
 		item := items[i]
-		prop := cy.propertyExpression(nil)(item.Entity)
+		prop := cy.propertyExpression(nil)(item.Identifier)
 		cy.WriteString(prop)
 		if len(item.Labels) > 0 {
 			cy.WriteString(":" + strings.Join(item.Labels, ":"))

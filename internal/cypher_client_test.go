@@ -12,7 +12,7 @@ func TestCypherClient(t *testing.T) {
 			cy := newCypher()
 			newCypherClient(cy).
 				Match(&CypherPattern{
-					ns: []*node{{data: "n"}},
+					ns: []*nodePattern{{data: "n"}},
 				}).
 				Where(&Condition{
 					Key:   "n.age",
@@ -28,7 +28,7 @@ func TestCypherClient(t *testing.T) {
 			cy := newCypher()
 			newCypherClient(cy).
 				Create(&CypherPattern{
-					ns: []*node{{data: "n"}},
+					ns: []*nodePattern{{data: "n"}},
 				}).
 				Return("n", "y")
 			assert.Equal(t, true, cy.isWrite)
@@ -39,7 +39,7 @@ func TestCypherClient(t *testing.T) {
 			newCypherClient(cy).
 				Subquery(func(c *CypherClient) *CypherRunner {
 					return c.Create(&CypherPattern{
-						ns: []*node{{data: "n"}},
+						ns: []*nodePattern{{data: "n"}},
 					}).CypherRunner
 				}).
 				Return("n")

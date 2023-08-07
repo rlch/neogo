@@ -27,7 +27,10 @@ func TestMatch(t *testing.T) {
 			var m Movie
 			var mts []string
 			c := internal.NewCypherClient()
-			cy, err := c.Match(db.Node(&m)).Return(db.Bind(&m.Title, &mts)).Compile()
+			cy, err := c.
+				Match(db.Node(&m)).
+				Return(db.Bind(&m.Title, &mts)).
+				Compile()
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (movie:Movie)

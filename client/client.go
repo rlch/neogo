@@ -25,7 +25,7 @@ type Client interface {
 
 // Scope provides information about the current state of the query.
 type Scope interface {
-	// Name returns the name of
+	// Name returns the name of 
 	Name(identifier any) string
 }
 
@@ -86,3 +86,4 @@ type Updater[To any] interface {
 type Runner interface {
 	Run(ctx context.Context) error
 }
+

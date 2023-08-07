@@ -88,7 +88,7 @@ func TestUnmarshalResult(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, &tests.Dog{
 				BaseOrganism: tests.BaseOrganism{
-					NodeEntity: internal.NodeEntity{
+					Node: internal.Node{
 						ID: "dog",
 					},
 					Alive: true,
@@ -244,7 +244,7 @@ func TestUnmarshalResult(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, &tests.Dog{
 				BaseOrganism: tests.BaseOrganism{
-					NodeEntity: internal.NodeEntity{
+					Node: internal.Node{
 						ID: "dog",
 					},
 					Alive: true,
@@ -253,7 +253,7 @@ func TestUnmarshalResult(t *testing.T) {
 			}, n[0])
 			assert.Equal(t, &tests.Human{
 				BaseOrganism: tests.BaseOrganism{
-					NodeEntity: internal.NodeEntity{
+					Node: internal.Node{
 						ID: "human",
 					},
 					Alive: true,

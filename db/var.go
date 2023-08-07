@@ -8,33 +8,33 @@ import (
 	"github.com/rlch/neogo/internal"
 )
 
-func Var(entity any, opts ...internal.VariableOption) *internal.Variable {
+func Var(identifier any, opts ...internal.VariableOption) *internal.Variable {
 	v := &internal.Variable{}
 	for _, opt := range opts {
 		internal.ConfigureVariable(v, opt)
 	}
-	switch e := entity.(type) {
+	switch e := identifier.(type) {
 	case internal.Expr:
 		v.Expr = e
 	case string:
 		v.Expr = Expr(e)
 	default:
-		v.Entity = e
+		v.Identifier = e
 	}
 	return v
 }
 
-// If entity is a string, it becomes the expression of the variable and expr
+// If identifier is a string, it becomes the expression of the variable and expr
 // becomes the alias. If a name is also provided, we throw.
-func Qual(entity any, expr string, opts ...internal.VariableOption) *internal.Variable {
+func Qual(identifier any, expr string, opts ...internal.VariableOption) *internal.Variable {
 	// Check if name is provided in opts, if so we make it an alias.
-	v := Var(entity, opts...)
+	v := Var(identifier, opts...)
 	if v.Name != "" && v.Expr != "" {
 		panic(fmt.Errorf(
-			`cannot create variable from 2 expressions: Qual(%s, ...) = %+v)`, entity, v,
+			`cannot create variable from 2 expressions: Qual(%s, ...) = %+v)`, identifier, v,
 		))
 	}
-	// entity > expr > name
+	// identifier > expr > name
 	if v.Expr != "" {
 		v.Name = expr
 	} else {
@@ -43,9 +43,9 @@ func Qual(entity any, expr string, opts ...internal.VariableOption) *internal.Va
 	return v
 }
 
-func Bind(entity any, toPtr any) *internal.Variable {
+func Bind(identifier any, toPtr any) *internal.Variable {
 	return &internal.Variable{
-		Entity: entity,
+		Identifier: identifier,
 		Bind:   toPtr,
 	}
 }

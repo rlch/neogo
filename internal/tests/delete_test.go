@@ -51,7 +51,11 @@ func TestDelete(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Match(
-				db.Node(db.Qual(&n, "n", db.Props{"name": "'Carrie-Anne Moss'"})),
+				db.Node(
+					db.Qual(&n, "n",
+						db.Props{"name": "'Carrie-Anne Moss'"},
+					),
+				),
 			).
 			DetachDelete(&n).
 			Compile()

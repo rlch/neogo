@@ -20,28 +20,28 @@ func New(neo4j neo4j.DriverWithContext, configurers ...config) Driver {
 type Driver interface {
 	DB() neo4j.DriverWithContext
 
-	ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) ReadSession
-	WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) WriteSession
-	Exec(configurers ...func(*ExecConfig)) Client
+	ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) readSession
+	WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) writeSession
+	Exec(configurers ...func(*execConfig)) Client
 }
 
 type config func(*driver)
 
-type ExecConfig struct {
+type execConfig struct {
 	*neo4j.SessionConfig
 	*neo4j.TransactionConfig
 }
 
 type txWork func(begin func() Client) error
 
-type ReadSession interface {
+type readSession interface {
 	Session() neo4j.SessionWithContext
 	Close(ctx context.Context) error
 	ReadTx(ctx context.Context, work txWork, configurers ...func(*neo4j.TransactionConfig)) error
 }
 
-type WriteSession interface {
-	ReadSession
+type writeSession interface {
+	readSession
 	WriteTx(ctx context.Context, work txWork, configurers ...func(*neo4j.TransactionConfig)) error
 }
 
@@ -53,7 +53,7 @@ type (
 	session struct {
 		registry
 		db         neo4j.DriverWithContext
-		execConfig ExecConfig
+		execConfig execConfig
 		session    neo4j.SessionWithContext
 		currentTx  neo4j.ManagedTransaction
 	}
@@ -63,10 +63,10 @@ func (d *driver) DB() neo4j.DriverWithContext {
 	return d.db
 }
 
-func (d *driver) Exec(configurers ...func(*ExecConfig)) Client {
+func (d *driver) Exec(configurers ...func(*execConfig)) Client {
 	sessionConfig := neo4j.SessionConfig{}
 	txConfig := neo4j.TransactionConfig{}
-	config := ExecConfig{
+	config := execConfig{
 		SessionConfig:     &sessionConfig,
 		TransactionConfig: &txConfig,
 	}
@@ -87,7 +87,7 @@ func (d *driver) Exec(configurers ...func(*ExecConfig)) Client {
 	return session.newClient(internal.NewCypherClient())
 }
 
-func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) ReadSession {
+func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) readSession {
 	config := neo4j.SessionConfig{}
 	for _, c := range configurers {
 		c(&config)
@@ -101,7 +101,7 @@ func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.Ses
 	}
 }
 
-func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) WriteSession {
+func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) writeSession {
 	config := neo4j.SessionConfig{}
 	for _, c := range configurers {
 		c(&config)
@@ -143,4 +143,20 @@ func (s *session) WriteTx(ctx context.Context, work txWork, configurers ...func(
 		})
 	}, configurers...)
 	return err
+}
+
+func WithTxConfig(configurers ...func(*neo4j.TransactionConfig)) func(ec *execConfig) {
+	return func(ec *execConfig) {
+		for _, c := range configurers {
+			c(ec.TransactionConfig)
+		}
+	}
+}
+
+func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execConfig) {
+	return func(ec *execConfig) {
+		for _, c := range configurers {
+			c(ec.SessionConfig)
+		}
+	}
 }

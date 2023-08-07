@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 )
@@ -20,10 +21,10 @@ func newCypherClient(cy *cypher) *CypherClient {
 
 type (
 	CypherPath struct {
-		n *node
+		n *nodePattern
 	}
 	CypherPattern struct {
-		ns []*node
+		ns []*nodePattern
 	}
 	CypherClient struct {
 		*cypher
@@ -56,8 +57,8 @@ type (
 
 func newCypherQuerier(cy *cypher) *CypherQuerier {
 	q := &CypherQuerier{
-		cypher:        cy,
-		CypherReader:  newCypherReader(cy, nil), CypherUpdater: newCypherUpdater(cy), CypherRunner:  newCypherRunner(cy, false),
+		cypher:       cy,
+		CypherReader: newCypherReader(cy, nil), CypherUpdater: newCypherUpdater(cy), CypherRunner: newCypherRunner(cy, false),
 	}
 	return q
 }
@@ -168,7 +169,7 @@ func (c *CypherUpdater[To]) Create(pattern Patterns) To {
 }
 
 func (c *CypherUpdater[To]) Merge(pattern Pattern, opts ...MergeOption) To {
-	c.writeMergeClause(pattern.node(), opts...)
+	c.writeMergeClause(pattern.nodePattern(), opts...)
 	return c.To(c.cypher)
 }
 
@@ -225,4 +226,9 @@ func (c *CypherRunner) Compile() (*CompiledCypher, error) {
 		return nil, c.err
 	}
 	return cy, nil
+}
+
+func (c *CypherRunner) Print() {
+	fmt.Println(c.String())
+	c.Reset()
 }

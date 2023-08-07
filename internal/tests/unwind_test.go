@@ -142,18 +142,18 @@ func TestUnwind(t *testing.T) {
 			},
 		}
 		type Year struct {
-			internal.NodeEntity `neo4j:"Year"`
+			internal.Node `neo4j:"Year"`
 
 			Year int `json:"year"`
 		}
 		type Event struct {
-			internal.NodeEntity `neo4j:"Event"`
+			internal.Node `neo4j:"Event"`
 
 			ID   int `json:"id"`
 			Year int `json:"year"`
 		}
 		type In struct {
-			internal.RelationshipEntity `neo4j:"IN"`
+			internal.Relationship `neo4j:"IN"`
 		}
 		var (
 			y Year

@@ -1,19 +1,19 @@
 package neogo_test
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
+	"fmt"
 
 	"github.com/rlch/neogo"
 )
 
-func TestNewNode(t *testing.T) {
+func ExampleNewNode() {
 	n := neogo.NewNode[neogo.Node]()
-	assert.NotEmpty(t, n.ID)
+	fmt.Printf("generated: %v", n.ID != "")
+	// Output: generated: true
 }
 
-func TestNodeWithID(t *testing.T) {
+func ExampleNodeWithID() {
 	n := neogo.NodeWithID[neogo.Node]("test")
-	assert.Equal(t, "test", n.ID)
+	fmt.Printf("id: %v", n.ID)
+	// Output: id: test
 }

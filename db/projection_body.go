@@ -2,17 +2,17 @@ package db
 
 import "github.com/rlch/neogo/internal"
 
-func With(entity any, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
+func With(identifier any, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
 	m := &internal.ProjectionBody{}
-	m.Entity = entity
+	m.Identifier = identifier
 	for _, opt := range opts {
 		internal.ConfigureProjectionBody(m, opt)
 	}
 	return m
 }
 
-func Return(entity any, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
-	return With(entity, opts...)
+func Return(identifier any, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
+	return With(identifier, opts...)
 }
 
 func OrderBy(field any, asc bool) internal.ProjectionBodyOption {

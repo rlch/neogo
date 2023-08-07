@@ -103,7 +103,7 @@ func TestCreate(t *testing.T) {
 				typeR string
 			)
 			type Reltype struct {
-				internal.RelationshipEntity `neo4j:"RELTYPE"`
+				internal.Relationship `neo4j:"RELTYPE"`
 			}
 			cy, err := c.
 				Match(db.Patterns(
@@ -140,7 +140,7 @@ func TestCreate(t *testing.T) {
 		t.Run("Create a relationship and set properties", func(t *testing.T) {
 			c := internal.NewCypherClient()
 			type Reltype struct {
-				internal.RelationshipEntity `neo4j:"RELTYPE"`
+				internal.Relationship `neo4j:"RELTYPE"`
 
 				Name string `json:"name"`
 			}

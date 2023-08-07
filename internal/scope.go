@@ -41,8 +41,7 @@ type (
 	}
 	// An instance of a node/relationship in the cypher query
 	member struct {
-		// The entity that was registered
-		entity any
+		identifier any
 		// Whether the entity was added to the scope by the query that returned this
 		// member.
 		isNew bool
@@ -78,7 +77,7 @@ func (m *member) Print() {
   variable: %+v,
   where: %+v,
   projection: %+v,
-}` + "\n" , m.entity, m.isNew, m.name, m.alias, m.props, m.variable, m.where, m.projectionBody)
+}` + "\n" , m.identifier, m.isNew, m.name, m.alias, m.props, m.variable, m.where, m.projectionBody)
 }
 
 func (s *Scope) clone() *Scope {
@@ -174,7 +173,7 @@ func (s *Scope) mergeChildScope(child *Scope) {
 	s.paramCounter = child.paramCounter
 }
 
-func (s *Scope) unfoldEntity(value any) (
+func (s *Scope) unfoldIdentifier(value any) (
 	entity any,
 	variable *Variable,
 	projBody *ProjectionBody,
@@ -217,16 +216,16 @@ RecurseToEntity:
 		switch v := entity.(type) {
 		case *ProjectionBody:
 			projBody = v
-			entity = v.Entity
+			entity = v.Identifier
 		case ProjectionBody:
 			projBody = &v
-			entity = v.Entity
+			entity = v.Identifier
 		case Variable:
 			mergeV(&v)
-			entity = v.Entity
+			entity = v.Identifier
 		case *Variable:
 			mergeV(v)
-			entity = v.Entity
+			entity = v.Identifier
 		default:
 			break RecurseToEntity
 		}
@@ -235,7 +234,7 @@ RecurseToEntity:
 }
 
 func (s *Scope) replaceBinding(m *member) {
-	v := reflect.ValueOf(m.entity)
+	v := reflect.ValueOf(m.identifier)
 	vT := v.Type()
 	canElem := vT.Kind() == reflect.Ptr ||
 		vT.Kind() == reflect.Slice
@@ -305,12 +304,12 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 	}
 
 	m := &member{isNew: true}
-	entity, variable, projBody := s.unfoldEntity(value)
+	entity, variable, projBody := s.unfoldIdentifier(value)
 
 	// Propagate information from Variable to member
-	m.entity = entity
+	m.identifier = entity
 	if variable != nil {
-		variable.Entity = entity
+		variable.Identifier = entity
 		m.variable = variable
 		if variable.Expr != "" {
 			m.name = string(variable.Expr)
@@ -325,7 +324,7 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		}
 	}
 	if projBody != nil {
-		projBody.Entity = entity
+		projBody.Identifier = entity
 		m.projectionBody = projBody
 	}
 	if entity == nil {
@@ -408,13 +407,13 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		}
 	}
 
-	if expr, ok := m.entity.(Expr); ok {
+	if expr, ok := m.identifier.(Expr); ok {
 		// Allow strings to be used as names
 		if m.name != "" {
 			m.alias = m.name
 		}
 		m.name = string(expr)
-	} else if name, ok := m.entity.(string); ok {
+	} else if name, ok := m.identifier.(string); ok {
 		// Allow strings to be used as names
 		if m.name != "" {
 			m.alias = m.name
@@ -469,37 +468,37 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 	return m
 }
 
-func (s *Scope) registerNode(n *node) *member {
+func (s *Scope) registerNode(n *nodePattern) *member {
 	t := true
 	return s.register(n.data, false, &t)
 }
 
-func (s *Scope) registerEdge(n *relationship) *member {
+func (s *Scope) registerEdge(n *relationshipPattern) *member {
 	f := false
 	return s.register(n.data, false, &f)
 }
 
-func (s *Scope) Name(entity any) string {
-	return s.lookupName(entity)
+func (s *Scope) Name(identifier any) string {
+	return s.lookupName(identifier)
 }
 
-func (s *Scope) lookupName(entity any) string {
-	entity, _, _ = s.unfoldEntity(entity)
-	return s.names[reflect.ValueOf(entity)]
+func (s *Scope) lookupName(identifier any) string {
+	identifier, _, _ = s.unfoldIdentifier(identifier)
+	return s.names[reflect.ValueOf(identifier)]
 }
 
-func (s *Scope) propertyExpression(entity any) func(v any) string {
-	entity, _, _ = s.unfoldEntity(entity)
-	entityName := s.lookupName(entity)
+func (s *Scope) propertyExpression(identifier any) func(v any) string {
+	identifier, _, _ = s.unfoldIdentifier(identifier)
+	identifierName := s.lookupName(identifier)
 	return func(v any) string {
-		if v == entity && entityName != "" {
-			return entityName
+		if v == identifier && identifierName != "" {
+			return identifierName
 		}
 		if expr, ok := v.(Expr); ok {
 			return string(expr)
-		} else if str, strOk := v.(string); strOk && entityName != "" {
+		} else if str, strOk := v.(string); strOk && identifierName != "" {
 			// Consider strings as properties if entity is known
-			return fmt.Sprintf("%s.%s", entityName, str)
+			return fmt.Sprintf("%s.%s", identifierName, str)
 		} else if strOk {
 			// Otherwise, consider strings as literals
 			return str

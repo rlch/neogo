@@ -7,7 +7,7 @@ import (
 )
 
 type person struct {
-	NodeEntity `neo4j:"Person"`
+	Node `neo4j:"Person"`
 }
 
 type swedishPerson struct {
@@ -37,11 +37,11 @@ func TestExtractNodeLabel(t *testing.T) {
 }
 
 type friendship struct {
-	RelationshipEntity `neo4j:"Friendship"`
+	Relationship `neo4j:"Friendship"`
 }
 
 type family struct {
-	RelationshipEntity `neo4j:"Family"`
+	Relationship `neo4j:"Family"`
 }
 
 func TestExtractRelationshipType(t *testing.T) {
