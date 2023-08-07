@@ -2,8 +2,10 @@ package db
 
 import "github.com/rlch/neogo/internal"
 
-func Node(match any) internal.Pattern {
-	return internal.Node(match)
+// Node creates a node pattern, which may be used in MATCH, CREATE and MERGE
+// clauses.
+func Node(entity any) internal.Pattern {
+	return internal.Node(entity)
 }
 
 func Path(path internal.Pattern, name string) internal.Pattern {

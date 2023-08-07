@@ -218,7 +218,7 @@ func TestSet(t *testing.T) {
 				db.Node(db.Qual(&n, "n", db.Props{"name": "'Andy'"})),
 			).
 			Set(
-				db.SetPropValue(&n.Surname, db.NamedParam("surname", "Taylor")),
+				db.SetPropValue(&n.Surname, db.NamedParam("Taylor", "surname")),
 			).
 			Return(&n.Name, &n.Surname).
 			Compile()
@@ -251,7 +251,7 @@ func TestSet(t *testing.T) {
 				db.Node(db.Qual(&n, "n", db.Props{"name": "'Andy'"})),
 			).
 			Set(
-				db.SetPropValue(&n, db.NamedParam("props", props)),
+				db.SetPropValue(&n, db.NamedParam(props, "props")),
 			).
 			Return(&n.Name).
 			Compile()

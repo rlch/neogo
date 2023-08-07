@@ -16,15 +16,15 @@ type (
 	clientImpl struct {
 		*session
 		cy *internal.CypherClient
-		reader
-		updater[querier]
+		Reader
+		Updater[Querier]
 	}
 	querierImpl struct {
 		*session
 		cy *internal.CypherQuerier
-		reader
+		Reader
 		runner
-		updater[querier]
+		Updater[Querier]
 	}
 	readerImpl struct {
 		*session
@@ -33,7 +33,7 @@ type (
 	yielderImpl struct {
 		*session
 		cy *internal.CypherYielder
-		querier
+		Querier
 	}
 	updaterImpl[To, ToCypher any] struct {
 		*session
@@ -50,11 +50,11 @@ func (s *session) newClient(cy *internal.CypherClient) *clientImpl {
 	return &clientImpl{
 		session: s,
 		cy:      cy,
-		reader:  s.newReader(cy.CypherReader),
-		updater: newUpdater[querier, *internal.CypherQuerier](
+		Reader:  s.newReader(cy.CypherReader),
+		Updater: newUpdater[Querier, *internal.CypherQuerier](
 			s,
 			cy.CypherUpdater,
-			func(c *internal.CypherQuerier) querier {
+			func(c *internal.CypherQuerier) Querier {
 				return s.newQuerier(c)
 			},
 		),
@@ -65,12 +65,12 @@ func (s *session) newQuerier(cy *internal.CypherQuerier) *querierImpl {
 	return &querierImpl{
 		session: s,
 		cy:      cy,
-		reader:  s.newReader(cy.CypherReader),
+		Reader:  s.newReader(cy.CypherReader),
 		runner:  s.newRunner(cy.CypherRunner),
-		updater: newUpdater[querier, *internal.CypherQuerier](
+		Updater: newUpdater[Querier, *internal.CypherQuerier](
 			s,
 			cy.CypherUpdater,
-			func(c *internal.CypherQuerier) querier {
+			func(c *internal.CypherQuerier) Querier {
 				return s.newQuerier(c)
 			},
 		),
@@ -107,11 +107,11 @@ func (s *session) newRunner(cy *internal.CypherRunner) *runnerImpl {
 	return &runnerImpl{session: s, cy: cy}
 }
 
-func (c *clientImpl) Use(graphExpr string) querier {
+func (c *clientImpl) Use(graphExpr string) Querier {
 	return c.newQuerier(c.cy.Use(graphExpr))
 }
 
-func (c *clientImpl) Union(unions ...func(c Client) runner) querier {
+func (c *clientImpl) Union(unions ...func(c Client) runner) Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
 		inUnions[i] = func(cc *internal.CypherClient) *internal.CypherRunner {
@@ -121,7 +121,7 @@ func (c *clientImpl) Union(unions ...func(c Client) runner) querier {
 	return c.newQuerier(c.cy.Union(inUnions...))
 }
 
-func (c *clientImpl) UnionAll(unions ...func(c Client) runner) querier {
+func (c *clientImpl) UnionAll(unions ...func(c Client) runner) Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
 		inUnions[i] = func(cc *internal.CypherClient) *internal.CypherRunner {
@@ -131,26 +131,26 @@ func (c *clientImpl) UnionAll(unions ...func(c Client) runner) querier {
 	return c.newQuerier(c.cy.UnionAll(inUnions...))
 }
 
-func (c *readerImpl) OptionalMatch(patterns internal.Patterns) querier {
+func (c *readerImpl) OptionalMatch(patterns internal.Patterns) Querier {
 	return c.newQuerier(c.cy.OptionalMatch(patterns))
 }
 
-func (c *readerImpl) Match(patterns internal.Patterns) querier {
+func (c *readerImpl) Match(patterns internal.Patterns) Querier {
 	return c.newQuerier(c.cy.Match(patterns))
 }
 
-func (c *readerImpl) Subquery(subquery func(c Client) runner) querier {
+func (c *readerImpl) Subquery(subquery func(c Client) runner) Querier {
 	inSubquery := func(cc *internal.CypherClient) *internal.CypherRunner {
 		return subquery(c.newClient(cc)).(*runnerImpl).cy
 	}
 	return c.newQuerier(c.cy.Subquery(inSubquery))
 }
 
-func (c *readerImpl) With(variables ...any) querier {
+func (c *readerImpl) With(variables ...any) Querier {
 	return c.newQuerier(c.cy.With(variables...))
 }
 
-func (c *readerImpl) Unwind(expr any, as string) querier {
+func (c *readerImpl) Unwind(expr any, as string) Querier {
 	return c.newQuerier(c.cy.Unwind(expr, as))
 }
 
@@ -166,14 +166,14 @@ func (c *readerImpl) Return(matches ...any) runner {
 	return c.newRunner(c.cy.Return(matches...))
 }
 
-func (c *readerImpl) Cypher(query func(s Scope) string) querier {
+func (c *readerImpl) Cypher(query func(s Scope) string) Querier {
 	q := c.cy.Cypher(func(scope *internal.Scope) string {
 		return query(scope)
 	})
 	return c.newQuerier(q)
 }
 
-func (c *querierImpl) Where(opts ...internal.WhereOption) querier {
+func (c *querierImpl) Where(opts ...internal.WhereOption) Querier {
 	return c.newQuerier(c.cy.Where(opts...))
 }
 
@@ -201,12 +201,12 @@ func (c *updaterImpl[To, ToCypher]) Remove(items ...internal.RemoveItem) To {
 	return c.to(c.cy.Remove(items...))
 }
 
-func (c *updaterImpl[To, ToCypher]) ForEach(entity, elementsExpr any, do func(c updater[any])) To {
+func (c *updaterImpl[To, ToCypher]) ForEach(entity, elementsExpr any, do func(c Updater[any])) To {
 	return c.to(c.cy.ForEach(entity, elementsExpr, func(c *internal.CypherUpdater[any]) {
 	}))
 }
 
-func (c *yielderImpl) Yield(variables ...any) querier {
+func (c *yielderImpl) Yield(variables ...any) Querier {
 	return c.newQuerier(c.cy.Yield(variables...))
 }
 
