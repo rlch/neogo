@@ -6,6 +6,7 @@ require (
 	github.com/goccy/go-json v0.10.2
 	github.com/iancoleman/strcase v0.3.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.10.0
+	github.com/oklog/ulid/v2 v2.1.0
 	github.com/sanity-io/litter v1.5.5
 	github.com/spf13/cast v1.5.1
 	github.com/stretchr/testify v1.8.4

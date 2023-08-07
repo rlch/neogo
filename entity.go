@@ -1,8 +1,23 @@
 package neogo
 
-import "github.com/rlch/neogo/internal"
+import (
+	"reflect"
+
+	"github.com/rlch/neogo/internal"
+)
+
+func NewNode[N any, PN interface {
+	INode
+	internal.IDSetter
+	*N
+}]() PN {
+	n := PN(new(N))
+	n.GenerateID()
+	return n
+}
 
 func NodeWithID[N any, PN interface {
+	INode
 	internal.IDSetter
 	*N
 }](id string,
@@ -11,6 +26,8 @@ func NodeWithID[N any, PN interface {
 	n.SetID(id)
 	return n
 }
+
+var rAbstract = reflect.TypeOf((*IAbstract)(nil)).Elem()
 
 type (
 	INode         = internal.INode

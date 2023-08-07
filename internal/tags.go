@@ -8,8 +8,15 @@ import (
 
 const neo4jTag = "neo4j"
 
-func extractNodeLabel(node any) []string {
+func ExtractNodeLabels(node any) []string {
 	if node == nil {
+		return nil
+	}
+	if _, ok := node.(INode); !ok {
+		v := reflect.ValueOf(node)
+		if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
+			return ExtractNodeLabels(reflect.Zero(v.Type().Elem()).Interface())
+		}
 		return nil
 	}
 	tags, err := extractNeo4JName(node)
@@ -19,8 +26,15 @@ func extractNodeLabel(node any) []string {
 	return tags
 }
 
-func extractRelationshipType(relationship any) string {
+func ExtractRelationshipType(relationship any) string {
 	if relationship == nil {
+		return ""
+	}
+	if _, ok := relationship.(IRelationship); !ok {
+		v := reflect.ValueOf(relationship)
+		if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
+			return ExtractRelationshipType(reflect.Zero(v.Type().Elem()).Interface())
+		}
 		return ""
 	}
 	tags, err := extractNeo4JName(relationship, "Relationship", "RelationshipEntity")
@@ -74,6 +88,9 @@ func extractNeo4JName(instance any, fields ...string) ([]string, error) {
 				extractTagFromMatch(&f)
 			}
 		}
+	}
+	for i, j := 0, len(tags)-1; i < j; i, j = i+1, j-1 {
+		tags[i], tags[j] = tags[j], tags[i]
 	}
 	return tags, nil
 }

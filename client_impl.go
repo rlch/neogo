@@ -7,7 +7,6 @@ import (
 	"reflect"
 
 	"github.com/goccy/go-json"
-
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
 	"github.com/rlch/neogo/internal"
@@ -105,7 +104,7 @@ func newUpdater[To, ToCypher any](
 }
 
 func (s *session) newRunner(cy *internal.CypherRunner) *runnerImpl {
-	return &runnerImpl{cy: cy}
+	return &runnerImpl{session: s, cy: cy}
 }
 
 func (c *clientImpl) Use(graphExpr string) querier {
@@ -148,7 +147,7 @@ func (c *readerImpl) Subquery(subquery func(c Client) runner) querier {
 }
 
 func (c *readerImpl) With(variables ...any) querier {
-	return c.newQuerier(c.cy.With(variables))
+	return c.newQuerier(c.cy.With(variables...))
 }
 
 func (c *readerImpl) Unwind(expr any, as string) querier {
@@ -164,7 +163,7 @@ func (c *readerImpl) Show(command string) yielder {
 }
 
 func (c *readerImpl) Return(matches ...any) runner {
-	return c.newRunner(c.cy.Return(matches))
+	return c.newRunner(c.cy.Return(matches...))
 }
 
 func (c *readerImpl) Cypher(query func(s Scope) string) querier {
@@ -187,11 +186,11 @@ func (c *updaterImpl[To, ToCypher]) Merge(pattern internal.Pattern, opts ...inte
 }
 
 func (c *updaterImpl[To, ToCypher]) DetachDelete(variables ...any) To {
-	return c.to(c.cy.DetachDelete(variables))
+	return c.to(c.cy.DetachDelete(variables...))
 }
 
 func (c *updaterImpl[To, ToCypher]) Delete(variables ...any) To {
-	return c.to(c.cy.Delete(variables))
+	return c.to(c.cy.Delete(variables...))
 }
 
 func (c *updaterImpl[To, ToCypher]) Set(items ...internal.SetItem) To {
@@ -208,23 +207,123 @@ func (c *updaterImpl[To, ToCypher]) ForEach(entity, elementsExpr any, do func(c 
 }
 
 func (c *yielderImpl) Yield(variables ...any) querier {
-	return c.newQuerier(c.cy.Yield(variables))
+	return c.newQuerier(c.cy.Yield(variables...))
 }
 
 func (c *runnerImpl) Run(ctx context.Context) (err error) {
 	cy, err := c.cy.Compile()
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot compile cypher: %w", err)
 	}
 	params, err := canonicalizeParams(cy.Parameters)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot serialize parameters: %w", err)
 	}
-	runTx := func(tx neo4j.ManagedTransaction) (neo4j.ResultWithContext, error) {
-		return tx.Run(ctx, cy.Cypher, params)
+	return c.executeTransaction(
+		ctx, cy,
+		func(tx neo4j.ManagedTransaction) (any, error) {
+			var result neo4j.ResultWithContext
+			result, err = tx.Run(ctx, cy.Cypher, params)
+			if err != nil {
+				return nil, fmt.Errorf("cannot run cypher: %w", err)
+			}
+			if !result.Next(ctx) {
+				return nil, nil
+			}
+			first := result.Record()
+			if result.Peek(ctx) {
+				var records []*neo4j.Record
+				records, err = result.Collect(ctx)
+				if err != nil {
+					return nil, fmt.Errorf("cannot collect records: %w", err)
+				}
+				records = append([]*neo4j.Record{first}, records...)
+				if err = c.unmarshalRecords(cy, records); err != nil {
+					return nil, fmt.Errorf("cannot unmarshal records: %w", err)
+				}
+			} else {
+				single := result.Record()
+				if single == nil {
+					return nil, nil
+				}
+				if err != nil {
+					return nil, fmt.Errorf("cannot get single record: %w", err)
+				}
+				if err = c.unmarshalRecord(cy, single); err != nil {
+					return nil, fmt.Errorf("cannot unmarshal record: %w", err)
+				}
+			}
+			return nil, nil
+		})
+}
+
+func (s *session) unmarshalRecords(
+	cy *internal.CompiledCypher,
+	records []*neo4j.Record,
+) error {
+	n := len(records)
+	slices := make(map[string]reflect.Value)
+	for name, binding := range cy.Bindings {
+		for binding.Kind() == reflect.Ptr {
+			binding = binding.Elem()
+		}
+		if binding.Kind() != reflect.Slice {
+			return fmt.Errorf("cannot allocate results a non-slice value, name: %q", name)
+		}
+		binding.Set(reflect.MakeSlice(
+			binding.Type(),
+			n, n,
+		))
+		slices[name] = binding
 	}
-	var result neo4j.ResultWithContext
-	if tx := c.currentTx; tx == nil {
+	for i, record := range records {
+		for key, binding := range slices {
+			value, ok := record.Get(key)
+			if !ok {
+				return fmt.Errorf("no value associated with key %q", key)
+			}
+			to := binding.Index(i)
+			if to.Kind() == reflect.Ptr {
+				to.Set(reflect.New(to.Type().Elem()))
+			} else {
+				to.Set(reflect.New(to.Type()).Elem())
+			}
+			if err := s.bindValue(value, to); err != nil {
+				return fmt.Errorf(
+					"error binding key %q to type %s: %w",
+					key, binding.Type().Elem().Name(), err,
+				)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *session) unmarshalRecord(
+	cy *internal.CompiledCypher,
+	record *neo4j.Record,
+) error {
+	for key, binding := range cy.Bindings {
+		value, ok := record.Get(key)
+		if !ok {
+			return fmt.Errorf("no value associated with key %q", key)
+		}
+		if err := s.bindValue(value, binding); err != nil {
+			return fmt.Errorf(
+				"error binding key %q to type %s: %w",
+				key, binding.Type().Name(), err,
+			)
+		}
+	}
+	return nil
+}
+
+func (c *runnerImpl) executeTransaction(
+	ctx context.Context,
+	cy *internal.CompiledCypher,
+	exec neo4j.ManagedTransactionWork,
+) (err error) {
+	if c.currentTx == nil {
 		sess := c.Session()
 		if sess == nil {
 			config := neo4j.SessionConfig{}
@@ -244,103 +343,60 @@ func (c *runnerImpl) Run(ctx context.Context) (err error) {
 				}
 			}()
 		}
-		var resultI any
 		config := func(tc *neo4j.TransactionConfig) {
 			if conf := c.execConfig.TransactionConfig; conf != nil {
 				*tc = *conf
 			}
 		}
 		if cy.IsWrite {
-			resultI, err = sess.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-				return runTx(tx)
-			}, config)
+			_, err = sess.ExecuteWrite(ctx, exec, config)
 		} else {
-			resultI, err = sess.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-				return runTx(tx)
-			}, config)
+			_, err = sess.ExecuteRead(ctx, exec, config)
 		}
 		if err != nil {
 			return err
 		}
-		result = resultI.(neo4j.ResultWithContext)
 	} else {
-		result, err = runTx(tx)
-	}
-	if err != nil {
-		return err
-	}
-	if result.Peek(ctx) {
-		records, err := result.Collect(ctx)
+		_, err = exec(c.currentTx)
 		if err != nil {
 			return err
 		}
-		n := len(records)
-		slices := make(map[string]reflect.Value)
-		for name, binding := range cy.Bindings {
-			for binding.Kind() == reflect.Ptr {
-				binding = binding.Elem()
-			}
-			if binding.Kind() != reflect.Slice {
-				return fmt.Errorf("cannot allocate results a non-slice value, name: %q", name)
-			}
-			binding.SetLen(n)
-			slices[name] = binding
-		}
-		for i, record := range records {
-			for key, binding := range slices {
-				value, ok := record.Get(key)
-				if !ok {
-					return fmt.Errorf("no value associated with key %q", key)
-				}
-				if err := bindValue(value, binding.Index(i)); err != nil {
-					return fmt.Errorf(
-						"error binding key %q to type %s: %w",
-						key, binding.Type().Elem().Name(), err,
-					)
-				}
-			}
-		}
-	} else {
-		record := result.Record()
-		for key, binding := range cy.Bindings {
-			value, ok := record.Get(key)
-			if !ok {
-				return fmt.Errorf("no value associated with key %q", key)
-			}
-			if err := bindValue(value, binding); err != nil {
-				return fmt.Errorf(
-					"error binding key %q to type %s: %w",
-					key, binding.Type().Name(), err,
-				)
-			}
-		}
 	}
-	return nil
+	return
 }
 
 func canonicalizeParams(params map[string]any) (map[string]any, error) {
 	canon := make(map[string]any, len(params))
+	if len(params) == 0 {
+		return canon, nil
+	}
 	for k, v := range params {
+		if v == nil {
+			canon[k] = nil
+		}
 		vv := reflect.ValueOf(v)
+		for vv.Kind() == reflect.Ptr {
+			vv = vv.Elem()
+		}
 		switch vv.Kind() {
 		case reflect.Slice:
 			bytes, err := json.Marshal(v)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("cannot marshal slice: %w", err)
 			}
 			var js []any
 			if err := json.Unmarshal(bytes, &js); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("cannot unmarshal slice: %w", err)
 			}
 			canon[k] = js
 		case reflect.Map, reflect.Struct:
 			bytes, err := json.Marshal(v)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("cannot marshal map: %w", err)
 			}
 			var js map[string]any
 			if err := json.Unmarshal(bytes, &js); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("cannot unmarshal map: %w", err)
 			}
 			canon[k] = js
 		default:

@@ -67,7 +67,7 @@ func TestCreate(t *testing.T) {
 
 			check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
-					CREATE (n:Swedish:Person)
+					CREATE (n:Person:Swedish)
 					`,
 			})
 		})

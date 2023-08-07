@@ -67,6 +67,20 @@ var (
 	relationshipType = reflect.TypeOf((*IRelationship)(nil)).Elem()
 )
 
+func (m *member) Print() {
+	fmt.Printf(
+`{
+  entity: %+v,
+  isNew: %v,
+  name: %s,
+  alias: %s,
+  props: %s,
+  variable: %+v,
+  where: %+v,
+  projection: %+v,
+}` + "\n" , m.entity, m.isNew, m.name, m.alias, m.props, m.variable, m.where, m.projectionBody)
+}
+
 func (s *Scope) clone() *Scope {
 	bindings := make(map[string]reflect.Value, len(s.bindings))
 	for k, v := range s.bindings {
@@ -358,9 +372,9 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		if needsName {
 			var prefix string
 			if vT.Implements(nodeType) {
-				prefix = strcase.ToLowerCamel(extractNodeLabel(entity)[0])
+				prefix = strcase.ToLowerCamel(ExtractNodeLabels(entity)[0])
 			} else if vT.Implements(relationshipType) {
-				prefix = strcase.ToLowerCamel(extractRelationshipType(entity))
+				prefix = strcase.ToLowerCamel(ExtractRelationshipType(entity))
 			} else {
 				prefix = strcase.ToLowerCamel(vT.Elem().Name())
 				if prefix == "" {

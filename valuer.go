@@ -2,45 +2,47 @@ package neogo
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/spf13/cast"
+
+	"github.com/rlch/neogo/internal"
 )
 
-// bool | int64 | float64 | string |
-// Point2D | Point3D |
-// Date | LocalTime | LocalDateTime | Time | Duration | time.Time |
-// []byte | []any | map[string]any |
-// Node | Relationship | Path
-
 type Valuer[V neo4j.RecordValue] interface {
-	Marshal() (V, error)
-	Unmarshal(V) error
+	Marshal() (*V, error)
+	Unmarshal(*V) error
 }
 
-// var (
-// 	boolV          = (*Valuer[bool])(nil)
-// 	intV           = (*Valuer[int64])(nil)
-// 	floatV         = (*Valuer[float64])(nil)
-// 	stringV        = (*Valuer[string])(nil)
-// 	point2dV       = (*Valuer[neo4j.Point2D])(nil)
-// 	point3dV       = (*Valuer[neo4j.Point3D])(nil)
-// 	dateV          = (*Valuer[neo4j.Date])(nil)
-// 	localTimeV     = (*Valuer[neo4j.LocalTime])(nil)
-// 	localDateTimeV = (*Valuer[neo4j.LocalDateTime])(nil)
-// 	timeV          = (*Valuer[neo4j.Time])(nil)
-// 	durationV      = (*Valuer[neo4j.Duration])(nil)
-// 	timeTimeV      = (*Valuer[time.Time])(nil)
-// 	bytesV         = (*Valuer[[]byte])(nil)
-// 	arrayV         = (*Valuer[[]any])(nil)
-// 	mapV           = (*Valuer[map[string]any])(nil)
-// 	nodeV          = (*Valuer[neo4j.Node])(nil)
-// 	relationshipV  = (*Valuer[neo4j.Relationship])(nil)
-// 	pathV          = (*Valuer[neo4j.Path])(nil)
-// )
+type registry struct {
+	abstractNodes []IAbstract
+	nodes         []INode
+	relationships []IRelationship
+}
+
+func WithTypes(types ...any) func(*driver) {
+	return func(d *driver) {
+		for _, t := range types {
+			if v, ok := t.(IAbstract); ok {
+				d.abstractNodes = append(d.abstractNodes, v)
+				continue
+			}
+			if v, ok := t.(INode); ok {
+				d.nodes = append(d.nodes, v)
+				continue
+			}
+			if v, ok := t.(IRelationship); ok {
+				d.relationships = append(d.relationships, v)
+				continue
+			}
+		}
+	}
+}
 
 func unwindValue(ptrTo reflect.Value) reflect.Value {
 	for ptrTo.Kind() == reflect.Ptr {
@@ -49,13 +51,13 @@ func unwindValue(ptrTo reflect.Value) reflect.Value {
 	return ptrTo
 }
 
-func bindValuer[V neo4j.RecordValue](value V, val reflect.Value) (ok bool, err error) {
-	i := val.Interface()
+func bindValuer[V neo4j.RecordValue](value V, bindTo reflect.Value) (ok bool, err error) {
+	i := bindTo.Interface()
 	valuer, ok := i.(Valuer[V])
 	if !ok {
 		return false, nil
 	}
-	if err := valuer.Unmarshal(value); err != nil {
+	if err := valuer.Unmarshal(&value); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -64,112 +66,137 @@ func bindValuer[V neo4j.RecordValue](value V, val reflect.Value) (ok bool, err e
 func bindCasted[C any](
 	cast func(any) (C, error),
 	value any,
-	ptrToVal reflect.Value,
+	bindTo reflect.Value,
 ) error {
 	c, err := cast(value)
 	if err != nil {
 		return err
 	}
-	ptrToVal.Elem().Set(reflect.ValueOf(c))
+	bindTo.Set(reflect.ValueOf(c))
 	return nil
 }
 
-func bindValue(fromVal any, to reflect.Value) error {
-	if !to.CanSet() {
-		return errors.New("cannot set value")
+var emptyInterface = reflect.TypeOf((*any)(nil)).Elem()
+
+func (r *registry) bindValue(from any, to reflect.Value) error {
+	if to.Kind() == reflect.Ptr && to.Type().Elem() == emptyInterface {
+		to.Elem().Set(reflect.ValueOf(from))
+		return nil
+	} else if to.Type() == emptyInterface && to.CanSet() {
+		to.Set(reflect.ValueOf(from))
+		return nil
+	}
+
+	switch fromVal := from.(type) {
+	case neo4j.Node:
+		ok, err := bindValuer(fromVal, to)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		if to.Type().Implements(rAbstract) ||
+			to.Elem().Type().Implements(rAbstract) {
+			return r.bindAbstractNode(fromVal, to)
+		}
+		// TODO: Support abstract nodes
+		return r.bindValue(fromVal.Props, to)
+	case neo4j.Relationship:
+		ok, err := bindValuer(fromVal, to)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		return r.bindValue(fromVal.Props, to)
 	}
 
 	// First, check for primitive coercion.
-	val := unwindValue(to)
-	_ = func() error {
-		i := val.Interface()
+	value := unwindValue(to)
+	ok, err := func() (bool, error) {
+		if !to.CanSet() {
+			return false, nil
+		}
+		i := value.Interface()
 		switch i.(type) {
 		case bool:
-			return bindCasted[bool](cast.ToBoolE, fromVal, val)
+			return true, bindCasted[bool](cast.ToBoolE, from, value)
 		case string:
-			return bindCasted[string](cast.ToStringE, fromVal, val)
+			return true, bindCasted[string](cast.ToStringE, from, value)
 		case int:
-			return bindCasted[int](cast.ToIntE, fromVal, val)
+			return true, bindCasted[int](cast.ToIntE, from, value)
 		case int8:
-			return bindCasted[int8](cast.ToInt8E, fromVal, val)
+			return true, bindCasted[int8](cast.ToInt8E, from, value)
 		case int16:
-			return bindCasted[int16](cast.ToInt16E, fromVal, val)
+			return true, bindCasted[int16](cast.ToInt16E, from, value)
 		case int32:
-			return bindCasted[int32](cast.ToInt32E, fromVal, val)
+			return true, bindCasted[int32](cast.ToInt32E, from, value)
 		case int64:
-			return bindCasted[int64](cast.ToInt64E, fromVal, val)
+			return true, bindCasted[int64](cast.ToInt64E, from, value)
 		case uint:
-			return bindCasted[uint](cast.ToUintE, fromVal, val)
+			return true, bindCasted[uint](cast.ToUintE, from, value)
 		case uint8:
-			return bindCasted[uint8](cast.ToUint8E, fromVal, val)
+			return true, bindCasted[uint8](cast.ToUint8E, from, value)
 		case uint16:
-			return bindCasted[uint16](cast.ToUint16E, fromVal, val)
+			return true, bindCasted[uint16](cast.ToUint16E, from, value)
 		case uint32:
-			return bindCasted[uint32](cast.ToUint32E, fromVal, val)
+			return true, bindCasted[uint32](cast.ToUint32E, from, value)
 		case uint64:
-			return bindCasted[uint64](cast.ToUint64E, fromVal, val)
+			return true, bindCasted[uint64](cast.ToUint64E, from, value)
 		case float32:
-			return bindCasted[float32](cast.ToFloat32E, fromVal, val)
+			return true, bindCasted[float32](cast.ToFloat32E, from, value)
 		case float64:
-			return bindCasted[float64](cast.ToFloat64E, fromVal, val)
+			return true, bindCasted[float64](cast.ToFloat64E, from, value)
 		case []int:
-			return bindCasted[[]int](cast.ToIntSliceE, fromVal, val)
+			return true, bindCasted[[]int](cast.ToIntSliceE, from, value)
 		case []string:
-			return bindCasted[[]string](cast.ToStringSliceE, fromVal, val)
+			return true, bindCasted[[]string](cast.ToStringSliceE, from, value)
 		case time.Time:
-			return bindCasted[time.Time](cast.ToTimeE, fromVal, val)
+			return true, bindCasted[time.Time](cast.ToTimeE, from, value)
 		case time.Duration:
-			return bindCasted[time.Duration](cast.ToDurationE, fromVal, val)
+			return true, bindCasted[time.Duration](cast.ToDurationE, from, value)
 		}
+		return false, nil
+	}()
+	if ok && err == nil {
 		return nil
 	}
 
 	// Next, we check if to implements Valuer.
-	ok, err := func() (bool, error) {
-		switch fromVal := fromVal.(type) {
+	ok, err = func() (bool, error) {
+		switch fromVal := from.(type) {
 		case bool:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case int64:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case float64:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case string:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case neo4j.Point2D:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case neo4j.Point3D:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case neo4j.Date:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case neo4j.LocalTime:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case neo4j.LocalDateTime:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case neo4j.Time:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case neo4j.Duration:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case time.Time:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case []byte:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case []any:
-			return bindValuer(fromVal, val)
+			return bindValuer(fromVal, to)
 		case map[string]any:
-			return bindValuer(fromVal, val)
-		case neo4j.Node:
-			// ptrToValDO: Support abstract nodes
-			err := bindValue(fromVal.Props, val)
-			if err != nil {
-				return false, err
-			}
-			return true, nil
-		case neo4j.Relationship:
-			err := bindValue(fromVal.Props, val)
-			if err != nil {
-				return false, err
-			}
-			return true, nil
+			return bindValuer(fromVal, to)
 		}
 		return false, nil
 	}()
@@ -179,15 +206,91 @@ func bindValue(fromVal any, to reflect.Value) error {
 	if ok {
 		return nil
 	}
+
 	// PERF: Obviously huge performance hit here. Consider alternative ways of
 	// coercing between types. Might just need to be imperative and verbose
-	bytes, err := json.Marshal(fromVal)
+	bytes, err := json.Marshal(from)
 	if err != nil {
 		return err
 	}
 	err = json.Unmarshal(bytes, to.Interface())
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
+	nodeLabels := node.Labels
+	isNodeLabel := make(map[string]struct{}, len(nodeLabels))
+	for _, label := range nodeLabels {
+		isNodeLabel[label] = struct{}{}
+	}
+
+	var abs IAbstract
+	ptrTo := false
+	if to.Type().Implements(rAbstract) {
+		if !to.IsNil() {
+			return fmt.Errorf(
+				"cannot bind abstract node to non-nil abstract type, as the type should not be deterministic.\nTry using *%T",
+				abs,
+			)
+		}
+	} else if to.Type().Elem().Implements(rAbstract) {
+		ptrTo = true
+		if !to.IsNil() {
+			abs = to.Elem().Interface().(IAbstract)
+		}
+	} else {
+		return errors.New("cannot bind abstract node to non-abstract type")
+	}
+	if abs == nil {
+	Bases:
+		for _, base := range r.abstractNodes {
+			labels := internal.ExtractNodeLabels(base)
+			if len(labels) == 0 {
+				continue
+			}
+			for _, label := range labels {
+				if _, ok := isNodeLabel[label]; !ok {
+					continue Bases
+				}
+			}
+			abs = base
+		}
+		if abs == nil {
+			return fmt.Errorf(
+				"no abstract node found for labels: %s\nDid you forget to register the base node using neogo.WithTypes(...)?",
+				strings.Join(nodeLabels, ", "),
+			)
+		}
+	}
+
+	abstractLabels := internal.ExtractNodeLabels(abs)
+	isAbstractLabel := make(map[string]struct{}, len(abstractLabels))
+	for _, label := range abstractLabels {
+		isAbstractLabel[label] = struct{}{}
+	}
+	for _, impl := range abs.Implementers() {
+		for _, label := range internal.ExtractNodeLabels(impl) {
+			if _, ok := isAbstractLabel[label]; ok {
+				continue
+			}
+			if _, ok := isNodeLabel[label]; !ok {
+				continue
+			}
+			toImpl := reflect.New(reflect.TypeOf(impl).Elem())
+			err := r.bindValue(node.Props, toImpl)
+			if err != nil {
+				return err
+			}
+			if ptrTo {
+				to.Elem().Set(toImpl)
+			} else {
+				to.Set(toImpl)
+			}
+			return nil
+		}
 	}
 	return nil
 }

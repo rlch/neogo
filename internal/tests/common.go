@@ -99,3 +99,30 @@ type (
 		internal.RelationshipEntity `neo4j:"WORKS_AT"`
 	}
 )
+
+type Organism interface {
+	internal.IAbstract
+}
+
+type BaseOrganism struct {
+	internal.AbstractEntity `neo4j:"Organism"`
+	internal.NodeEntity
+	Alive bool `json:"alive"`
+}
+
+func (b BaseOrganism) Implementers() []internal.IAbstract {
+	return []internal.IAbstract{
+		&Human{},
+		&Dog{},
+	}
+}
+
+type Human struct {
+	BaseOrganism `neo4j:"Human"`
+	Name         string `json:"name"`
+}
+
+type Dog struct {
+	BaseOrganism `neo4j:"Dog"`
+	Borfs        bool `json:"borfs"`
+}

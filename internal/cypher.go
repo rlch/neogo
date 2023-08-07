@@ -74,7 +74,7 @@ func (cy *cypher) writeNode(m *member) {
 		if !m.isNew {
 			fmt.Fprintf(cy, "(%s)", m.name)
 		} else {
-			nodeLabels := extractNodeLabel(m.entity)
+			nodeLabels := ExtractNodeLabels(m.entity)
 			cy.WriteString("(")
 			padProps := false
 			if m.name != "" {
@@ -130,7 +130,7 @@ func (cy *cypher) writeRelationship(m *member, rs *relationship) {
 				inner = m.name + inner
 			}
 		} else {
-			label := extractRelationshipType(m.entity)
+			label := ExtractRelationshipType(m.entity)
 			if m.variable != nil && m.variable.Pattern != "" {
 				inner = ":" + string(m.variable.Pattern)
 			} else if label != "" {
@@ -430,6 +430,7 @@ func (cy *cypher) writeSubqueryClause(subquery func(c *CypherClient) *CypherRunn
 			}
 			cy.WriteString(compiled.Cypher)
 			cy.mergeChildScope(runSubquery.Scope)
+			cy.isWrite = cy.isWrite || compiled.IsWrite
 		})
 		cy.WriteString("\n}\n")
 	})

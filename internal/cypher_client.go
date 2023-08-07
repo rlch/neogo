@@ -57,9 +57,7 @@ type (
 func newCypherQuerier(cy *cypher) *CypherQuerier {
 	q := &CypherQuerier{
 		cypher:        cy,
-		CypherReader:  newCypherReader(cy, nil),
-		CypherUpdater: newCypherUpdater(cy),
-		CypherRunner:  newCypherRunner(cy, false),
+		CypherReader:  newCypherReader(cy, nil), CypherUpdater: newCypherUpdater(cy), CypherRunner:  newCypherRunner(cy, false),
 	}
 	return q
 }
