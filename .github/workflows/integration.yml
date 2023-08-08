@@ -47,4 +47,4 @@ jobs:
         with:
           version: v1.53
           only-new-issues: true
-          args: --timeout=3m
+          args: --timeout=3m -v
