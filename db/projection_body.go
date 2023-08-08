@@ -72,7 +72,8 @@ func Limit(expr string) internal.ProjectionBodyOption {
 //	<clause> DISTINCT ...
 //
 // [DISTINCT]: https://neo4j.com/docs/cypher-manual/current/clauses/return/#query-return-distinct
-var Distinct internal.ProjectionBodyOption = &internal.Configurer{ ProjectionBody: func(m *internal.ProjectionBody) {
+var Distinct internal.ProjectionBodyOption = &internal.Configurer{
+	ProjectionBody: func(m *internal.ProjectionBody) {
 		m.Distinct = true
 	},
 }

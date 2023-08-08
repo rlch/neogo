@@ -1,4 +1,7 @@
 # neogo
+
+[![Coverage Status](https://coveralls.io/repos/github/rlch/neogo/badge.svg?branch=main)](https://coveralls.io/github/rlch/neogo?branch=main) [![Go Report Card](https://goreportcard.com/badge/github.com/rlch/neogo)](https://goreportcard.com/report/github.com/rlch/neogo) [![Go Reference](https://pkg.go.dev/badge/github.com/rlch/neogo.svg)](https://pkg.go.dev/github.com/rlch/neogo)
+
 A Golang-ORM for Neo4J which creates idiomatic & fluent Cypher.
 
 Neogo was designed to make writing Cypher as simple as possible, providing a
@@ -28,7 +31,7 @@ nodes and relationships.
 See the following resources to get started with neogo:
 
 - [Docs](https://pkg.go.dev/github.com/rlch/neogo)
-- [Tests](https://github.com/rlch/neogo/tree/main/internal/tests)
+- [Tests](https://github.com/rlch/neogo/tree/main/internal/tests
 - [Official driver](https://github.com/neo4j/neo4j-go-driver)
 
 

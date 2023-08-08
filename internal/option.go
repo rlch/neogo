@@ -67,11 +67,11 @@ type (
 		Bind       any
 		Name       string
 		// If both name and expr are provided, name is used as an alias
-		Expr       Expr
-		Where      *Where
-		Select     *json.FieldQuery
-		Props      Props
-		Pattern    Expr
+		Expr      Expr
+		Where     *Where
+		Select    *json.FieldQuery
+		Props     Props
+		Pattern   Expr
 		VarLength Expr
 	}
 )
@@ -158,7 +158,7 @@ func (p Props) configureVariable(v *Variable) {
 type (
 	SetItem struct {
 		PropIdentifier any
-		ValIdentifier          any
+		ValIdentifier  any
 		Merge          bool
 		Labels         []string
 	}

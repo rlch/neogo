@@ -283,7 +283,7 @@ func (s *Scope) replaceBinding(m *member) {
 			accessor := strings.Split(jsTag, ",")[0]
 			ptr := uintptr(vf.Addr().UnsafePointer())
 			f := field{
-				name:   accessor,
+				name:       accessor,
 				identifier: name,
 			}
 			s.fields[ptr] = f

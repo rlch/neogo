@@ -7,7 +7,7 @@ import (
 
 // Where creates an inline [WHERE] clause.
 // Can be used for [nodes + relationship patterns] and [WITH] clauses.
-// 
+//
 // [WHERE]: https://neo4j.com/docs/cypher-manual/current/clauses/where/
 // [nodes + relationship patterns]: https://neo4j.com/docs/cypher-manual/current/patterns/reference
 // [WITH]: https://neo4j.com/docs/cypher-manual/current/clauses/where/#usage-with-with-clause
