@@ -31,7 +31,7 @@ nodes and relationships.
 See the following resources to get started with neogo:
 
 - [Docs](https://pkg.go.dev/github.com/rlch/neogo)
-- [Tests](https://github.com/rlch/neogo/tree/main/internal/tests
+- [Tests](https://github.com/rlch/neogo/tree/main/internal/tests)
 - [Official driver](https://github.com/neo4j/neo4j-go-driver)
 
 
