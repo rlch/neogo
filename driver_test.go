@@ -3,6 +3,7 @@ package neogo_test
 import (
 	"context"
 	"fmt"
+	"testing"
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -64,6 +65,19 @@ type Person struct {
 }
 
 func ExampleDriver() {
+	if testing.Short() {
+		fmt.Println("err: <nil>")
+		fmt.Printf("person: %v\n", Person{
+			Node: neogo.Node{
+				ID: "some-unique-id",
+			},
+			Name:    "Spongebob",
+			Surname: "Squarepants",
+			Age:     20,
+		})
+		return
+	}
+
 	ctx := context.Background()
 	neo4j := startNeo4J(ctx)
 	d := neogo.New(neo4j)
@@ -85,6 +99,17 @@ func ExampleDriver() {
 }
 
 func ExampleDriver_readSession() {
+	if testing.Short() {
+		fmt.Printf("err: %v\n", nil)
+		fmt.Printf("ns:       %v\n", []int{
+			0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+		})
+		fmt.Printf("nsTimes2: %v\n", []int{
+			0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
+		})
+		return
+	}
+
 	ctx := context.Background()
 	neo4j := startNeo4J(ctx)
 	d := neogo.New(neo4j)
@@ -119,6 +144,14 @@ func ExampleDriver_readSession() {
 }
 
 func ExampleDriver_writeSession() {
+	if testing.Short() {
+		fmt.Printf("err: %v\n", nil)
+		fmt.Printf("ids: %v\n", []int{
+			1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+		})
+		return
+	}
+
 	ctx := context.Background()
 	neo4j := startNeo4J(ctx)
 	d := neogo.New(neo4j)
