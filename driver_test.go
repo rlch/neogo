@@ -133,7 +133,7 @@ func ExampleDriver_writeSession() {
 	err := session.WriteTx(ctx, func(begin func() client.Client) error {
 		if err := begin().
 			Unwind("range(1, 10)", "i").
-			Create(db.Node(
+			Merge(db.Node(
 				db.Qual(
 					Person{},
 					"p",
@@ -146,7 +146,9 @@ func ExampleDriver_writeSession() {
 		if err := begin().
 			Unwind("range(1, 10)", "i").
 			Match(db.Node(db.Qual(&people, "p"))).
-			Where(db.Cond("p.id", "=", "toString(i)")).
+			Where(db.And(
+				db.Cond("p.id", "=", "toString(i)"),
+			)).
 			Return(&people).
 			Run(ctx); err != nil {
 			return err

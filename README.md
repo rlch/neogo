@@ -5,6 +5,10 @@ Neogo was designed to make writing Cypher as simple as possible, providing a
 safety-net and reducing boilerplate by leveraging canonical representations of
 nodes and relationships. 
 
+> [!WARNING]
+> The neogo API is still in an experimental phase. Expect minor changes and
+> additions until the first release.
+
 ---
 
 ## Overview
@@ -19,8 +23,17 @@ nodes and relationships.
 - Creates readable, interoperable Cypher queries
 - Heavily tested; full coverage of Neo4J docs examples (see `internal/tests`)
 
+## Getting Started
+
+See the following resources to get started with neogo:
+
+- [Docs](https://pkg.go.dev/github.com/rlch/neogo)
+- [Tests](https://github.com/rlch/neogo/tree/main/internal/tests)
+- [Official driver](https://github.com/neo4j/neo4j-go-driver)
+
 
 ## Example
+
 
 ```go
 type Person struct {
@@ -57,4 +70,3 @@ func main() {
 ## Contributions
 
 See [the contributing guide](CONTRIBUTING.md) for detailed instructions on how to get started with our project.
-

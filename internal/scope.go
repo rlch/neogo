@@ -563,7 +563,7 @@ func (s *Scope) addParameter(v reflect.Value, optName string) (name string) {
 		if v.IsValid() && v.CanInterface() {
 			s.parameters[name] = v.Interface()
 		} else {
-			fmt.Printf("[WARNING] invalid paramter: %s\n", name)
+			fmt.Printf("[WARNING] invalid parameter: %s\n", name)
 			s.parameters[name] = nil
 		}
 		name = "$" + name

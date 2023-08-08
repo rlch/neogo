@@ -28,9 +28,10 @@ type (
 	// certain types can change. See [PropertyIdentifier] and [ValueIdentifier].
 	Identifier = any
 
-	// PropertyIdentifier is a type of [Identifier], which considers strings
-	// as property accessors as opposed to literals. Literals may still be used by
-	// wrapping then in [pkg/github.com/rlch/neogo/db.Expr]
+	// PropertyIdentifier is a type of [Identifier], which considers strings as
+	// property accessors as opposed to literals, when used in a pattern WHERE
+	// clause or ORDER BY clause. Literals may still be used by wrapping then in
+	// [pkg/github.com/rlch/neogo/db.Expr]
 	//
 	// It is important to note that [PropertyIdentifier]'s cannot register
 	// identifiers, only refer to existing ones.
