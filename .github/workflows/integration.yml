@@ -23,12 +23,12 @@ jobs:
       - name: Run unit-tests
         run: |
           go test -race -covermode=atomic -coverprofile=cov.out -coverpkg=./... -short ./...
-      - name: Install goveralls
-        run: go install github.com/mattn/goveralls@latest
-      - name: Send coverage
-        env:
-          COVERALLS_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-        run: goveralls -coverprofile=cov.out -service=github
+      - name: Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ github.token }}
+          file: cov.out
+          format: golang
   lint:
     name: Lint
     runs-on: ubuntu-latest
