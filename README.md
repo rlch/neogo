@@ -4,16 +4,16 @@
 
 A Golang-ORM for Neo4J which creates idiomatic & fluent Cypher.
 
+> [!WARNING]
+> The neogo API is still in an experimental phase. Expect minor changes and
+> additions until the first release.
+
 
 ## Overview
 
 `neogo` was designed to make writing Cypher as simple as possible, providing a
 safety-net and reducing boilerplate by leveraging canonical representations of
 nodes and relationships. 
-
-> [!WARNING]
-> The neogo API is still in an experimental phase. Expect minor changes and
-> additions until the first release.
 
 - Hands-free un/marshalling between Go and Neo4J
 - No dynamic property, variable, label qualification necessary
