@@ -16,7 +16,7 @@ func newScope() *Scope {
 		bindings:       make(map[string]reflect.Value),
 		names:          make(map[reflect.Value]string),
 		generatedNames: map[string]struct{}{},
-		fields:         make(map[uintptr]struct{ name, entity string }),
+		fields:         make(map[uintptr]field),
 		parameters:     map[string]any{},
 		paramAddrs:     map[uintptr]string{},
 	}
@@ -30,7 +30,7 @@ type (
 		bindings       map[string]reflect.Value
 		generatedNames map[string]struct{}
 		names          map[reflect.Value]string
-		fields         map[uintptr]struct{ name, entity string }
+		fields         map[uintptr]field
 
 		paramCounter int
 		paramPrefix  string
@@ -42,7 +42,7 @@ type (
 	// An instance of a node/relationship in the cypher query
 	member struct {
 		identifier any
-		// Whether the entity was added to the scope by the query that returned this
+		// Whether the identifier was added to the scope by the query that returned this
 		// member.
 		isNew bool
 		// The name of the variable in the cypher query
@@ -59,6 +59,10 @@ type (
 		// The projection body that this member is associated with.
 		projectionBody *ProjectionBody
 	}
+	field struct {
+		name       string
+		identifier string
+	}
 )
 
 var (
@@ -68,8 +72,8 @@ var (
 
 func (m *member) Print() {
 	fmt.Printf(
-`{
-  entity: %+v,
+		`{
+  identifier: %+v,
   isNew: %v,
   name: %s,
   alias: %s,
@@ -77,7 +81,7 @@ func (m *member) Print() {
   variable: %+v,
   where: %+v,
   projection: %+v,
-}` + "\n" , m.identifier, m.isNew, m.name, m.alias, m.props, m.variable, m.where, m.projectionBody)
+}`+"\n", m.identifier, m.isNew, m.name, m.alias, m.props, m.variable, m.where, m.projectionBody)
 }
 
 func (s *Scope) clone() *Scope {
@@ -93,7 +97,7 @@ func (s *Scope) clone() *Scope {
 	for k, v := range s.names {
 		names[k] = v
 	}
-	fields := make(map[uintptr]struct{ name, entity string }, len(s.fields))
+	fields := make(map[uintptr]field, len(s.fields))
 	for k, v := range s.fields {
 		fields[k] = v
 	}
@@ -142,7 +146,7 @@ func (s *Scope) clear() {
 	s.bindings = map[string]reflect.Value{}
 	s.names = map[reflect.Value]string{}
 	s.generatedNames = map[string]struct{}{}
-	s.fields = map[uintptr]struct{ name, entity string }{}
+	s.fields = map[uintptr]field{}
 	s.parameters = map[string]any{}
 	s.paramAddrs = map[uintptr]string{}
 	s.parameterFilters = map[string]*json.FieldQuery{}
@@ -174,11 +178,11 @@ func (s *Scope) mergeChildScope(child *Scope) {
 }
 
 func (s *Scope) unfoldIdentifier(value any) (
-	entity any,
+	identifier any,
 	variable *Variable,
 	projBody *ProjectionBody,
 ) {
-	entity = value
+	identifier = value
 	// Preference outer overrides
 	// Could use mergo.Merge, but it's not worth the dependency
 	mergeV := func(v *Variable) {
@@ -204,8 +208,8 @@ func (s *Scope) unfoldIdentifier(value any) (
 		if variable.Pattern == "" {
 			variable.Pattern = v.Pattern
 		}
-		if variable.Quantifier == "" {
-			variable.Quantifier = v.Quantifier
+		if variable.VarLength == "" {
+			variable.VarLength = v.VarLength
 		}
 		if variable.Select == nil {
 			variable.Select = v.Select
@@ -213,24 +217,24 @@ func (s *Scope) unfoldIdentifier(value any) (
 	}
 RecurseToEntity:
 	for {
-		switch v := entity.(type) {
+		switch v := identifier.(type) {
 		case *ProjectionBody:
 			projBody = v
-			entity = v.Identifier
+			identifier = v.Identifier
 		case ProjectionBody:
 			projBody = &v
-			entity = v.Identifier
+			identifier = v.Identifier
 		case Variable:
 			mergeV(&v)
-			entity = v.Identifier
+			identifier = v.Identifier
 		case *Variable:
 			mergeV(v)
-			entity = v.Identifier
+			identifier = v.Identifier
 		default:
 			break RecurseToEntity
 		}
 	}
-	return entity, variable, projBody
+	return identifier, variable, projBody
 }
 
 func (s *Scope) replaceBinding(m *member) {
@@ -278,16 +282,13 @@ func (s *Scope) replaceBinding(m *member) {
 			}
 			accessor := strings.Split(jsTag, ",")[0]
 			ptr := uintptr(vf.Addr().UnsafePointer())
-			field := struct {
-				name   string
-				entity string
-			}{
+			f := field{
 				name:   accessor,
-				entity: name,
+				identifier: name,
 			}
-			s.fields[ptr] = field
+			s.fields[ptr] = f
 
-			fieldName := field.entity + "." + field.name
+			fieldName := f.identifier + "." + f.name
 			vfAddr := vf.Addr()
 			s.names[vfAddr] = fieldName
 		}
@@ -304,12 +305,12 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 	}
 
 	m := &member{isNew: true}
-	entity, variable, projBody := s.unfoldIdentifier(value)
+	identifier, variable, projBody := s.unfoldIdentifier(value)
 
 	// Propagate information from Variable to member
-	m.identifier = entity
+	m.identifier = identifier
 	if variable != nil {
-		variable.Identifier = entity
+		variable.Identifier = identifier
 		m.variable = variable
 		if variable.Expr != "" {
 			m.name = string(variable.Expr)
@@ -324,19 +325,19 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		}
 	}
 	if projBody != nil {
-		projBody.Identifier = entity
+		projBody.Identifier = identifier
 		m.projectionBody = projBody
 	}
-	if entity == nil {
+	if identifier == nil {
 		return m
 	}
 
-	v := reflect.ValueOf(entity)
+	v := reflect.ValueOf(identifier)
 	vT := v.Type()
 	canElem := vT.Kind() == reflect.Ptr ||
 		vT.Kind() == reflect.Slice
 
-	// Find the name of the entity
+	// Find the name of the identifier
 	if m.name != "" {
 		if exst, ok := s.bindings[m.name]; ok && exst != v {
 			panic(fmt.Errorf("(%s) already bound to different value. want: %s, have: %s", m.name, v, s.bindings[m.name]))
@@ -371,9 +372,9 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		if needsName {
 			var prefix string
 			if vT.Implements(nodeType) {
-				prefix = strcase.ToLowerCamel(ExtractNodeLabels(entity)[0])
+				prefix = strcase.ToLowerCamel(ExtractNodeLabels(identifier)[0])
 			} else if vT.Implements(relationshipType) {
-				prefix = strcase.ToLowerCamel(ExtractRelationshipType(entity))
+				prefix = strcase.ToLowerCamel(ExtractRelationshipType(identifier))
 			} else {
 				prefix = strcase.ToLowerCamel(vT.Elem().Name())
 				if prefix == "" {
@@ -423,12 +424,12 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 
 	s.replaceBinding(m)
 
-	// Validate entity type
+	// Validate identifier type
 	canHaveProps := isNode != nil &&
 		((*isNode && vT.Implements(nodeType)) ||
 			(!*isNode && vT.Implements(relationshipType)))
 
-	// Check if entity has data to inject as a parameter
+	// Check if identifier has data to inject as a parameter
 	inner := v
 	for inner.Kind() == reflect.Ptr {
 		inner = inner.Elem()
@@ -487,7 +488,7 @@ func (s *Scope) lookupName(identifier any) string {
 	return s.names[reflect.ValueOf(identifier)]
 }
 
-func (s *Scope) propertyExpression(identifier any) func(v any) string {
+func (s *Scope) propertyIdentifier(identifier any) func(v any) string {
 	identifier, _, _ = s.unfoldIdentifier(identifier)
 	identifierName := s.lookupName(identifier)
 	return func(v any) string {
@@ -497,7 +498,7 @@ func (s *Scope) propertyExpression(identifier any) func(v any) string {
 		if expr, ok := v.(Expr); ok {
 			return string(expr)
 		} else if str, strOk := v.(string); strOk && identifierName != "" {
-			// Consider strings as properties if entity is known
+			// Consider strings as properties if identifier is known
 			return fmt.Sprintf("%s.%s", identifierName, str)
 		} else if strOk {
 			// Otherwise, consider strings as literals
@@ -512,13 +513,13 @@ func (s *Scope) propertyExpression(identifier any) func(v any) string {
 			return name
 		}
 		if field, ok := s.fields[ptr]; ok {
-			return fmt.Sprintf("%s.%s", field.entity, field.name)
+			return fmt.Sprintf("%s.%s", field.identifier, field.name)
 		}
 		panic(fmt.Errorf("could not find a property-representation for %v", v))
 	}
 }
 
-func (s *Scope) valueExpression(v any) string {
+func (s *Scope) valueIdentifier(v any) string {
 	vv := reflect.ValueOf(v)
 	switch vv.Kind() {
 	case reflect.Bool:
@@ -549,7 +550,7 @@ func (s *Scope) valueExpression(v any) string {
 			return name
 		}
 		if field, ok := s.fields[ptr]; ok {
-			return fmt.Sprintf("%s.%s", field.entity, field.name)
+			return fmt.Sprintf("%s.%s", field.identifier, field.name)
 		}
 	default:
 		panic(fmt.Errorf("unsupported value-type %T", v))

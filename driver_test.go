@@ -10,6 +10,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/rlch/neogo"
+	"github.com/rlch/neogo/client"
 	"github.com/rlch/neogo/db"
 )
 
@@ -95,7 +96,7 @@ func ExampleDriver_readSession() {
 			panic(err)
 		}
 	}()
-	err := session.ReadTx(ctx, func(begin func() neogo.Client) error {
+	err := session.ReadTx(ctx, func(begin func() client.Client) error {
 		if err := begin().
 			Unwind("range(0, 10)", "i").
 			Return(db.Qual(&ns, "i")).Run(ctx); err != nil {
@@ -129,7 +130,7 @@ func ExampleDriver_writeSession() {
 			panic(err)
 		}
 	}()
-	err := session.WriteTx(ctx, func(begin func() neogo.Client) error {
+	err := session.WriteTx(ctx, func(begin func() client.Client) error {
 		if err := begin().
 			Unwind("range(1, 10)", "i").
 			Create(db.Node(

@@ -1,14 +1,94 @@
-package neogo_test
+package client_test
 
 import (
 	"fmt"
 
+	_ "github.com/rlch/neogo/client"
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 	"github.com/rlch/neogo/internal/tests"
 )
 
 func c() *internal.CypherClient { return internal.NewCypherClient() }
+
+func ExampleIdentifier_nil() {
+	c().
+		Match(
+			db.Node(nil).To("e", nil),
+		).
+		Print()
+	// Output:
+	// MATCH ()-[e]->()
+}
+
+func ExampleIdentifier_string() {
+	c().
+		Match(
+			db.Node("n"),
+		).
+		With("n").
+		Print()
+	// Output:
+	// MATCH (n)
+	// WITH n
+}
+
+func ExampleIdentifier_expr() {
+	c().
+		With(db.Qual(
+			"timestamp()", // identifier
+			"t",
+		)).
+		Print()
+	// Output:
+	// WITH timestamp() AS t
+}
+
+func ExampleIdentifier_pointer() {
+	var p any
+	c().
+		With(db.Qual(&p, "pName")).
+		Return(db.Qual(&p, "pDiffName")).
+		Print()
+	// Output:
+	// WITH pName
+	// RETURN pName AS pDiffName
+}
+
+func ExampleIdentifier_parameter() {
+	data := []string{"a", "b", "c"}
+	var n any
+	c().
+		Unwind(db.NamedParam(&data, "var"), "n").
+		With(db.Qual(&n, "n")).
+		Return(&n).
+		Print()
+	// Output:
+	// UNWIND $var AS n
+	// WITH n
+	// RETURN n
+}
+
+func ExampleIdentifier_pointerToField() {
+	var older, younger tests.Person
+	c().
+		Match(
+			db.Node(
+				db.Qual(&older, "older"),
+			).
+				To(
+					tests.Knows{},
+					db.Qual(&younger, "younger"),
+				),
+		).
+		Where(db.Cond(&older.Age, ">", &younger.Age)).
+		Return(&older.Name, &younger.Name).
+		Print()
+	// Output:
+	// MATCH (older:Person)-[:KNOWS]->(younger:Person)
+	// WHERE older.age > younger.age
+	// RETURN older.name, younger.name
+}
 
 func ExampleClient_match() {
 	var m tests.Movie
@@ -85,7 +165,7 @@ func ExampleClient_with() {
 
 func ExampleClient_subquery() {
 	var (
-		p       Person
+		p       tests.Person
 		numConn int
 	)
 	c().
@@ -399,7 +479,7 @@ func ExampleClient_remove() {
 func ExampleClient_forEach() {
 	c().
 		Match(
-			db.Path(db.Node("start").To(db.Var(nil, db.Quantifier("*")), "finish"), "p"),
+			db.Path(db.Node("start").To(db.Var(nil, db.VarLength("*")), "finish"), "p"),
 		).
 		Where(db.And(
 			db.Cond("start.name", "=", "'A'"),

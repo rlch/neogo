@@ -1,9 +1,16 @@
 package db
 
-import "github.com/rlch/neogo/internal"
+import (
+	"github.com/rlch/neogo/client"
+	"github.com/rlch/neogo/internal"
+)
 
-// Can be used for nodes + relationship patterns, WITH clauses and WHERE
-// clauses.
+// Where creates an inline [WHERE] clause.
+// Can be used for [nodes + relationship patterns] and [WITH] clauses.
+// 
+// [WHERE]: https://neo4j.com/docs/cypher-manual/current/clauses/where/
+// [nodes + relationship patterns]: https://neo4j.com/docs/cypher-manual/current/patterns/reference
+// [WITH]: https://neo4j.com/docs/cypher-manual/current/clauses/where/#usage-with-with-clause
 func Where(opts ...internal.WhereOption) interface {
 	internal.VariableOption
 	internal.ProjectionBodyOption
@@ -30,7 +37,16 @@ func Where(opts ...internal.WhereOption) interface {
 	}
 }
 
-func Cond(key any, op string, value any) internal.ICondition {
+// Cond creates a condition for use in a [WHERE] clause.
+//
+//	WHERE <key> <op> <value>
+//
+// [WHERE]: https://neo4j.com/docs/cypher-manual/current/clauses/where/
+func Cond(
+	key client.PropertyIdentifier,
+	op string,
+	value client.ValueIdentifier,
+) internal.ICondition {
 	return &internal.Condition{
 		Key:   key,
 		Op:    op,
@@ -38,6 +54,11 @@ func Cond(key any, op string, value any) internal.ICondition {
 	}
 }
 
+// Or creates an OR condition for use in a [WHERE] clause.
+//
+//	WHERE <cond> OR <cond> ... OR <cond>
+//
+// [WHERE]: https://neo4j.com/docs/cypher-manual/current/clauses/where/
 func Or(conds ...internal.ICondition) internal.ICondition {
 	ors := make([]*internal.Condition, len(conds))
 	for i, cond := range conds {
@@ -48,6 +69,11 @@ func Or(conds ...internal.ICondition) internal.ICondition {
 	}
 }
 
+// And creates an AND condition for use in a [WHERE] clause.
+//
+//	WHERE <cond> AND <cond> ... AND <cond>
+//
+// [WHERE]: https://neo4j.com/docs/cypher-manual/current/clauses/where/
 func And(conds ...internal.ICondition) internal.ICondition {
 	ands := make([]*internal.Condition, len(conds))
 	for i, cond := range conds {
@@ -58,6 +84,11 @@ func And(conds ...internal.ICondition) internal.ICondition {
 	}
 }
 
+// Xor creates an XOR condition for use in a [WHERE] clause.
+//
+//	WHERE <cond> XOR <cond> ... XOR <cond>
+//
+// [WHERE]: https://neo4j.com/docs/cypher-manual/current/clauses/where/
 func Xor(conds ...internal.ICondition) internal.ICondition {
 	xors := make([]*internal.Condition, len(conds))
 	for i, cond := range conds {
@@ -68,6 +99,11 @@ func Xor(conds ...internal.ICondition) internal.ICondition {
 	}
 }
 
+// Not creates a NOT condition for use in a [WHERE] clause.
+//
+//	WHERE NOT <cond>
+//
+// [WHERE]: https://neo4j.com/docs/cypher-manual/current/clauses/where/
 func Not(cond internal.ICondition) internal.ICondition {
 	c := cond.Condition()
 	c.Not = true

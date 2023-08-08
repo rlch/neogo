@@ -39,7 +39,7 @@ func (c *cypher) Bindings() map[string]reflect.Value {
 var (
 	errMergingReturnSubclause = errors.New("cannot merge multiple RETURN sub-clauses (ORDER BY, LIMIT, SKIP, ...)")
 	errWhereReturnSubclause   = errors.New("WHERE clause in RETURN sub-clause is not allowed")
-	errInvalidPropExpr        = errors.New("invalid property expression. Property expressions must be strings or an identifier of some entity")
+	errInvalidPropExpr        = errors.New("invalid property expression. Property expressions must be strings or an identifier")
 	errSubqueryImportAlias    = errors.New("aliasing or expressions are not supported in importing WITH clauses")
 )
 
@@ -139,8 +139,8 @@ func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
 			if m.name != "" {
 				inner = m.name + inner
 			}
-			if m.variable != nil && m.variable.Quantifier != "" {
-				inner = inner + string(m.variable.Quantifier)
+			if m.variable != nil && m.variable.VarLength != "" {
+				inner = inner + string(m.variable.VarLength)
 			}
 			if m.variable != nil && m.variable.Props != nil {
 				inner = inner + " " + cy.writeToString(func(cy *cypher) {
@@ -186,7 +186,7 @@ func (cy *cypher) writeProps(props Props) {
 	}, len(props))
 	i := 0
 	for k := range props {
-		name := cy.propertyExpression(nil)(k)
+		name := cy.propertyIdentifier(nil)(k)
 		accessors := strings.Split(name, ".")
 		if len(accessors) == 2 {
 			name = accessors[1]
@@ -209,7 +209,7 @@ func (cy *cypher) writeProps(props Props) {
 		if i > 0 {
 			cy.WriteString(", ")
 		}
-		v := cy.valueExpression(props[k.Prop])
+		v := cy.valueIdentifier(props[k.Prop])
 		fmt.Fprintf(cy, "%s: %s", k.Key, v)
 	}
 	cy.WriteString("}")
@@ -375,12 +375,12 @@ func (cy *cypher) writeMergeClause(
 	})
 }
 
-func (cy *cypher) writeDeleteClause(detach bool, variables ...any) {
+func (cy *cypher) writeDeleteClause(detach bool, propIdentifiers ...any) {
 	if detach {
 		cy.WriteString("DETACH ")
 	}
-	cy.writeSinglelineQuery("DELETE", len(variables), func(i int) {
-		cy.WriteString(cy.propertyExpression(nil)(variables[i]))
+	cy.writeSinglelineQuery("DELETE", len(propIdentifiers), func(i int) {
+		cy.WriteString(cy.propertyIdentifier(nil)(propIdentifiers[i]))
 	})
 	cy.newline()
 }
@@ -397,7 +397,7 @@ func (cy *cypher) writeWhereClause(where *Where, inline bool) {
 			} else if len(where.Conds) > 1 {
 				cond = &Condition{And: where.Conds}
 			}
-			cy.writeCondition(cond, cy.propertyExpression(where.Identifier), cy.valueExpression)
+			cy.writeCondition(cond, cy.propertyIdentifier(where.Identifier), cy.valueIdentifier)
 		}
 		if !inline {
 			cy.newline()
@@ -514,7 +514,7 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 						subclause.Where = m.projectionBody.Where
 					}
 					for ob, asc := range m.projectionBody.OrderBy {
-						getKey := cy.propertyExpression(m.identifier)
+						getKey := cy.propertyIdentifier(m.identifier)
 						var key string
 						if ob == "" || ob == nil {
 							key = getKey(m.identifier)
@@ -590,7 +590,7 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 func (cy *cypher) writeSetClause(items ...SetItem) {
 	cy.writeMultilineQuery("SET", len(items), func(i int) {
 		item := items[i]
-		prop := cy.propertyExpression(nil)(item.Identifier)
+		prop := cy.propertyIdentifier(nil)(item.PropIdentifier)
 		cy.WriteString(prop)
 		if len(item.Labels) > 0 {
 			cy.WriteString(":" + strings.Join(item.Labels, ":"))
@@ -601,14 +601,14 @@ func (cy *cypher) writeSetClause(items ...SetItem) {
 		} else {
 			cy.WriteString(" = ")
 		}
-		cy.WriteString(cy.valueExpression(item.Value))
+		cy.WriteString(cy.valueIdentifier(item.ValIdentifier))
 	})
 }
 
 func (cy *cypher) writeRemoveClause(items ...RemoveItem) {
 	cy.writeMultilineQuery("REMOVE", len(items), func(i int) {
 		item := items[i]
-		prop := cy.propertyExpression(nil)(item.Identifier)
+		prop := cy.propertyIdentifier(nil)(item.PropIdentifier)
 		cy.WriteString(prop)
 		if len(item.Labels) > 0 {
 			cy.WriteString(":" + strings.Join(item.Labels, ":"))
@@ -617,13 +617,13 @@ func (cy *cypher) writeRemoveClause(items ...RemoveItem) {
 	})
 }
 
-func (cy *cypher) writeForEachClause(entity, elementsExpr any, do func(c *CypherUpdater[any])) {
+func (cy *cypher) writeForEachClause(identifier, elementsExpr any, do func(c *CypherUpdater[any])) {
 	cy.catch(func() {
 		cy.WriteString("FOREACH (")
-		value := cy.valueExpression(elementsExpr)
+		value := cy.valueIdentifier(elementsExpr)
 
 		foreach := newCypher()
-		m := foreach.register(entity, false, nil)
+		m := foreach.register(identifier, false, nil)
 		fmt.Fprintf(cy, "%s IN %s | ", m.name, value)
 
 		b := &strings.Builder{}
@@ -651,9 +651,9 @@ func (cy *cypher) writeShowClause(procedure string) {
 	cy.newline()
 }
 
-func (cy *cypher) writeYieldClause(variables ...any) {
-	cy.writeSinglelineQuery("YIELD", len(variables), func(i int) {
-		v := variables[i]
+func (cy *cypher) writeYieldClause(identifiers ...any) {
+	cy.writeSinglelineQuery("YIELD", len(identifiers), func(i int) {
+		v := identifiers[i]
 		m := cy.register(v, false, nil)
 		cy.WriteString(m.name)
 		if m.alias != "" {

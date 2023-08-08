@@ -47,6 +47,8 @@ type registry struct {
 	relationships []IRelationship
 }
 
+// WithTypes is an option for [New] that allows you to register instances of
+// [IAbstract], [INode] and [IRelationship] to be used with [neogo].
 func WithTypes(types ...any) func(*driver) {
 	return func(d *driver) {
 		for _, t := range types {

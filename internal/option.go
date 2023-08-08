@@ -72,7 +72,7 @@ type (
 		Select     *json.FieldQuery
 		Props      Props
 		Pattern    Expr
-		Quantifier Expr
+		VarLength Expr
 	}
 )
 
@@ -84,16 +84,7 @@ type (
 		selectionSubClause
 
 		Identifier any
-		Pagination PaginationOptions
 		Distinct   bool
-	}
-	PaginationOptions struct {
-		First  int
-		Last   int
-		After  string
-		Before string
-		SortBy string
-		Desc   bool
 	}
 	selectionSubClause struct {
 		// Field name -> true if ascending
@@ -166,14 +157,14 @@ func (p Props) configureVariable(v *Variable) {
 
 type (
 	SetItem struct {
-		Identifier any
-		Value      any
-		Merge      bool
-		Labels     []string
+		PropIdentifier any
+		ValIdentifier          any
+		Merge          bool
+		Labels         []string
 	}
 	RemoveItem struct {
-		Identifier any
-		Labels     []string
+		PropIdentifier any
+		Labels         []string
 	}
 )
 

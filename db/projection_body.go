@@ -1,8 +1,14 @@
 package db
 
-import "github.com/rlch/neogo/internal"
+import (
+	"github.com/rlch/neogo/client"
+	"github.com/rlch/neogo/internal"
+)
 
-func With(identifier any, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
+// With adds configuration to a projection item for use in a [WITH] clause.
+//
+// [WITH]: https://neo4j.com/docs/cypher-manual/current/clauses/where/#usage-with-with-clause
+func With(identifier client.Identifier, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
 	m := &internal.ProjectionBody{}
 	m.Identifier = identifier
 	for _, opt := range opts {
@@ -11,21 +17,35 @@ func With(identifier any, opts ...internal.ProjectionBodyOption) *internal.Proje
 	return m
 }
 
-func Return(identifier any, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
+// Return adds configuration to a projection item for use in a [RETURN] clause.
+//
+// [RETURN]: https://neo4j.com/docs/cypher-manual/current/clauses/return/
+func Return(identifier client.Identifier, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
 	return With(identifier, opts...)
 }
 
-func OrderBy(field any, asc bool) internal.ProjectionBodyOption {
+// OrderBy adds an [ORDER BY] clause to a [With] or [Return] projection item.
+// asc determines whether the ordering is ascending or descending.
+//
+//	ORDER BY <identifier> [ASC|DESC]
+//
+// [ORDER BY]: https://neo4j.com/docs/cypher-manual/current/clauses/order-by/
+func OrderBy(identifier client.PropertyIdentifier, asc bool) internal.ProjectionBodyOption {
 	return &internal.Configurer{
 		ProjectionBody: func(m *internal.ProjectionBody) {
 			if m.OrderBy == nil {
 				m.OrderBy = map[any]bool{}
 			}
-			m.OrderBy[field] = asc
+			m.OrderBy[identifier] = asc
 		},
 	}
 }
 
+// Skip adds a [SKIP] clause to a [With] or [Return] projection item.
+//
+//	SKIP <expr>
+//
+// [SKIP]: https://neo4j.com/docs/cypher-manual/current/clauses/skip/
 func Skip(expr string) internal.ProjectionBodyOption {
 	return &internal.Configurer{
 		ProjectionBody: func(m *internal.ProjectionBody) {
@@ -34,6 +54,11 @@ func Skip(expr string) internal.ProjectionBodyOption {
 	}
 }
 
+// Limit adds a [LIMIT] clause to a [With] or [Return] projection item.
+//
+//	LIMIT <expr>
+//
+// [LIMIT]: https://neo4j.com/docs/cypher-manual/current/clauses/limit/
 func Limit(expr string) internal.ProjectionBodyOption {
 	return &internal.Configurer{
 		ProjectionBody: func(m *internal.ProjectionBody) {
@@ -42,50 +67,12 @@ func Limit(expr string) internal.ProjectionBodyOption {
 	}
 }
 
-var Distinct internal.ProjectionBodyOption = &internal.Configurer{
-	ProjectionBody: func(m *internal.ProjectionBody) {
+// Distinct adds a [DISTINCT] clause to a [With] or [Return] projection item.
+//
+//	<clause> DISTINCT ...
+//
+// [DISTINCT]: https://neo4j.com/docs/cypher-manual/current/clauses/return/#query-return-distinct
+var Distinct internal.ProjectionBodyOption = &internal.Configurer{ ProjectionBody: func(m *internal.ProjectionBody) {
 		m.Distinct = true
 	},
-}
-
-func Paginate(options PaginationOptions) internal.ProjectionBodyOption {
-	return &internal.Configurer{
-		ProjectionBody: func(pb *internal.ProjectionBody) {
-			o := internal.PaginationOptions{}
-			options.apply(&o)
-			pb.Pagination = o
-		},
-	}
-}
-
-type (
-	PaginationOptions interface {
-		apply(*internal.PaginationOptions)
-	}
-	ForwardOptions struct {
-		First  int
-		After  string
-		SortBy string
-		Desc   bool
-	}
-	BackwardOptions struct {
-		Last   int
-		Before string
-		SortBy string
-		Desc   bool
-	}
-)
-
-func (o ForwardOptions) apply(opts *internal.PaginationOptions) {
-	opts.First = o.First
-	opts.After = o.After
-	opts.SortBy = o.SortBy
-	opts.Desc = o.Desc
-}
-
-func (o BackwardOptions) apply(opts *internal.PaginationOptions) {
-	opts.Last = o.Last
-	opts.Before = o.Before
-	opts.SortBy = o.SortBy
-	opts.Desc = o.Desc
 }

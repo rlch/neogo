@@ -123,13 +123,13 @@ func (c *CypherReader) Subquery(subquery func(c *CypherClient) *CypherRunner) *C
 	return newCypherQuerier(c.cypher)
 }
 
-func (c *CypherReader) With(variables ...any) *CypherQuerier {
-	c.writeProjectionBodyClause("WITH", c.Parent, variables...)
+func (c *CypherReader) With(identifiers ...any) *CypherQuerier {
+	c.writeProjectionBodyClause("WITH", c.Parent, identifiers...)
 	return newCypherQuerier(c.cypher)
 }
 
-func (c *CypherReader) Unwind(expr any, as string) *CypherQuerier {
-	c.writeUnwindClause(expr, as)
+func (c *CypherReader) Unwind(identifier any, as string) *CypherQuerier {
+	c.writeUnwindClause(identifier, as)
 	return newCypherQuerier(c.cypher)
 }
 
@@ -143,8 +143,8 @@ func (c *CypherReader) Show(command string) *CypherYielder {
 	return newCypherYielder(c.cypher)
 }
 
-func (c *CypherReader) Return(matches ...any) *CypherRunner {
-	c.writeProjectionBodyClause("RETURN", nil, matches...)
+func (c *CypherReader) Return(identifiers ...any) *CypherRunner {
+	c.writeProjectionBodyClause("RETURN", nil, identifiers...)
 	return newCypherRunner(c.cypher, true)
 }
 
@@ -173,13 +173,13 @@ func (c *CypherUpdater[To]) Merge(pattern Pattern, opts ...MergeOption) To {
 	return c.To(c.cypher)
 }
 
-func (c *CypherUpdater[To]) DetachDelete(variables ...any) To {
-	c.writeDeleteClause(true, variables...)
+func (c *CypherUpdater[To]) DetachDelete(propIdentifiers ...any) To {
+	c.writeDeleteClause(true, propIdentifiers...)
 	return c.To(c.cypher)
 }
 
-func (c *CypherUpdater[To]) Delete(variables ...any) To {
-	c.writeDeleteClause(false, variables...)
+func (c *CypherUpdater[To]) Delete(identifiers ...any) To {
+	c.writeDeleteClause(false, identifiers...)
 	return c.To(c.cypher)
 }
 
@@ -193,13 +193,13 @@ func (c *CypherUpdater[To]) Remove(items ...RemoveItem) To {
 	return c.To(c.cypher)
 }
 
-func (c *CypherUpdater[To]) ForEach(entity, elementsExpr any, do func(c *CypherUpdater[any])) To {
-	c.writeForEachClause(entity, elementsExpr, do)
+func (c *CypherUpdater[To]) ForEach(identifier, elementsExpr any, do func(c *CypherUpdater[any])) To {
+	c.writeForEachClause(identifier, elementsExpr, do)
 	return c.To(c.cypher)
 }
 
-func (c *CypherYielder) Yield(variables ...any) *CypherQuerier {
-	c.writeYieldClause(variables...)
+func (c *CypherYielder) Yield(identifiers ...any) *CypherQuerier {
+	c.writeYieldClause(identifiers...)
 	return newCypherQuerier(c.cypher)
 }
 

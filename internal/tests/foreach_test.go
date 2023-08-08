@@ -13,7 +13,7 @@ func TestForEach(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Match(
-				db.Path(db.Node("start").To(db.Var(nil, db.Quantifier("*")), "finish"), "p"),
+				db.Path(db.Node("start").To(db.Var(nil, db.VarLength("*")), "finish"), "p"),
 			).
 			Where(db.And(
 				db.Cond("start.name", "=", "'A'"),
