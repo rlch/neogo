@@ -25,9 +25,8 @@ jobs:
           go test -race -covermode=atomic -coverprofile=cov.out -coverpkg=./... -short ./...
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
-        env:
+        with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: cov.out
           fail_ci_if_error: true
   lint:
     name: Lint
