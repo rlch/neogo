@@ -41,7 +41,7 @@ jobs:
           cache: false
       - name: Install dependencies
         run: |
-          go mod download
+          go mod download && go mod vendor
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
