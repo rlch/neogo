@@ -11,5 +11,3 @@ linters:
     # Extras
     - containedctx
     - wastedassign
-run:
-  modules-download-mode: vendor
