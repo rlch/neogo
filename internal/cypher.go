@@ -122,7 +122,7 @@ func (cy *cypher) writeNode(m *member) {
 // patternFiller ::= [ relationshipVariable ] [ typeExpression ]
 //
 //	[ propertyKeyValueExpression ] [ "WHERE" booleanExpression ]
-func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
+func (cy *cypher) writeRelationship(m *member, rs *RelationshipPattern) {
 	if m != nil {
 		var inner string
 		if !m.isNew {
@@ -160,17 +160,17 @@ func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
 			}
 		}
 
-		if rs.to != nil {
+		if rs.To != nil {
 			fmt.Fprintf(cy, "-[%s]->", inner)
-		} else if rs.from != nil {
+		} else if rs.From != nil {
 			fmt.Fprintf(cy, "<-[%s]-", inner)
 		} else {
 			fmt.Fprintf(cy, "-[%s]-", inner)
 		}
 	} else {
-		if rs.to != nil {
+		if rs.To != nil {
 			cy.WriteString("-->")
-		} else if rs.from != nil {
+		} else if rs.From != nil {
 			cy.WriteString("<--")
 		} else {
 			cy.WriteString("--")
@@ -268,7 +268,7 @@ func (cy *cypher) writeCondition(c *Condition, parseKey, parseValue func(any) st
 	})
 }
 
-func (cy *cypher) writePattern(pattern *nodePattern) {
+func (cy *cypher) writePattern(pattern *NodePattern) {
 	cy.catch(func() {
 		if pattern.pathName != "" {
 			fmt.Fprintf(cy, "%s = ", pattern.pathName)
@@ -276,14 +276,14 @@ func (cy *cypher) writePattern(pattern *nodePattern) {
 		for {
 			nodeM := cy.registerNode(pattern)
 			cy.writeNode(nodeM)
-			edge := pattern.relationship
+			edge := pattern.Relationship
 			if edge == nil {
 				break
 			}
 			edgeM := cy.registerEdge(edge)
 			cy.writeRelationship(edgeM, edge)
 
-			if next := pattern.next(); next != pattern {
+			if next := pattern.Next(); next != pattern {
 				pattern = next
 			} else {
 				break
@@ -292,7 +292,7 @@ func (cy *cypher) writePattern(pattern *nodePattern) {
 	})
 }
 
-func (cy *cypher) writeReadingClause(patterns []*nodePattern, optional bool) {
+func (cy *cypher) writeReadingClause(patterns []*NodePattern, optional bool) {
 	clause := "MATCH"
 	if optional {
 		clause = "OPTIONAL " + clause
@@ -340,7 +340,7 @@ func (cy *cypher) writeUnionClause(unions []func(*CypherClient) *CypherRunner, a
 }
 
 func (cy *cypher) writeCreateClause(
-	nodes []*nodePattern,
+	nodes []*NodePattern,
 ) {
 	cy.writeMultilineQuery("CREATE", len(nodes), func(i int) {
 		cy.writePattern(nodes[i])
@@ -348,7 +348,7 @@ func (cy *cypher) writeCreateClause(
 }
 
 func (cy *cypher) writeMergeClause(
-	node *nodePattern,
+	node *NodePattern,
 	opts ...MergeOption,
 ) {
 	merge := &MergeOptions{}

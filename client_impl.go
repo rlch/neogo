@@ -258,6 +258,10 @@ func (c *runnerImpl) Run(ctx context.Context) (err error) {
 		})
 }
 
+func (c *runnerImpl) Compile() (*internal.CompiledCypher, error) {
+	return c.cy.Compile()
+}
+
 func (s *session) unmarshalRecords(
 	cy *internal.CompiledCypher,
 	records []*neo4j.Record,

@@ -3,8 +3,6 @@ package db
 import (
 	"fmt"
 
-	"github.com/goccy/go-json"
-
 	"github.com/rlch/neogo/client"
 	"github.com/rlch/neogo/internal"
 )
@@ -100,17 +98,6 @@ func VarLength(varLengthExpr internal.Expr) internal.VariableOption {
 	return &internal.Configurer{
 		Variable: func(v *internal.Variable) {
 			v.VarLength = varLengthExpr
-		},
-	}
-}
-
-// Select filters the properties of a node or relationship to be returned.
-//
-// NOTE: This API has not been implemented yet.
-func Select(filter *json.FieldQuery) internal.VariableOption {
-	return &internal.Configurer{
-		Variable: func(v *internal.Variable) {
-			v.Select = filter
 		},
 	}
 }

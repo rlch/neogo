@@ -62,7 +62,7 @@ func Cond(
 func Or(conds ...internal.ICondition) internal.ICondition {
 	ors := make([]*internal.Condition, len(conds))
 	for i, cond := range conds {
-		ors[i] = cond.Condition()
+		ors[i] = internal.ToCondition(cond)
 	}
 	return &internal.Condition{
 		Or: ors,
@@ -77,7 +77,7 @@ func Or(conds ...internal.ICondition) internal.ICondition {
 func And(conds ...internal.ICondition) internal.ICondition {
 	ands := make([]*internal.Condition, len(conds))
 	for i, cond := range conds {
-		ands[i] = cond.Condition()
+		ands[i] = internal.ToCondition(cond)
 	}
 	return &internal.Condition{
 		And: ands,
@@ -92,7 +92,7 @@ func And(conds ...internal.ICondition) internal.ICondition {
 func Xor(conds ...internal.ICondition) internal.ICondition {
 	xors := make([]*internal.Condition, len(conds))
 	for i, cond := range conds {
-		xors[i] = cond.Condition()
+		xors[i] = internal.ToCondition(cond)
 	}
 	return &internal.Condition{
 		Xor: xors,
@@ -105,7 +105,7 @@ func Xor(conds ...internal.ICondition) internal.ICondition {
 //
 // [WHERE]: https://neo4j.com/docs/cypher-manual/current/clauses/where/
 func Not(cond internal.ICondition) internal.ICondition {
-	c := cond.Condition()
+	c := internal.ToCondition(cond)
 	c.Not = true
 	return c
 }

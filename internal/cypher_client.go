@@ -20,12 +20,6 @@ func newCypherClient(cy *cypher) *CypherClient {
 }
 
 type (
-	CypherPath struct {
-		n *nodePattern
-	}
-	CypherPattern struct {
-		ns []*nodePattern
-	}
 	CypherClient struct {
 		*cypher
 		*CypherReader

@@ -3,8 +3,8 @@ package client
 
 import (
 	"context"
+	"reflect"
 
-	_ "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	_ "github.com/sanity-io/litter"
 
 	"github.com/rlch/neogo/internal"
@@ -80,6 +80,9 @@ type Client interface {
 type Scope interface {
 	// Name returns the name of previously registered identifier.
 	Name(identifier Identifier) string
+
+	// Binding returns the value of previously registered identifier.
+	Binding(name string) reflect.Value
 }
 
 // Reader is the interface for reading data from the database.
@@ -114,6 +117,11 @@ type Reader interface {
 	//  SHOW <command>
 	Show(command string) Yielder
 
+	// Subquery writes a CALL subquery clause to the query
+	//
+	//  CALL {
+	//    <query>
+	//  }
 	Subquery(func(c Client) Runner) Querier
 
 	// Cypher allows you to inject a raw Cypher query into the query.
@@ -190,4 +198,7 @@ type Updater[To any] interface {
 type Runner interface {
 	// Run executes the query.
 	Run(ctx context.Context) error
+
+	// Compile returns a compiled version of the query, without executing.
+	Compile() (*internal.CompiledCypher, error)
 }

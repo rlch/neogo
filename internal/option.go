@@ -1,7 +1,5 @@
 package internal
 
-import "github.com/goccy/go-json"
-
 func ConfigureMergeOptions(o *MergeOptions, configurer MergeOption) {
 	configurer.configureMergeOptions(o)
 }
@@ -69,7 +67,6 @@ type (
 		// If both name and expr are provided, name is used as an alias
 		Expr      Expr
 		Where     *Where
-		Select    *json.FieldQuery
 		Props     Props
 		Pattern   Expr
 		VarLength Expr
@@ -105,7 +102,7 @@ type (
 	}
 	ICondition interface {
 		WhereOption
-		Condition() *Condition
+		condition() *Condition
 	}
 	Where struct {
 		Identifier any
@@ -133,11 +130,15 @@ var (
 	} = (*Condition)(nil)
 )
 
+func ToCondition(i ICondition) *Condition {
+	return i.condition()
+}
+
 func (e Expr) configureWhere(w *Where) {
 	w.Expr = string(e)
 }
 
-func (e Expr) Condition() *Condition {
+func (e Expr) condition() *Condition {
 	return &Condition{Key: e}
 }
 
@@ -145,7 +146,7 @@ func (c *Condition) configureWhere(w *Where) {
 	w.Conds = append(w.Conds, c)
 }
 
-func (c *Condition) Condition() *Condition {
+func (c *Condition) condition() *Condition {
 	return c
 }
 
