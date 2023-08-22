@@ -188,6 +188,23 @@ type Updater[To any] interface {
 
 // Runner allows the query to be executed.
 type Runner interface {
-	// Run executes the query.
+	// Run executes the query, populating all the values bound within the query if
+	// their identifiers exist in the returning scope.
 	Run(ctx context.Context) error
+
+	// Result executes the query and returns an abstraction over a
+	// [pkg/github.com/neo4j/neo4j-go-driver/v4/neo4j.ResultWithContext], which
+	// allows records to be consumed one-by-one as a linked list, instead of all
+	// at once like Run. This is useful for large or undefined results that may
+	// not necessarily fit in memory.
+	Result(ctx context.Context) (Result, error)
+}
+
+type Result interface {
+	Peek(ctx context.Context) bool
+	Next(ctx context.Context) bool
+	Err() error
+	// Read reads the values of the current record into the values bound within
+	// the query.
+	Read() error
 }
