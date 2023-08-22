@@ -202,9 +202,17 @@ type Runner interface {
 
 type Result interface {
 	Close(ctx context.Context) error
+
+	// Peek returns true only if there is a record after the current one to be processed without advancing the record
+	// stream
 	Peek(ctx context.Context) bool
+
+	// Next returns true only if there is a record to be processed.
 	Next(ctx context.Context) bool
+
+	// Err returns the latest error that caused this Next to return false.
 	Err() error
+
 	// Read reads the values of the current record into the values bound within
 	// the query.
 	Read() error

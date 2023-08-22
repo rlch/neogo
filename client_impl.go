@@ -283,7 +283,10 @@ func (c *runnerImpl) Stream(ctx context.Context, sink func(r client.Result) erro
 			ResultWithContext: result,
 			compiled:          cy,
 		})
-		return nil, fmt.Errorf("cannot sink result: %w", err)
+		if err != nil {
+			return nil, fmt.Errorf("cannot sink result: %w", err)
+		}
+		return nil, nil
 	})
 }
 

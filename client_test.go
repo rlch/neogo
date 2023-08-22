@@ -1,14 +1,18 @@
 package neogo
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/rlch/neogo/client"
+	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 	"github.com/rlch/neogo/internal/tests"
+	testutils "github.com/rlch/neogo/test_utils"
 )
 
 func TestUnmarshalResult(t *testing.T) {
@@ -262,4 +266,43 @@ func TestUnmarshalResult(t *testing.T) {
 			}, n[1])
 		})
 	})
+}
+
+func TestStream(t *testing.T) {
+	assert := assert.New(t)
+	ctx := context.Background()
+	neo4j, cancel := testutils.StartNeo4J(ctx)
+	d := New(neo4j)
+	session := d.ReadSession(ctx)
+
+	t.Cleanup(func() {
+		if err := session.Close(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := cancel(ctx); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	var actualOut, expectedOut []int
+	expectedOut = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	err := session.ReadTx(ctx, func(begin func() client.Client) error {
+		var num int
+		return begin().
+			Unwind("range(0, 10)", "i").
+			Return(db.Qual(&num, "i")).Stream(ctx, func(r client.Result) error {
+			for r.Next(ctx) {
+				if err := r.Read(); err != nil {
+					return err
+				}
+				actualOut = append(actualOut, num)
+			}
+			return nil
+		})
+	})
+	assert.NoError(err)
+	assert.Equal(len(expectedOut), len(actualOut))
+	for i := 0; i < len(expectedOut); i++ {
+		assert.Equal(expectedOut[i], actualOut[i])
+	}
 }
