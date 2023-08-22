@@ -77,6 +77,9 @@ type (
 		session    neo4j.SessionWithContext
 		currentTx  neo4j.ManagedTransaction
 	}
+	result struct {
+		neo4j.ResultWithContext
+	}
 )
 
 func (d *driver) DB() neo4j.DriverWithContext {

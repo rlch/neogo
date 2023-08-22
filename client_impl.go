@@ -45,6 +45,10 @@ type (
 		*session
 		cy *internal.CypherRunner
 	}
+	resultImpl struct {
+		neo4j.ResultWithContext
+		compiled *internal.CompiledCypher
+	}
 )
 
 func (s *session) newClient(cy *internal.CypherClient) *clientImpl {
@@ -256,6 +260,41 @@ func (c *runnerImpl) Run(ctx context.Context) (err error) {
 			}
 			return nil, nil
 		})
+}
+
+func (r *runnerImpl) Result(ctx context.Context) (client.Result, error) {
+	compiled, err := r.cy.Compile()
+	if err != nil {
+		return nil, err
+	}
+	return &resultImpl{
+		compiled:          nil,
+		ResultWithContext: nil,
+	}, nil
+
+}
+
+func (c *resultImpl) Peek(ctx context.Context) bool {
+	return c.result.Peek(ctx)
+}
+
+func (c *resultImpl) Next(ctx context.Context) bool {
+	return c.result.Next(ctx)
+}
+
+func (c *resultImpl) Err() error {
+	return c.result.Err()
+}
+
+func (c *resultImpl) Read() error {
+	record := c.result.Record()
+	if record == nil {
+		return nil
+	}
+	if err := c.unmarshalRecord(c.cy, record); err != nil {
+		return fmt.Errorf("cannot unmarshal record: %w", err)
+	}
+	return nil
 }
 
 func (s *session) unmarshalRecords(
