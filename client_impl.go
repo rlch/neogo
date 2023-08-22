@@ -46,6 +46,7 @@ type (
 		cy *internal.CypherRunner
 	}
 	resultImpl struct {
+		*session
 		neo4j.ResultWithContext
 		compiled *internal.CompiledCypher
 	}
@@ -262,36 +263,48 @@ func (c *runnerImpl) Run(ctx context.Context) (err error) {
 		})
 }
 
-func (r *runnerImpl) Result(ctx context.Context) (client.Result, error) {
-	compiled, err := r.cy.Compile()
+func (c *runnerImpl) Stream(ctx context.Context, sink func(r client.Result) error) (err error) {
+	cy, err := c.cy.Compile()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("cannot compile cypher: %w", err)
 	}
-	return &resultImpl{
-		compiled:          nil,
-		ResultWithContext: nil,
-	}, nil
-
+	params, err := canonicalizeParams(cy.Parameters)
+	if err != nil {
+		return fmt.Errorf("cannot serialize parameters: %w", err)
+	}
+	return c.executeTransaction(ctx, cy, func(tx neo4j.ManagedTransaction) (any, error) {
+		var result neo4j.ResultWithContext
+		result, err = tx.Run(ctx, cy.Cypher, params)
+		if err != nil {
+			return nil, fmt.Errorf("cannot run cypher: %w", err)
+		}
+		err := sink(&resultImpl{
+			session:           c.session,
+			ResultWithContext: result,
+			compiled:          cy,
+		})
+		return nil, fmt.Errorf("cannot sink result: %w", err)
+	})
 }
 
 func (c *resultImpl) Peek(ctx context.Context) bool {
-	return c.result.Peek(ctx)
+	return c.ResultWithContext.Peek(ctx)
 }
 
 func (c *resultImpl) Next(ctx context.Context) bool {
-	return c.result.Next(ctx)
+	return c.ResultWithContext.Next(ctx)
 }
 
 func (c *resultImpl) Err() error {
-	return c.result.Err()
+	return c.ResultWithContext.Err()
 }
 
 func (c *resultImpl) Read() error {
-	record := c.result.Record()
+	record := c.Record()
 	if record == nil {
 		return nil
 	}
-	if err := c.unmarshalRecord(c.cy, record); err != nil {
+	if err := c.unmarshalRecord(c.compiled, record); err != nil {
 		return fmt.Errorf("cannot unmarshal record: %w", err)
 	}
 	return nil

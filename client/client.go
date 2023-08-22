@@ -192,15 +192,16 @@ type Runner interface {
 	// their identifiers exist in the returning scope.
 	Run(ctx context.Context) error
 
-	// Result executes the query and returns an abstraction over a
+	// Stream executes the query and returns an abstraction over a
 	// [pkg/github.com/neo4j/neo4j-go-driver/v4/neo4j.ResultWithContext], which
 	// allows records to be consumed one-by-one as a linked list, instead of all
 	// at once like Run. This is useful for large or undefined results that may
 	// not necessarily fit in memory.
-	Result(ctx context.Context) (Result, error)
+	Stream(ctx context.Context, sink func(r Result) error) error
 }
 
 type Result interface {
+	Close(ctx context.Context) error
 	Peek(ctx context.Context) bool
 	Next(ctx context.Context) bool
 	Err() error
