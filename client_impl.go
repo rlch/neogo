@@ -109,6 +109,7 @@ func (s *session) newRunner(cy *internal.CypherRunner) *runnerImpl {
 }
 
 func (c *clientImpl) Use(graphExpr string) client.Querier {
+	c.hooks.Use(graphExpr)
 	return c.newQuerier(c.cy.Use(graphExpr))
 }
 
@@ -133,10 +134,12 @@ func (c *clientImpl) UnionAll(unions ...func(c client.Client) client.Runner) cli
 }
 
 func (c *readerImpl) OptionalMatch(patterns internal.Patterns) client.Querier {
+	c.hooks.OptionalMatch(patterns)
 	return c.newQuerier(c.cy.OptionalMatch(patterns))
 }
 
 func (c *readerImpl) Match(patterns internal.Patterns) client.Querier {
+	c.hooks.Match(patterns)
 	return c.newQuerier(c.cy.Match(patterns))
 }
 
@@ -148,22 +151,27 @@ func (c *readerImpl) Subquery(subquery func(c client.Client) client.Runner) clie
 }
 
 func (c *readerImpl) With(identifiers ...any) client.Querier {
+	c.hooks.With(identifiers...)
 	return c.newQuerier(c.cy.With(identifiers...))
 }
 
-func (c *readerImpl) Unwind(expr any, as string) client.Querier {
-	return c.newQuerier(c.cy.Unwind(expr, as))
+func (c *readerImpl) Unwind(identifier any, as string) client.Querier {
+	c.hooks.Unwind(identifier, as)
+	return c.newQuerier(c.cy.Unwind(identifier, as))
 }
 
 func (c *readerImpl) Call(procedure string) client.Yielder {
+	c.hooks.Call(procedure)
 	return c.newYielder(c.cy.Call(procedure))
 }
 
 func (c *readerImpl) Show(command string) client.Yielder {
+	c.hooks.Show(command)
 	return c.newYielder(c.cy.Show(command))
 }
 
 func (c *readerImpl) Return(identifiers ...any) client.Runner {
+	c.hooks.Return(identifiers...)
 	return c.newRunner(c.cy.Return(identifiers...))
 }
 
@@ -175,26 +183,48 @@ func (c *readerImpl) Cypher(query func(s client.Scope) string) client.Querier {
 }
 
 func (c *querierImpl) Where(opts ...internal.WhereOption) client.Querier {
-	return c.newQuerier(c.cy.Where(opts...))
+	where := &internal.Where{}
+	for _, opt := range opts {
+		internal.ConfigureWhere(where, opt)
+	}
+	c.hooks.Where(where)
+	return c.newQuerier(c.cy.Where(&internal.Configurer{
+		Where: func(w *internal.Where) {
+			*w = *where
+		},
+	}))
 }
 
 func (c *updaterImpl[To, ToCypher]) Create(pattern internal.Patterns) To {
+	c.hooks.Create(pattern)
 	return c.to(c.cy.Create(pattern))
 }
 
 func (c *updaterImpl[To, ToCypher]) Merge(pattern internal.Pattern, opts ...internal.MergeOption) To {
-	return c.to(c.cy.Merge(pattern, opts...))
+	merge := &internal.Merge{}
+	for _, opt := range opts {
+		internal.ConfigureMerge(merge, opt)
+	}
+	c.hooks.Merge(pattern, merge)
+	return c.to(c.cy.Merge(pattern, &internal.Configurer{
+		Merge: func(m *internal.Merge) {
+			*m = *merge
+		},
+	}))
 }
 
 func (c *updaterImpl[To, ToCypher]) DetachDelete(identifiers ...any) To {
+	c.hooks.DetachDelete(identifiers...)
 	return c.to(c.cy.DetachDelete(identifiers...))
 }
 
 func (c *updaterImpl[To, ToCypher]) Delete(identifiers ...any) To {
+	c.hooks.Delete(identifiers...)
 	return c.to(c.cy.Delete(identifiers...))
 }
 
 func (c *updaterImpl[To, ToCypher]) Set(items ...internal.SetItem) To {
+	c.hooks.Set(items...)
 	return c.to(c.cy.Set(items...))
 }
 

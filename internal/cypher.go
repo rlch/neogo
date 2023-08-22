@@ -351,7 +351,7 @@ func (cy *cypher) writeMergeClause(
 	node *NodePattern,
 	opts ...MergeOption,
 ) {
-	merge := &MergeOptions{}
+	merge := &Merge{}
 	for _, opt := range opts {
 		opt.configureMergeOptions(merge)
 	}

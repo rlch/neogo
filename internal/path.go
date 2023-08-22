@@ -37,11 +37,11 @@ type (
 
 	NodePattern struct {
 		pathName     string
-		Identifier   any
+		Data         any
 		Relationship *RelationshipPattern
 	}
 	RelationshipPattern struct {
-		Identifier any
+		Data any
 		To         *NodePattern
 		From       *NodePattern
 		Related    *NodePattern
@@ -83,7 +83,7 @@ func (n *NodePattern) Tail() *NodePattern {
 }
 
 func NewNode(match any) Pattern {
-	return &CypherPath{Pattern: &NodePattern{Identifier: match}}
+	return &CypherPath{Pattern: &NodePattern{Data: match}}
 }
 
 func NewPath(path Pattern, name string) Pattern {
@@ -105,24 +105,24 @@ func Paths(paths ...Pattern) Patterns {
 
 func (c *CypherPath) Related(edgeMatch, nodeMatch any) Pattern {
 	c.Pattern.Tail().Relationship = &RelationshipPattern{
-		Identifier: edgeMatch,
-		Related:    &NodePattern{Identifier: nodeMatch},
+		Data: edgeMatch,
+		Related:    &NodePattern{Data: nodeMatch},
 	}
 	return c
 }
 
 func (c *CypherPath) From(edgeMatch, nodeMatch any) Pattern {
 	c.Pattern.Tail().Relationship = &RelationshipPattern{
-		Identifier: edgeMatch,
-		From:       &NodePattern{Identifier: nodeMatch},
+		Data: edgeMatch,
+		From:       &NodePattern{Data: nodeMatch},
 	}
 	return c
 }
 
 func (c *CypherPath) To(edgeMatch, nodeMatch any) Pattern {
 	c.Pattern.Tail().Relationship = &RelationshipPattern{
-		Identifier: edgeMatch,
-		To:         &NodePattern{Identifier: nodeMatch},
+		Data: edgeMatch,
+		To:         &NodePattern{Data: nodeMatch},
 	}
 	return c
 }

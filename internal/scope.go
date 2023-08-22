@@ -166,7 +166,7 @@ func (s *Scope) mergeChildScope(child *Scope) {
 	s.paramCounter = child.paramCounter
 }
 
-func (s *Scope) unfoldIdentifier(value any) (
+func (s *Scope) Unfold(value any) (
 	identifier any,
 	variable *Variable,
 	projBody *ProjectionBody,
@@ -291,7 +291,7 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 	}
 
 	m := &member{isNew: true}
-	identifier, variable, projBody := s.unfoldIdentifier(value)
+	identifier, variable, projBody := s.Unfold(value)
 
 	// Propagate information from Variable to member
 	m.identifier = identifier
@@ -454,21 +454,21 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 
 func (s *Scope) registerNode(n *NodePattern) *member {
 	t := true
-	return s.register(n.Identifier, false, &t)
+	return s.register(n.Data, false, &t)
 }
 
 func (s *Scope) registerEdge(n *RelationshipPattern) *member {
 	f := false
-	return s.register(n.Identifier, false, &f)
+	return s.register(n.Data, false, &f)
 }
 
 func (s *Scope) lookupName(identifier any) string {
-	identifier, _, _ = s.unfoldIdentifier(identifier)
+	identifier, _, _ = s.Unfold(identifier)
 	return s.names[reflect.ValueOf(identifier)]
 }
 
 func (s *Scope) propertyIdentifier(identifier any) func(v any) string {
-	identifier, _, _ = s.unfoldIdentifier(identifier)
+	identifier, _, _ = s.Unfold(identifier)
 	identifierName := s.lookupName(identifier)
 	return func(v any) string {
 		if v == identifier && identifierName != "" {

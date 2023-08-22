@@ -7,12 +7,15 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
 	"github.com/rlch/neogo/client"
+	"github.com/rlch/neogo/hooks"
 	"github.com/rlch/neogo/internal"
 )
 
 // New creates a new neogo [Driver] from a [neo4j.DriverWithContext].
 func New(neo4j neo4j.DriverWithContext, configurers ...config) Driver {
-	d := driver{db: neo4j}
+	d := driver{db: neo4j, registry: registry{
+		hooks: hooks.NewRegistry(),
+	}}
 	for _, c := range configurers {
 		c(&d)
 	}
@@ -33,6 +36,9 @@ type Driver interface {
 
 	// WriteSession creates a new write-access session based on the specified session configuration.
 	WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) writeSession
+
+	// UseHooks registers the given hooks to be used with queries created by the driver.
+	UseHooks(hooks ...*hooks.Hook)
 
 	// Exec creates a new transaction + session and executes the given Cypher
 	// query.

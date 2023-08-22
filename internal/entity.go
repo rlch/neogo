@@ -26,6 +26,7 @@ type INode interface {
 }
 
 type IDSetter interface {
+	GetID() string
 	SetID(id any)
 	GenerateID()
 }
@@ -36,6 +37,10 @@ type Node struct {
 
 func (Node) IsNode() {}
 
+func (n Node) GetID() string {
+	return n.ID
+}
+
 func (n *Node) SetID(id any) {
 	if s, ok := id.(string); ok {
 		n.ID = s
@@ -43,7 +48,11 @@ func (n *Node) SetID(id any) {
 }
 
 func (n *Node) GenerateID() {
-	n.ID = ulid.MustNew(ulid.Now(), defaultEntropySource).String()
+	n.ID = NewID()
+}
+
+func NewID() string {
+	return ulid.MustNew(ulid.Now(), defaultEntropySource).String()
 }
 
 type IAbstract interface {

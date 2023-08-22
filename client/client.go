@@ -81,6 +81,16 @@ type Scope interface {
 	// Name returns the name of previously registered identifier.
 	Name(identifier Identifier) string
 
+	// Unfold returns the inner value and related registration data (if any) of an
+	// identifier.
+	//
+	//  Unfold(db.Qual(&p, "p")) -> (&p, {Name: "p"}, <nil>)
+	Unfold(value Identifier) (
+		identifier any,
+		variable *internal.Variable,
+		projBody *internal.ProjectionBody,
+	)
+
 	// Binding returns the value of previously registered identifier.
 	Binding(name string) reflect.Value
 }
