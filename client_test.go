@@ -291,24 +291,22 @@ func TestRunnerImpl(t *testing.T) {
 		})
 
 		t.Run("should stream when valid query", func(t *testing.T) {
-			var actualOut, expectedOut []int
-			expectedOut = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+			expectedOut := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 			var num int
 			err := d.Exec().Unwind("range(0, 10)", "i").
 				Return(db.Qual(&num, "i")).Stream(ctx, func(r client.Result) error {
+				n := 0
 				for r.Next(ctx) {
 					if err := r.Read(); err != nil {
 						return err
 					}
-					actualOut = append(actualOut, num)
+					assert.Equal(expectedOut[n], num)
+					n++
 				}
+				assert.Equal(len(expectedOut), n)
 				return nil
 			})
 			assert.NoError(err)
-			assert.Equal(len(expectedOut), len(actualOut))
-			for i := 0; i < len(expectedOut); i++ {
-				assert.Equal(expectedOut[i], actualOut[i])
-			}
 		})
 	})
 }
