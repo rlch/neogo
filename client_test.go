@@ -12,7 +12,6 @@ import (
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 	"github.com/rlch/neogo/internal/tests"
-	testutils "github.com/rlch/neogo/test_utils"
 )
 
 func TestUnmarshalResult(t *testing.T) {
@@ -271,7 +270,7 @@ func TestUnmarshalResult(t *testing.T) {
 func TestStream(t *testing.T) {
 	assert := assert.New(t)
 	ctx := context.Background()
-	neo4j, cancel := testutils.StartNeo4J(ctx)
+	neo4j, cancel := startNeo4J(ctx)
 	d := New(neo4j)
 	session := d.ReadSession(ctx)
 
