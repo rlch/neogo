@@ -201,8 +201,6 @@ type Runner interface {
 }
 
 type Result interface {
-	Close(ctx context.Context) error
-
 	// Peek returns true only if there is a record after the current one to be processed without advancing the record
 	// stream
 	Peek(ctx context.Context) bool
