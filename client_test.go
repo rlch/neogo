@@ -268,7 +268,6 @@ func TestUnmarshalResult(t *testing.T) {
 }
 
 func TestRunnerImpl(t *testing.T) {
-	assert := assert.New(t)
 	ctx := context.Background()
 	neo4j, cancel := startNeo4J(ctx)
 	d := New(neo4j)
@@ -287,32 +286,33 @@ func TestRunnerImpl(t *testing.T) {
 				Stream(ctx, func(r client.Result) error {
 					return nil
 				})
-			assert.Error(err)
+			assert.Error(t, err)
 		})
 
 		t.Run("should stream when valid query", func(t *testing.T) {
 			expectedOut := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 			var num int
-			err := d.Exec().Unwind("range(0, 10)", "i").
-				Return(db.Qual(&num, "i")).Stream(ctx, func(r client.Result) error {
-				n := 0
-				for r.Next(ctx) {
-					if err := r.Read(); err != nil {
-						return err
+			err := d.Exec().
+				Unwind("range(0, 10)", "i").
+				Return(db.Qual(&num, "i")).
+				Stream(ctx, func(r client.Result) error {
+					n := 0
+					for r.Next(ctx) {
+						if err := r.Read(); err != nil {
+							return err
+						}
+						assert.Equal(t, expectedOut[n], num)
+						n++
 					}
-					assert.Equal(expectedOut[n], num)
-					n++
-				}
-				assert.Equal(len(expectedOut), n)
-				return nil
-			})
-			assert.NoError(err)
+					assert.Equal(t, len(expectedOut), n)
+					return nil
+				})
+			assert.NoError(t, err)
 		})
 	})
 }
 
 func TestResultImpl(t *testing.T) {
-	assert := assert.New(t)
 	ctx := context.Background()
 	neo4jDriver, cancel := startNeo4J(ctx)
 	d := New(neo4jDriver)
@@ -331,23 +331,23 @@ func TestResultImpl(t *testing.T) {
 	t.Run("Peek", func(t *testing.T) {
 		var num int
 		err := d.Exec().Unwind("range(0, 1)", "i").Return(db.Qual(&num, "i")).Stream(ctx, func(r client.Result) error {
-			assert.True(r.Next(ctx))
-			assert.True(r.Peek(ctx), "should be true when there is one record to process after current record")
-			assert.True(r.Next(ctx))
-			assert.False(r.Peek(ctx), "should be false when there is no record to process after current record")
+			assert.True(t, r.Next(ctx))
+			assert.True(t, r.Peek(ctx), "should be true when there is one record to process after current record")
+			assert.True(t, r.Next(ctx))
+			assert.False(t, r.Peek(ctx), "should be false when there is no record to process after current record")
 			return nil
 		})
-		assert.NoError(err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("Next", func(t *testing.T) {
 		var num int
 		err := d.Exec().Unwind("range(0, 0)", "i").Return(db.Qual(&num, "i")).Stream(ctx, func(r client.Result) error {
-			assert.True(r.Next(ctx), "should be true when there is one record to process")
-			assert.False(r.Next(ctx), "should be false when there is no record to process")
+			assert.True(t, r.Next(ctx), "should be true when there is one record to process")
+			assert.False(t, r.Next(ctx), "should be false when there is no record to process")
 			return nil
 		})
-		assert.NoError(err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("Err", func(t *testing.T) {
@@ -356,33 +356,33 @@ func TestResultImpl(t *testing.T) {
 			err := d.Exec().Unwind("range(0, 0)", "i").Return(db.Qual(&num, "i")).Stream(ctx, func(r client.Result) error {
 				return r.Err()
 			})
-			assert.NoError(err)
+			assert.NoError(t, err)
 		})
 
 		t.Run("should throw error when there is error in resultWithContext", func(t *testing.T) {
 			var n []any
 			c := internal.NewCypherClient()
 			cy, err := c.Match(db.Node(db.Var(n, db.Name("n")))).Return(n).Compile()
-			assert.NoError(err)
+			assert.NoError(t, err)
 			params, err := canonicalizeParams(cy.Parameters)
-			assert.NoError(err)
+			assert.NoError(t, err)
 
-			runnerImpl := runnerImpl{session: session}
-			err = runnerImpl.executeTransaction(ctx, cy, func(tx neo4j.ManagedTransaction) (any, error) {
+			r := runnerImpl{session: session}
+			err = r.executeTransaction(ctx, cy, func(tx neo4j.ManagedTransaction) (any, error) {
 				var result neo4j.ResultWithContext
 				result, err = tx.Run(ctx, cy.Cypher, params)
-				assert.NoError(err)
+				assert.NoError(t, err)
 				_, resultErr := result.Single(ctx)
-				assert.Error(resultErr)
+				assert.Error(t, resultErr)
 
 				var res client.Result = &resultImpl{
 					ResultWithContext: result,
 					compiled:          cy,
 				}
-				assert.ErrorIs(res.Err(), resultErr)
+				assert.ErrorIs(t, res.Err(), resultErr)
 				return nil, res.Err()
 			})
-			assert.Error(err)
+			assert.Error(t, err)
 		})
 	})
 
@@ -394,12 +394,12 @@ func TestResultImpl(t *testing.T) {
 				Stream(ctx, func(r client.Result) error {
 					for i := 0; r.Next(ctx); i++ {
 						err := r.Read()
-						assert.NoError(err)
-						assert.Equal(i, num)
+						assert.NoError(t, err)
+						assert.Equal(t, i, num)
 					}
 					return nil
 				})
-			assert.NoError(err)
+			assert.NoError(t, err)
 		})
 
 		t.Run("should fail read for invalid variable type", func(t *testing.T) {
@@ -407,10 +407,10 @@ func TestResultImpl(t *testing.T) {
 			err := d.Exec().Unwind("range(0, 5)", "i").
 				Return(db.Qual(&num, "i")).
 				Stream(ctx, func(r client.Result) error {
-					assert.True(r.Next(ctx))
+					assert.True(t, r.Next(ctx))
 					return r.Read()
 				})
-			assert.Error(err)
+			assert.Error(t, err)
 		})
 	})
 }
