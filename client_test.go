@@ -268,6 +268,10 @@ func TestUnmarshalResult(t *testing.T) {
 }
 
 func TestRunnerImpl(t *testing.T) {
+	if testing.Short() {
+		return
+	}
+
 	ctx := context.Background()
 	neo4j, cancel := startNeo4J(ctx)
 	d := New(neo4j)
@@ -313,6 +317,10 @@ func TestRunnerImpl(t *testing.T) {
 }
 
 func TestResultImpl(t *testing.T) {
+	if testing.Short() {
+		return
+	}
+
 	ctx := context.Background()
 	neo4jDriver, cancel := startNeo4J(ctx)
 	d := New(neo4jDriver)
