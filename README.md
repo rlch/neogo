@@ -15,7 +15,7 @@ A Golang-ORM for Neo4J which creates idiomatic & fluent Cypher.
 
 `neogo` was designed to make writing Cypher as simple as possible, providing a
 safety-net and reducing boilerplate by leveraging canonical representations of
-nodes and relationships. 
+nodes and relationships as Golang structs. 
 
 - Hands-free un/marshalling between Go and Neo4J
 - No dynamic property, variable, label qualification necessary
