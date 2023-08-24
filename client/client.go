@@ -188,6 +188,30 @@ type Updater[To any] interface {
 
 // Runner allows the query to be executed.
 type Runner interface {
-	// Run executes the query.
+	// Run executes the query, populating all the values bound within the query if
+	// their identifiers exist in the returning scope.
 	Run(ctx context.Context) error
+
+	// Stream executes the query and returns an abstraction over a
+	// [pkg/github.com/neo4j/neo4j-go-driver/v5/neo4j.ResultWithContext], which
+	// allows records to be consumed one-by-one as a linked list, instead of all
+	// at once like Run. This is useful for large or undefined results that may
+	// not necessarily fit in memory.
+	Stream(ctx context.Context, sink func(r Result) error) error
+}
+
+type Result interface {
+	// Peek returns true only if there is a record after the current one to be processed without advancing the record
+	// stream
+	Peek(ctx context.Context) bool
+
+	// Next returns true only if there is a record to be processed.
+	Next(ctx context.Context) bool
+
+	// Err returns the latest error that caused this Next to return false.
+	Err() error
+
+	// Read reads the values of the current record into the values bound within
+	// the query.
+	Read() error
 }
