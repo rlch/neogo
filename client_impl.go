@@ -216,6 +216,11 @@ func (c *yielderImpl) Yield(identifiers ...any) client.Querier {
 	return c.newQuerier(c.cy.Yield(identifiers...))
 }
 
+func (c *runnerImpl) Print() client.Runner {
+	c.cy.Print()
+	return c
+}
+
 func (c *runnerImpl) Run(ctx context.Context) (err error) {
 	cy, err := c.cy.Compile()
 	if err != nil {

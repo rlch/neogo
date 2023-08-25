@@ -527,6 +527,16 @@ func ExampleClient_where() {
 	// ORDER BY name
 }
 
+func ExampleClient_print() {
+	c().
+		Match(db.Node("n")).
+		Return("n").
+		Print()
+	// Output:
+	// MATCH (n)
+	// RETURN n
+}
+
 func ExampleScope() {
 	var n any
 	c().

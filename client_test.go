@@ -267,7 +267,7 @@ func TestUnmarshalResult(t *testing.T) {
 	})
 }
 
-func TestRunnerImpl(t *testing.T) {
+func TestStreamImpl(t *testing.T) {
 	if testing.Short() {
 		return
 	}
@@ -282,37 +282,35 @@ func TestRunnerImpl(t *testing.T) {
 		}
 	})
 
-	t.Run("Stream", func(t *testing.T) {
-		t.Run("should fail when invalid parameters passed", func(t *testing.T) {
-			var nums []chan int
-			err := d.Exec().Unwind(db.NamedParam(nums, "nums"), "i").
-				Return(db.Qual(&nums, "i")).
-				Stream(ctx, func(r client.Result) error {
-					return nil
-				})
-			assert.Error(t, err)
-		})
+	t.Run("should fail when invalid parameters passed", func(t *testing.T) {
+		var nums []chan int
+		err := d.Exec().Unwind(db.NamedParam(nums, "nums"), "i").
+			Return(db.Qual(&nums, "i")).
+			Stream(ctx, func(r client.Result) error {
+				return nil
+			})
+		assert.Error(t, err)
+	})
 
-		t.Run("should stream when valid query", func(t *testing.T) {
-			expectedOut := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-			var num int
-			err := d.Exec().
-				Unwind("range(0, 10)", "i").
-				Return(db.Qual(&num, "i")).
-				Stream(ctx, func(r client.Result) error {
-					n := 0
-					for r.Next(ctx) {
-						if err := r.Read(); err != nil {
-							return err
-						}
-						assert.Equal(t, expectedOut[n], num)
-						n++
+	t.Run("should stream when valid query", func(t *testing.T) {
+		expectedOut := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+		var num int
+		err := d.Exec().
+			Unwind("range(0, 10)", "i").
+			Return(db.Qual(&num, "i")).
+			Stream(ctx, func(r client.Result) error {
+				n := 0
+				for r.Next(ctx) {
+					if err := r.Read(); err != nil {
+						return err
 					}
-					assert.Equal(t, len(expectedOut), n)
-					return nil
-				})
-			assert.NoError(t, err)
-		})
+					assert.Equal(t, expectedOut[n], num)
+					n++
+				}
+				assert.Equal(t, len(expectedOut), n)
+				return nil
+			})
+		assert.NoError(t, err)
 	})
 }
 
