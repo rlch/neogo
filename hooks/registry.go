@@ -1,5 +1,7 @@
 package hooks
 
+import "github.com/rlch/neogo/client"
+
 type Registry struct {
 	*reconcilerClient
 	hooks        map[string]*Hook
@@ -35,7 +37,7 @@ type hookSequence struct {
 	clauseParams [][]any
 }
 
-func (r *Registry) Reconcile(clause ClauseType, params ...any) {
+func (r *Registry) Reconcile(scope client.Scope, clause ClauseType, params ...any) {
 	nextSeqs := make(map[ClauseType][]*hookSequence)
 	matched := []*hookSequence{}
 	for _, hook := range r.current[clause] {
@@ -97,8 +99,8 @@ Matches:
 			i++
 			n.hookNode = n.next
 		}
-		if match.Before != nil {
-			match.Before()
+		if match.After != nil {
+			match.After(scope)
 		}
 	}
 	r.current = nextSeqs

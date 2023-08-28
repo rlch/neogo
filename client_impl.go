@@ -45,6 +45,11 @@ type (
 		*session
 		cy *internal.CypherRunner
 	}
+	resultImpl struct {
+		*session
+		neo4j.ResultWithContext
+		compiled *internal.CompiledCypher
+	}
 )
 
 func (s *session) newClient(cy *internal.CypherClient) *clientImpl {
@@ -241,6 +246,11 @@ func (c *yielderImpl) Yield(identifiers ...any) client.Querier {
 	return c.newQuerier(c.cy.Yield(identifiers...))
 }
 
+func (c *runnerImpl) Print() client.Runner {
+	c.cy.Print()
+	return c
+}
+
 func (c *runnerImpl) Run(ctx context.Context) (err error) {
 	cy, err := c.cy.Compile()
 	if err != nil {
@@ -290,6 +300,56 @@ func (c *runnerImpl) Run(ctx context.Context) (err error) {
 
 func (c *runnerImpl) Compile() (*internal.CompiledCypher, error) {
 	return c.cy.Compile()
+}
+
+func (c *runnerImpl) Stream(ctx context.Context, sink func(r client.Result) error) (err error) {
+	cy, err := c.cy.Compile()
+	if err != nil {
+		return fmt.Errorf("cannot compile cypher: %w", err)
+	}
+	params, err := canonicalizeParams(cy.Parameters)
+	if err != nil {
+		return fmt.Errorf("cannot serialize parameters: %w", err)
+	}
+	return c.executeTransaction(ctx, cy, func(tx neo4j.ManagedTransaction) (any, error) {
+		var result neo4j.ResultWithContext
+		result, err = tx.Run(ctx, cy.Cypher, params)
+		if err != nil {
+			return nil, fmt.Errorf("cannot run cypher: %w", err)
+		}
+		err := sink(&resultImpl{
+			session:           c.session,
+			ResultWithContext: result,
+			compiled:          cy,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("cannot sink result: %w", err)
+		}
+		return nil, nil
+	})
+}
+
+func (c *resultImpl) Peek(ctx context.Context) bool {
+	return c.ResultWithContext.Peek(ctx)
+}
+
+func (c *resultImpl) Next(ctx context.Context) bool {
+	return c.ResultWithContext.Next(ctx)
+}
+
+func (c *resultImpl) Err() error {
+	return c.ResultWithContext.Err()
+}
+
+func (c *resultImpl) Read() error {
+	record := c.Record()
+	if record == nil {
+		return nil
+	}
+	if err := c.unmarshalRecord(c.compiled, record); err != nil {
+		return fmt.Errorf("cannot unmarshal record: %w", err)
+	}
+	return nil
 }
 
 func (s *session) unmarshalRecords(

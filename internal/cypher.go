@@ -353,7 +353,7 @@ func (cy *cypher) writeMergeClause(
 ) {
 	merge := &Merge{}
 	for _, opt := range opts {
-		opt.configureMergeOptions(merge)
+		opt.configureMerge(merge)
 	}
 	cy.catch(func() {
 		cy.WriteString("MERGE ")

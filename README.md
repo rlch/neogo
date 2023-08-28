@@ -2,7 +2,7 @@
 
 ![logo](https://i.imgur.com/4bK7CqC.png)
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/rlch/neogo)](https://goreportcard.com/report/github.com/rlch/neogo) [![Coverage Status](https://coveralls.io/repos/github/rlch/neogo/badge.svg?branch=main)](https://coveralls.io/github/rlch/neogo?branch=main) [![Go Reference](https://pkg.go.dev/badge/github.com/rlch/neogo.svg)](https://pkg.go.dev/github.com/rlch/neogo)
+[![Go Report Card](https://goreportcard.com/badge/github.com/rlch/neogo)](https://goreportcard.com/report/github.com/rlch/neogo) [![codecov](https://codecov.io/gh/rlch/neogo/branch/main/graph/badge.svg?token=K1NYHBQD1A)](https://codecov.io/gh/rlch/neogo) [![Go Reference](https://pkg.go.dev/badge/github.com/rlch/neogo.svg)](https://pkg.go.dev/github.com/rlch/neogo)
 
 A Golang-ORM for Neo4J which creates idiomatic & fluent Cypher.
 
@@ -15,7 +15,7 @@ A Golang-ORM for Neo4J which creates idiomatic & fluent Cypher.
 
 `neogo` was designed to make writing Cypher as simple as possible, providing a
 safety-net and reducing boilerplate by leveraging canonical representations of
-nodes and relationships. 
+nodes and relationships as Golang structs. 
 
 - Hands-free un/marshalling between Go and Neo4J
 - No dynamic property, variable, label qualification necessary

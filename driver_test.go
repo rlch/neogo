@@ -1,4 +1,4 @@
-package neogo_test
+package neogo
 
 import (
 	"context"
@@ -7,15 +7,13 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
-
-	"github.com/rlch/neogo"
 	"github.com/rlch/neogo/client"
 	"github.com/rlch/neogo/db"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-func startNeo4J(ctx context.Context) neo4j.DriverWithContext {
+func startNeo4J(ctx context.Context) (neo4j.DriverWithContext, func(context.Context) error) {
 	request := testcontainers.ContainerRequest{
 		Name:         "neo4j",
 		Image:        "neo4j:5.7-enterprise",
@@ -36,11 +34,7 @@ func startNeo4J(ctx context.Context) neo4j.DriverWithContext {
 	if err != nil {
 		panic(fmt.Errorf("container should start: %w", err))
 	}
-	// defer func() {
-	// 	if err := container.Terminate(ctx); err != nil {
-	// 		panic(err)
-	// 	}
-	// }()
+
 	port, err := container.MappedPort(ctx, "7687")
 	if err != nil {
 		panic(err)
@@ -53,11 +47,11 @@ func startNeo4J(ctx context.Context) neo4j.DriverWithContext {
 	if err != nil {
 		panic(err)
 	}
-	return driver
+	return driver, container.Terminate
 }
 
 type Person struct {
-	neogo.Node `neo4j:"Person"`
+	Node `neo4j:"Person"`
 
 	Name    string `json:"name"`
 	Surname string `json:"surname"`
@@ -68,7 +62,7 @@ func ExampleDriver() {
 	if testing.Short() {
 		fmt.Println("err: <nil>")
 		fmt.Printf("person: %v\n", Person{
-			Node: neogo.Node{
+			Node: Node{
 				ID: "some-unique-id",
 			},
 			Name:    "Spongebob",
@@ -79,8 +73,13 @@ func ExampleDriver() {
 	}
 
 	ctx := context.Background()
-	neo4j := startNeo4J(ctx)
-	d := neogo.New(neo4j)
+	neo4j, cancel := startNeo4J(ctx)
+	d := New(neo4j)
+	defer func() {
+		if err := cancel(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	person := Person{
 		Name:    "Spongebob",
@@ -111,8 +110,13 @@ func ExampleDriver_readSession() {
 	}
 
 	ctx := context.Background()
-	neo4j := startNeo4J(ctx)
-	d := neogo.New(neo4j)
+	neo4j, cancel := startNeo4J(ctx)
+	d := New(neo4j)
+	defer func() {
+		if err := cancel(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	var ns, nsTimes2 []int
 	session := d.ReadSession(ctx)
@@ -153,8 +157,13 @@ func ExampleDriver_writeSession() {
 	}
 
 	ctx := context.Background()
-	neo4j := startNeo4J(ctx)
-	d := neogo.New(neo4j)
+	neo4j, cancel := startNeo4J(ctx)
+	d := New(neo4j)
+	defer func() {
+		if err := cancel(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	var people []*Person
 	session := d.WriteSession(ctx)

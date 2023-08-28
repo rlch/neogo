@@ -18,6 +18,11 @@ type foreignPerson struct {
 	swedishPerson `neo4j:"Foreign"`
 }
 
+type personWithNonStructLabels struct {
+	swedishPerson
+	Name string `neo4j:"Name"`
+}
+
 func TestExtractNodeLabel(t *testing.T) {
 	t.Run("nil when node nil", func(t *testing.T) {
 		assert.Nil(t, ExtractNodeLabels(nil))
@@ -33,6 +38,10 @@ func TestExtractNodeLabel(t *testing.T) {
 
 	t.Run("extract node label from slice of node", func(t *testing.T) {
 		assert.Equal(t, []string{"Person"}, ExtractNodeLabels([]*person{}))
+	})
+
+	t.Run("Only extract the labels from structs", func(t *testing.T) {
+		assert.Equal(t, []string{"Person", "Swedish"}, ExtractNodeLabels(personWithNonStructLabels{}))
 	})
 }
 

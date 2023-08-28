@@ -74,7 +74,7 @@ func RemoveLabels(identifier client.PropertyIdentifier, labels ...string) intern
 // [MERGE]: https://neo4j.com/docs/cypher-manual/current/clauses/merge/
 func OnCreate(set ...internal.SetItem) internal.MergeOption {
 	return &internal.Configurer{
-		MergeOptions: func(mo *internal.Merge) {
+		Merge: func(mo *internal.Merge) {
 			mo.OnCreate = append(mo.OnCreate, set...)
 		},
 	}
@@ -89,7 +89,7 @@ func OnCreate(set ...internal.SetItem) internal.MergeOption {
 // [MERGE]: https://neo4j.com/docs/cypher-manual/current/clauses/merge/
 func OnMatch(set ...internal.SetItem) internal.MergeOption {
 	return &internal.Configurer{
-		MergeOptions: func(mo *internal.Merge) {
+		Merge: func(mo *internal.Merge) {
 			mo.OnMatch = append(mo.OnMatch, set...)
 		},
 	}

@@ -14,27 +14,29 @@ import (
 func Example() {
 	mergeP := new(hooks.PatternMatcher)
 	mergeOptsP := new(hooks.MergeMatcher)
-	mergeIDHook := hooks.New(func(c *hooks.Client) hooks.HookClient {
-		return c.Merge(mergeP, mergeOptsP)
-	}).Before(func(scope client.Scope) error {
-		pat := mergeP.Head()
-		if pat.Next() != nil {
-			return nil
-		}
-		node, _, _ := scope.Unfold(pat.Data)
-		name := scope.Name(node)
-		if n, ok := node.(internal.IDSetter); ok {
-			if n.GetID() != "" {
+	mergeIDHook := hooks.
+		New(func(c *hooks.Client) hooks.HookClient {
+			return c.Merge(mergeP, mergeOptsP)
+		}).
+		Before(func(scope client.Scope) error {
+			pat := mergeP.Head()
+			if pat.Next() != nil {
 				return nil
 			}
-			genID := db.NamedParam("new-id", "id")
-			mergeOptsP.Merge.OnCreate = append(
-				mergeOptsP.Merge.OnCreate,
-				db.SetPropValue(name+".id", genID),
-			)
-		}
-		return nil
-	})
+			node, _, _ := scope.Unfold(pat.Data)
+			name := scope.Name(node)
+			if n, ok := node.(internal.IDSetter); ok {
+				if n.GetID() != "" {
+					return nil
+				}
+				genID := db.NamedParam("new-id", "id")
+				mergeOptsP.Merge.OnCreate = append(
+					mergeOptsP.Merge.OnCreate,
+					db.SetPropValue(name+".id", genID),
+				)
+			}
+			return nil
+		})
 
 	driver := neogo.New(nil)
 	driver.UseHooks(mergeIDHook)

@@ -18,7 +18,7 @@ func toAnyList[T any](ms ...T) []any {
 }
 
 func (c *reconcilerClient) Use(graphExpr string) {
-	c.Reconcile(clauseUse, graphExpr)
+	c.Reconcile(c.scope, clauseUse, graphExpr)
 }
 
 func (c *reconcilerClient) OptionalMatch(patterns internal.Patterns) {
@@ -73,7 +73,7 @@ func (c *reconcilerClient) Delete(identifiers ...client.Identifier) {
 	c.Reconcile(clauseDelete, toAnyList(identifiers...)...)
 }
 
-func (c *reconcilerClient) Set(items ...*internal.SetItem) {
+func (c *reconcilerClient) Set(items ...internal.SetItem) {
 	c.Reconcile(clauseSet, toAnyList(items...)...)
 }
 

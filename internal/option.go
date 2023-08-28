@@ -1,7 +1,7 @@
 package internal
 
 func ConfigureMerge(o *Merge, configurer MergeOption) {
-	configurer.configureMergeOptions(o)
+	configurer.configureMerge(o)
 }
 
 func ConfigureVariable(v *Variable, configurer VariableOption) {
@@ -30,7 +30,7 @@ var _ interface {
 	WhereOption
 } = (*Configurer)(nil)
 
-func (c *Configurer) configureMergeOptions(o *Merge) {
+func (c *Configurer) configureMerge(o *Merge) {
 	c.Merge(o)
 }
 
@@ -48,7 +48,7 @@ func (c *Configurer) configureWhere(w *Where) {
 
 type (
 	MergeOption interface {
-		configureMergeOptions(*Merge)
+		configureMerge(*Merge)
 	}
 	Merge struct {
 		OnCreate []SetItem
