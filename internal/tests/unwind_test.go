@@ -17,7 +17,7 @@ func TestUnwind(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Unwind(db.Expr("[1, 2, 3, null]"), "x").
-			Return(db.Bind("x", &x), db.Qual(db.Bind(db.Expr("'val'"), &y), "y")).Compile()
+			Return(db.Bind("x", &x), db.Qual(&y, "'val'", db.Name("y"))).Compile()
 
 		check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
