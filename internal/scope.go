@@ -45,8 +45,9 @@ type (
 		// Whether the identifier was added to the scope by the query that returned this
 		// member.
 		isNew bool
-		// The name of the variable in the cypher query
-		name  string
+		// The expr of the variable in the cypher query
+		expr string
+		// alias is the qualified name of the variable
 		alias string
 		// The name of the property in the cypher query
 		props string
@@ -81,7 +82,7 @@ func (m *member) Print() {
   variable: %+v,
   where: %+v,
   projection: %+v,
-}`+"\n", m.identifier, m.isNew, m.name, m.alias, m.props, m.variable, m.where, m.projectionBody)
+}`+"\n", m.identifier, m.isNew, m.expr, m.alias, m.props, m.variable, m.where, m.projectionBody)
 }
 
 func (s *Scope) clone() *Scope {
@@ -245,7 +246,7 @@ func (s *Scope) replaceBinding(m *member) {
 
 	name := m.alias
 	if name == "" {
-		name = m.name
+		name = m.expr
 	}
 	if m.variable != nil && m.variable.Bind != nil {
 		bind := reflect.ValueOf(m.variable.Bind)
@@ -254,16 +255,16 @@ func (s *Scope) replaceBinding(m *member) {
 		}
 		s.bindings[name] = bind
 		s.names[bind] = name
-	} else if m.alias != "" && m.alias != m.name {
+	} else if m.alias != "" && m.alias != m.expr {
 		s.names[v] = m.alias
-		delete(s.bindings, m.name)
+		delete(s.bindings, m.expr)
 		if canElem {
 			s.bindings[m.alias] = v
 		}
-	} else if m.name != "" {
-		s.names[v] = m.name
+	} else if m.expr != "" {
+		s.names[v] = m.expr
 		if canElem {
-			s.bindings[m.name] = v
+			s.bindings[m.expr] = v
 		}
 	}
 
@@ -323,12 +324,12 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		variable.Identifier = identifier
 		m.variable = variable
 		if variable.Expr != "" {
-			m.name = string(variable.Expr)
+			m.expr = string(variable.Expr)
 			if variable.Name != "" {
 				m.alias = variable.Name
 			}
 		} else if variable.Name != "" {
-			m.name = variable.Name
+			m.expr = variable.Name
 		}
 		if variable.Where != nil {
 			m.where = variable.Where
@@ -348,16 +349,16 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		vT.Kind() == reflect.Slice
 
 	// Find the name of the identifier
-	if m.name != "" {
-		if exst, ok := s.bindings[m.name]; ok && exst != v {
-			panic(fmt.Errorf("(%s) already bound to different value. want: %s, have: %s", m.name, v, s.bindings[m.name]))
+	if m.expr != "" {
+		if exst, ok := s.bindings[m.expr]; ok && exst != v {
+			panic(fmt.Errorf("(%s) already bound to different value. want: %s, have: %s", m.expr, v, s.bindings[m.expr]))
 		} else if ok {
 			m.isNew = false
 			currentName := s.names[exst]
 			// Check if name needs to be replaced
-			if currentName != "" && currentName != m.name {
-				m.alias = m.name
-				m.name = currentName
+			if currentName != "" && currentName != m.expr {
+				m.alias = m.expr
+				m.expr = currentName
 			}
 		} else if !ok {
 			if lookup {
@@ -366,19 +367,19 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 			if canElem {
 				// Check if name needs to be replaced
 				if oldName, ok := s.names[v]; ok {
-					m.alias = m.name
-					m.name = oldName
+					m.alias = m.expr
+					m.expr = oldName
 				}
 			}
 		}
 	} else if canElem {
 		if name, ok := s.names[v]; ok {
 			m.isNew = false
-			m.name = name
+			m.expr = name
 		} else if lookup {
 			return nil
 		}
-		needsName := m.name == "" && (projBody != nil || m.where != nil || v.Kind() == reflect.Ptr)
+		needsName := m.expr == "" && (projBody != nil || m.where != nil || v.Kind() == reflect.Ptr)
 		if needsName {
 			var prefix string
 			if vT.Implements(nodeType) {
@@ -392,7 +393,7 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 				}
 			}
 			if _, ok := s.bindings[prefix]; !ok {
-				m.name = prefix
+				m.expr = prefix
 			} else {
 				var potentialName string
 				i := 1
@@ -403,9 +404,9 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 					}
 					i++
 				}
-				m.name = potentialName
+				m.expr = potentialName
 			}
-			s.generatedNames[m.name] = struct{}{}
+			s.generatedNames[m.expr] = struct{}{}
 		}
 	}
 
@@ -420,16 +421,16 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 
 	if expr, ok := m.identifier.(Expr); ok {
 		// Allow strings to be used as names
-		if m.name != "" {
-			m.alias = m.name
+		if m.expr != "" {
+			m.alias = m.expr
 		}
-		m.name = string(expr)
+		m.expr = string(expr)
 	} else if name, ok := m.identifier.(string); ok {
 		// Allow strings to be used as names
-		if m.name != "" {
-			m.alias = m.name
+		if m.expr != "" {
+			m.alias = m.expr
 		}
-		m.name = name
+		m.expr = name
 	}
 
 	s.replaceBinding(m)
@@ -444,16 +445,16 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 	for inner.Kind() == reflect.Ptr {
 		inner = inner.Elem()
 	}
-	if inner.IsValid() && m.isNew {
+	if inner.IsValid() && m.isNew && !inner.IsZero() {
+		if m.alias != "" {
+			panic(fmt.Errorf("cannot bind parameter to alias %s already bound to expression %s", m.alias, m.expr))
+		}
 		switch inner.Kind() {
 		case reflect.Struct, reflect.Slice:
-			if inner.IsZero() {
-				break
-			}
 			effProp := v
 			effName := m.alias
 			if effName == "" {
-				effName = m.name
+				effName = m.expr
 			}
 			if p, ok := inner.Interface().(Param); ok {
 				effName = p.Name
@@ -467,13 +468,13 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 			if canHaveProps {
 				m.props = param
 			} else {
-				m.alias = m.name
-				m.name = param
+				m.alias = m.expr
+				m.expr = param
 			}
 		case reflect.Map:
-			param := s.addParameter(v, m.name)
-			m.alias = m.name
-			m.name = param
+			param := s.addParameter(v, m.expr)
+			m.alias = m.expr
+			m.expr = param
 		}
 	}
 	return m
@@ -576,7 +577,9 @@ func (s *Scope) addParameter(v reflect.Value, optName string) (name string) {
 			fmt.Printf("[WARNING] invalid parameter: %s\n", name)
 			s.parameters[name] = nil
 		}
-		name = "$" + name
+		if !strings.HasPrefix(name, "$") {
+			name = "$" + name
+		}
 	}()
 	if v.CanAddr() {
 		addr := v.UnsafeAddr()
