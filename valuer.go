@@ -262,7 +262,7 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 		}
 	} else if to.Type().Elem().Implements(rAbstract) {
 		ptrTo = true
-		if !to.IsNil() {
+		if !to.Elem().IsNil() {
 			abs = to.Elem().Interface().(IAbstract)
 		}
 	} else {
@@ -275,6 +275,7 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 			if len(labels) == 0 {
 				continue
 			}
+			fmt.Println(labels)
 			for _, label := range labels {
 				if _, ok := isNodeLabel[label]; !ok {
 					continue Bases

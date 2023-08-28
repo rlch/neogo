@@ -386,6 +386,43 @@ func TestBindValue(t *testing.T) {
 		}, *to)
 	})
 
+	t.Run("Abstract using base type", func(t *testing.T) {
+		var to tests.Organism = &tests.BaseOrganism{}
+		err := r.bindValue(neo4j.Node{
+			Labels: []string{"Dog", "Organism"},
+			Props: map[string]any{
+				"borfs": true,
+			},
+		}, reflect.ValueOf(&to))
+		assert.NoError(t, err)
+		assert.Equal(t, &tests.Dog{
+			Borfs: true,
+		}, to)
+	})
+
+	t.Run("Abstract using registered types", func(t *testing.T) {
+		rWithAbstract := &registry{
+			abstractNodes: []IAbstract{
+				&tests.BaseOrganism{},
+			},
+		}
+		var to tests.Organism
+		err := rWithAbstract.bindValue(neo4j.Node{
+			Labels: []string{"Human", "Organism"},
+			Props: map[string]any{
+				"alive": true,
+				"name":  "Raqeeb",
+			},
+		}, reflect.ValueOf(&to))
+		assert.NoError(t, err)
+		assert.Equal(t, &tests.Human{
+			BaseOrganism: tests.BaseOrganism{
+				Alive: true,
+			},
+			Name: "Raqeeb",
+		}, to)
+	})
+
 	t.Run("Any", func(t *testing.T) {
 		to := new(any)
 		err := r.bindValue(neo4j.Node{
