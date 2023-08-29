@@ -194,10 +194,9 @@ type Runner interface {
 	// their identifiers exist in the returning scope.
 	Run(ctx context.Context) error
 
-	// RunWithParams executes the query, injecting the given parameters into the
-	// query, populating all the values bound within the query if their identifiers
-	// exist in the returning scope.
-	RunWithParams(ctx context.Context, params map[string]interface{}) error
+	// RunWithParams is the same as Run, but injects the provided parameters into the
+	// query.
+	RunWithParams(ctx context.Context, params map[string]any) error
 
 	// Stream executes the query and returns an abstraction over a
 	// [pkg/github.com/neo4j/neo4j-go-driver/v5/neo4j.ResultWithContext], which

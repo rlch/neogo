@@ -228,14 +228,9 @@ func ExampleDriver_runWithParams() {
 	}
 
 	var ns []int
-
-	if err := d.Exec().Return(db.Bind("$ns", &ns)).RunWithParams(ctx, params); err != nil {
-		panic(err)
-	}
-
-	fmt.Println("err: <nil>")
+	err := d.Exec().Return(db.Qual(&ns, "$ns")).RunWithParams(ctx, params)
+	fmt.Printf("err: %v\n", err)
 	fmt.Printf("ns:       %v\n", ns)
-
 	// Output: err: <nil>
 	// ns:       [1 2 3]
 }
