@@ -24,7 +24,7 @@ func TestForEach(t *testing.T) {
 			}).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH p = (start)-[*]->(finish)
 					WHERE start.name = 'A' AND finish.name = 'D'

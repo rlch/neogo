@@ -18,7 +18,7 @@ func TestRemove(t *testing.T) {
 			Return(&a.Name, &a.Age).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (a:Person {name: 'Andy'})
 					REMOVE a.age
@@ -41,7 +41,7 @@ func TestRemove(t *testing.T) {
 			Return(&n.Name, db.Qual(&labels, "labels(n)")).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Peter'})
 					REMOVE n:German
@@ -64,7 +64,7 @@ func TestRemove(t *testing.T) {
 			Return(&n.Name, db.Qual(&labels, "labels(n)")).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Peter'})
 					REMOVE n:German
@@ -87,7 +87,7 @@ func TestRemove(t *testing.T) {
 			Return(&n.Name, db.Qual(&labels, "labels(n)")).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Peter'})
 					REMOVE n:German:Swedish

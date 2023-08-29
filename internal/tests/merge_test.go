@@ -21,7 +21,7 @@ func TestMerge(t *testing.T) {
 				Return(&robert, db.Qual(&labels, "labels(robert)")).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MERGE (robert:Critic)
 					RETURN robert, labels(robert)
@@ -44,7 +44,7 @@ func TestMerge(t *testing.T) {
 				Return(&charlie).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MERGE (charlie {age: 10, name: 'Charlie Sheen'})
 					RETURN charlie
@@ -65,7 +65,7 @@ func TestMerge(t *testing.T) {
 				Return(&michael.Name, &michael.BornIn).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MERGE (michael:Person {name: 'Michael Douglas'})
 					RETURN michael.name, michael.bornIn
@@ -91,7 +91,7 @@ func TestMerge(t *testing.T) {
 				Return(&person.Name, &person.BornIn, &location).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (person:Person)
 					MERGE (location:Location {name: person.bornIn})
@@ -124,7 +124,7 @@ func TestMerge(t *testing.T) {
 				Return(&keanu.Name, &keanu.Created).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MERGE (keanu:Person {bornIn: 'Beirut', chauffeurName: 'Eric Brown', name: 'Keanu Reeves'})
 					ON CREATE
@@ -149,7 +149,7 @@ func TestMerge(t *testing.T) {
 				Return(&person.Name, &person.Found).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MERGE (person:Person)
 					ON MATCH
@@ -177,7 +177,7 @@ func TestMerge(t *testing.T) {
 				Return(&keanu.Name, &keanu.Created, &keanu.LastSeen).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MERGE (keanu:Person {name: 'Keanu Reeves'})
 					ON CREATE
@@ -208,7 +208,7 @@ func TestMerge(t *testing.T) {
 				Return(&person.Name, &person.Found, &person.LastSeen).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MERGE (person:Person)
 					ON MATCH
@@ -249,7 +249,7 @@ func TestMerge(t *testing.T) {
 				Return(&charlie.Name, db.Qual(&typeR, "type(r)"), &wallStreet.Title).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH
 					  (charlie:Person {name: 'Charlie Sheen'}),
@@ -291,7 +291,7 @@ func TestMerge(t *testing.T) {
 				Return(&movie).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH
 					  (oliver:Person {name: 'Oliver Stone'}),
@@ -330,7 +330,7 @@ func TestMerge(t *testing.T) {
 				Return(&r).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH
 					  (charlie:Person {name: 'Charlie Sheen'}),
@@ -363,7 +363,7 @@ func TestMerge(t *testing.T) {
 				Return(&person.Name, &person.BornIn, &location).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (person:Person)
 					MERGE (location:Location {name: person.bornIn})
@@ -404,7 +404,7 @@ func TestMerge(t *testing.T) {
 				Return(&person.Name, &person.ChauffeurName, &chauffeur).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (person:Person)
 					MERGE (person)-[r:HAS_CHAUFFEUR]->(chauffeur:Chauffeur {name: person.chauffeurName})

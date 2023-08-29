@@ -19,7 +19,7 @@ func TestUnwind(t *testing.T) {
 			Unwind(db.Expr("[1, 2, 3, null]"), "x").
 			Return(db.Bind("x", &x), db.Qual(&y, "'val'", db.Name("y"))).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					UNWIND [1, 2, 3, null] AS x
 					RETURN x, 'val' AS y
@@ -40,7 +40,7 @@ func TestUnwind(t *testing.T) {
 			With(db.With("x", db.Distinct)).
 			Return(db.Qual(&setOfVals, "collect(x)", db.Name("setOfVals"))).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					WITH [1, 1, 2, 2] AS coll
 					UNWIND coll AS x
@@ -64,7 +64,7 @@ func TestUnwind(t *testing.T) {
 			Unwind("(a + b)", "x").
 			Return(db.Qual(&x, "x")).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					WITH [1, 2] AS a, [3, 4] AS b
 					UNWIND (a + b) AS x
@@ -85,7 +85,7 @@ func TestUnwind(t *testing.T) {
 			Unwind("x", "y").
 			Return(db.Qual(&y, "y")).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					WITH [[1, 2], [3, 4], 5] AS nested
 					UNWIND nested AS x
@@ -104,7 +104,7 @@ func TestUnwind(t *testing.T) {
 			Unwind("[]", "empty").
 			Return("'literal_that_is_not_returned'").Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					UNWIND [] AS empty
 					RETURN 'literal_that_is_not_returned'
@@ -119,7 +119,7 @@ func TestUnwind(t *testing.T) {
 			Unwind("null", "x").
 			Return("x", "'some_literal'").Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					UNWIND null AS x
 					RETURN x, 'some_literal'
@@ -172,7 +172,7 @@ func TestUnwind(t *testing.T) {
 			Return(db.Return(db.Qual(&e.ID, "x"), db.OrderBy("", true))).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					UNWIND $events AS event
 					MERGE (y:Year {year: event.year})

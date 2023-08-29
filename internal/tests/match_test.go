@@ -14,7 +14,7 @@ func TestMatch(t *testing.T) {
 			var n []any
 			c := internal.NewCypherClient()
 			cy, err := c.Match(db.Node(db.Var(n, db.Name("n")))).Return(n).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n)
 					RETURN n
@@ -31,7 +31,7 @@ func TestMatch(t *testing.T) {
 				Match(db.Node(&m)).
 				Return(db.Bind(&m.Title, &mts)).
 				Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (movie:Movie)
 					RETURN movie.title
@@ -58,7 +58,7 @@ func TestMatch(t *testing.T) {
 					&m.Title,
 					db.Name("movie.title"),
 				)).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (director {name: 'Oliver Stone'})--(movie)
 					RETURN movie.title
@@ -78,7 +78,7 @@ func TestMatch(t *testing.T) {
 					"name": "'Oliver Stone'",
 				},
 			)).Related(nil, &m)).Return(&m.Title).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (:Person {name: 'Oliver Stone'})--(movie:Movie)
 					RETURN movie.title
@@ -98,7 +98,7 @@ func TestMatch(t *testing.T) {
 				db.Qual(&name, "n.name", db.Name("name")),
 				db.Qual(&title, "n.title", db.Name("title")),
 			).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Movie|Person)
 					RETURN n.name AS name, n.title AS title
@@ -128,7 +128,7 @@ func TestMatch(t *testing.T) {
 					&m.Title,
 					"movie.title",
 				)).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (:Person {name: 'Oliver Stone'})-->(movie)
 					RETURN movie.title
@@ -153,7 +153,7 @@ func TestMatch(t *testing.T) {
 					&out,
 					"type(r)",
 				)).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (:Person {name: 'Oliver Stone'})-[r]->(movie)
 					RETURN type(r)
@@ -180,7 +180,7 @@ func TestMatch(t *testing.T) {
 							db.Var(&b, db.Name("b")),
 						)).
 				Return(&a, &b).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (a)-[:ACTED_IN {role: 'Bud Fox'}]-(b)
 					RETURN a, b
@@ -204,7 +204,7 @@ func TestMatch(t *testing.T) {
 					},
 				)).From(ActedIn{}, db.Var("actor"))).
 				Return(db.Qual(&name, "actor.name")).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (wallstreet:Movie {title: 'Wall Street'})<-[:ACTED_IN]-(actor)
 					RETURN actor.name
@@ -227,7 +227,7 @@ func TestMatch(t *testing.T) {
 				db.Var("", db.Label("ACTED_IN|DIRECTED")),
 				db.Var("person"),
 			)).Return(db.Qual(&name, "person.name")).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 		MATCH (wallstreet {title: 'Wall Street'})<-[:ACTED_IN|DIRECTED]-(person)
 		RETURN person.name
@@ -249,7 +249,7 @@ func TestMatch(t *testing.T) {
 					},
 				)).From(db.Qual(&r, "r"), db.Var("actor"))).
 				Return(&r.Role).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (wallstreet {title: 'Wall Street'})<-[r:ACTED_IN]-(actor)
 					RETURN r.role
@@ -291,7 +291,7 @@ func TestMatch(t *testing.T) {
 							&martin,
 						),
 				).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 		MATCH
 		  (martin:Person {name: 'Martin Sheen'}),
@@ -319,7 +319,7 @@ func TestMatch(t *testing.T) {
 					db.Qual(&mTitle, "movie.title"),
 					db.Qual(&dName, "director.name"),
 				).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (charlie {name: 'Charlie Sheen'})-[:ACTED_IN]->(movie)<-[:DIRECTED]-(director)
 					RETURN movie.title, director.name
@@ -350,7 +350,7 @@ func TestMatch(t *testing.T) {
 				OptionalMatch(
 					db.Node(&a).To(db.Qual(&r, "r"), nil),
 				).Return(&a.Name, &r).Compile()
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 		MATCH (a:Person {name: 'Martin Sheen'})
 		OPTIONAL MATCH (a)-[r:DIRECTED]->()
@@ -379,7 +379,7 @@ func TestMatch(t *testing.T) {
 				OptionalMatch(db.Node(&a).To(nil, db.Qual(&x, "x"))).
 				Return(&x).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 		MATCH (a:Person {name: 'Charlie Sheen'})
 		OPTIONAL MATCH (a)-->(x)
@@ -408,7 +408,7 @@ func TestMatch(t *testing.T) {
 				OptionalMatch(db.Node(&a).To(nil, db.Qual(&x, "x"))).
 				Return(&x, db.Qual(&name, "x.name")).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 		MATCH (a:Person {name: 'Martin Sheen'})
 		OPTIONAL MATCH (a)-->(x)
@@ -438,7 +438,7 @@ func TestMatch(t *testing.T) {
 				OptionalMatch(db.Node(db.Var("x")).To(db.Qual(ActedIn{}, "r"), &a)).
 				Return(&a.Title, db.Qual(&name, "x.name"), db.Qual(&typeR, "type(r)")).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 		MATCH (a:Movie {title: 'Wall Street'})
 		OPTIONAL MATCH (x)-[r:ACTED_IN]->(a)

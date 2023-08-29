@@ -2,13 +2,13 @@ package internal_test
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
+	"github.com/rlch/neogo/internal/tests"
 )
 
 func TestParameter(t *testing.T) {
@@ -27,8 +27,9 @@ func TestParameter(t *testing.T) {
 			Unwind("range(0, size($propsList)-1)", "i").
 			With("i", db.Qual(&props, "$propsList[i]", db.Name("props"))).
 			Return(&props).Compile()
-		assert.Error(t, err)
 		assert.Nil(t, cy)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, internal.ErrAliasAlreadyBound)
 	})
 
 	t.Run("Allow maps to be bound to an expression", func(t *testing.T) {
@@ -46,9 +47,9 @@ func TestParameter(t *testing.T) {
 			Return(&props).Compile()
 		assert.NoError(t, err)
 
-		wantCypher := internal.CompiledCypher{
+		tests.Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
-          WITH $propsList
+					WITH $propsList
 					UNWIND range(0, size($propsList)-1) AS i
 					WITH i, $propsList[i] AS props
 					RETURN props
@@ -59,11 +60,24 @@ func TestParameter(t *testing.T) {
 			Bindings: map[string]reflect.Value{
 				"props": reflect.ValueOf(&props),
 			},
-		}
-		cypher := strings.TrimSpace(wantCypher.Cypher)
-		cypher = strings.ReplaceAll(cypher, "\t", "")
-		assert.Equal(t, cypher, cy.Cypher)
-		assert.Equal(t, wantCypher.Bindings, cy.Bindings)
-		assert.Equal(t, wantCypher.Parameters, cy.Parameters)
+		})
+	})
+
+	t.Run("Doesn't allow bounding a parameter to a value which is already bound to another value", func(t *testing.T) {
+		var (
+			num1 int
+			num2 float64
+		)
+		numParam := []int{1, 2, 3}
+
+		c := internal.NewCypherClient()
+		cy, err := c.
+			With(db.NamedParam(&numParam, "numbers")).
+			With(db.Qual(&num1, "numbers[0]")).
+			With(db.Qual(&num2, "numbers[0]")).
+			Return(&num1, &num2).Compile()
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, internal.ErrExpresionAlreadyBound)
+		assert.Nil(t, cy)
 	})
 }

@@ -18,7 +18,7 @@ func TestUse(t *testing.T) {
 			Return("n").
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					USE myDatabase
 					MATCH (n)
@@ -39,7 +39,7 @@ func TestUse(t *testing.T) {
 			Return("n").
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					USE myComposite.myConstituent
 					MATCH (n)
@@ -62,7 +62,7 @@ func TestUse(t *testing.T) {
 				"graphName": "'idksomegraph'",
 			})
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					USE graph.byName($graphName)
 					MATCH (n)

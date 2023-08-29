@@ -67,8 +67,10 @@ type (
 )
 
 var (
-	nodeType         = reflect.TypeOf((*INode)(nil)).Elem()
-	relationshipType = reflect.TypeOf((*IRelationship)(nil)).Elem()
+	nodeType                       = reflect.TypeOf((*INode)(nil)).Elem()
+	relationshipType               = reflect.TypeOf((*IRelationship)(nil)).Elem()
+	ErrExpresionAlreadyBound error = errors.New("expression already bound to different value")
+	ErrAliasAlreadyBound     error = errors.New("alias already bound to expression")
 )
 
 func (m *member) Print() {
@@ -348,10 +350,10 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 	canElem := vT.Kind() == reflect.Ptr ||
 		vT.Kind() == reflect.Slice
 
-	// Find the name of the identifier
+		// Find the name of the identifier
 	if m.expr != "" {
 		if exst, ok := s.bindings[m.expr]; ok && exst != v {
-			panic(fmt.Errorf("(%s) already bound to different value. want: %s, have: %s", m.expr, v, s.bindings[m.expr]))
+			panic(fmt.Errorf("%w (%s): want: %v, have: %v", ErrExpresionAlreadyBound, m.expr, v, exst))
 		} else if ok {
 			m.isNew = false
 			currentName := s.names[exst]
@@ -447,7 +449,7 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 	}
 	if inner.IsValid() && m.isNew && !inner.IsZero() {
 		if m.alias != "" {
-			panic(fmt.Errorf("cannot bind parameter to alias %s already bound to expression %s", m.alias, m.expr))
+			panic(fmt.Errorf("%w: alias %s already bound to expression %s", ErrAliasAlreadyBound, m.alias, m.expr))
 		}
 		switch inner.Kind() {
 		case reflect.Struct, reflect.Slice:

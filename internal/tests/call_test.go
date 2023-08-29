@@ -20,7 +20,7 @@ func TestCallSubquery(t *testing.T) {
 			}).
 			Return(&innerReturn).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					UNWIND [0, 1, 2] AS x
 					CALL {
@@ -59,7 +59,7 @@ func TestCallSubquery(t *testing.T) {
 				db.Qual(db.Bind(&n.Count, &totalCount), "totalCount"),
 			).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					UNWIND [0, 1, 2] AS x
 					CALL {
@@ -90,7 +90,7 @@ func TestCallSubquery(t *testing.T) {
 			}).
 			Return(&x, &y).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					UNWIND [0, 1, 2] AS x
 					CALL {
@@ -143,7 +143,7 @@ func TestCallSubquery(t *testing.T) {
 
 			// TODO: Maybe expose db.Multiline as an option that can force multiline
 			// queries
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (person:Person)
 					WITH person
@@ -201,7 +201,7 @@ func TestCallSubquery(t *testing.T) {
 
 			// TODO: Maybe expose db.Multiline as an option that can force multiline
 			// queries
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					CALL {
 					  MATCH (p:Person)
@@ -263,7 +263,7 @@ func TestCallSubquery(t *testing.T) {
 
 			// TODO: Maybe expose db.Multiline as an option that can force multiline
 			// queries
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person)
 					CALL {
@@ -305,7 +305,7 @@ func TestCallSubquery(t *testing.T) {
 
 			// TODO: Maybe expose db.Multiline as an option that can force multiline
 			// queries
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person)
 					CALL {
@@ -343,7 +343,7 @@ func TestCallSubquery(t *testing.T) {
 
 			// TODO: Maybe expose db.Multiline as an option that can force multiline
 			// queries
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person)
 					CALL {
@@ -380,7 +380,7 @@ func TestCallSubquery(t *testing.T) {
 
 			// TODO: Maybe expose db.Multiline as an option that can force multiline
 			// queries
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person)
 					CALL {
@@ -418,7 +418,7 @@ func TestCallSubquery(t *testing.T) {
 			}).
 			Return(&v1, &v2, &v3).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 			WITH $ptr AS ptr
 			CALL {
@@ -459,7 +459,7 @@ func TestCallSubquery(t *testing.T) {
 			With(db.Param(nil)).
 			Return(db.Param(nil)).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 			WITH $v1
 			CALL {
@@ -492,7 +492,7 @@ func TestCallProcedure(t *testing.T) {
 			Return(&labels).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 			CALL db.labels()
 			YIELD label
@@ -520,7 +520,7 @@ func TestCallProcedure(t *testing.T) {
 			Return(&sig).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					SHOW PROCEDURES
 					YIELD name, signature
@@ -552,7 +552,7 @@ func TestCallProcedure(t *testing.T) {
 			// ignore, just a bad tree-sitter query triggering a false-positive for
 			// sql lol
 		isNot := "IS NOT"
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					CALL db.propertyKeys()
 					YIELD propertyKey AS prop

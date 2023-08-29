@@ -22,7 +22,7 @@ func TestOrderBy(t *testing.T) {
 			).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n)
 					RETURN n.name, n.age
@@ -46,7 +46,7 @@ func TestOrderBy(t *testing.T) {
 			).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n)
 					RETURN n.name, n.age
@@ -71,7 +71,7 @@ func TestOrderBy(t *testing.T) {
 			).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person)
 					RETURN n.name, n.age
@@ -96,7 +96,7 @@ func TestOrderBy(t *testing.T) {
 			).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person)
 					RETURN n.name, n.age
@@ -120,7 +120,7 @@ func TestOrderBy(t *testing.T) {
 			).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person)
 					RETURN n.name, n.age
@@ -145,7 +145,7 @@ func TestOrderBy(t *testing.T) {
 			).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person)
 					RETURN n.length, n.name, n.age
@@ -169,7 +169,7 @@ func TestOrderBy(t *testing.T) {
 			).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n)
 					WITH n

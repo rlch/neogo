@@ -25,7 +25,7 @@ func TestUnion(t *testing.T) {
 			},
 		).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person)
 					RETURN n.name AS name
@@ -55,7 +55,7 @@ func TestUnion(t *testing.T) {
 			},
 		).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person)
 					RETURN n.name AS name
