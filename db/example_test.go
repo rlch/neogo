@@ -23,6 +23,22 @@ func ExampleString() {
 	// RETURN "hello"
 }
 
+func ExampleMap_single() {
+	c().
+		Return(String("hello")).
+		Print()
+	// Output:
+	// RETURN "hello"
+}
+
+func ExampleMap_multi() {
+	c().
+		Return(String("hello")).
+		Print()
+	// Output:
+	// RETURN "hello"
+}
+
 func ExampleParam() {
 	c().
 		Return(Param(123)).
@@ -322,3 +338,4 @@ func ExampleNot() {
 	// MATCH (n)
 	// WHERE NOT n.isBlocked = true
 }
+

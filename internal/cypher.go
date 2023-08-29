@@ -60,7 +60,7 @@ func (s *cypher) catch(op func()) {
 	op()
 }
 
-const indent = "  "
+const Indent = "  "
 
 func (cy *cypher) newline() {
 	cy.WriteByte('\n')
@@ -679,13 +679,13 @@ func (cy *cypher) writeMultilineQuery(clause string, n int, each func(i int)) {
 	cy.catch(func() {
 		cy.WriteString(clause)
 		if n > 1 {
-			cy.WriteString("\n" + indent)
+			cy.WriteString("\n" + Indent)
 		} else {
 			cy.WriteString(" ")
 		}
 		for i := 0; i < n; i++ {
 			if i > 0 {
-				cy.WriteString(",\n" + indent)
+				cy.WriteString(",\n" + Indent)
 			}
 			each(i)
 		}

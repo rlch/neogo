@@ -16,7 +16,7 @@ func TestNew(t *testing.T) {
 			return c.
 				Match(mp).
 				Create(cp)
-		}).After(func(scope client.Scope) error {
+		}).Mutate(func(scope client.Scope) error {
 			return nil
 		})
 		r.Restart()

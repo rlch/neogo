@@ -205,6 +205,15 @@ func ExampleClient_call() {
 	// RETURN label
 }
 
+func ExampleClient_callNoYield() {
+	c().
+		Call("db.labels()").
+		Print()
+
+	// Output:
+	// CALL db.labels()
+}
+
 func ExampleClient_show() {
 	var (
 		name any

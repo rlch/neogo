@@ -18,22 +18,28 @@ func Example() {
 		New(func(c *hooks.Client) hooks.HookClient {
 			return c.Merge(mergeP, mergeOptsP)
 		}).
-		Before(func(scope client.Scope) error {
+		Mutate(func(scope client.Scope) error {
 			pat := mergeP.Head()
-			if pat.Next() != nil {
-				return nil
-			}
-			node, _, _ := scope.Unfold(pat.Data)
-			name := scope.Name(node)
-			if n, ok := node.(internal.IDSetter); ok {
-				if n.GetID() != "" {
-					return nil
+			for {
+				node, _, _ := scope.Unfold(pat.Data)
+				fmt.Printf("%+v\n", node)
+				name := scope.Name(node)
+				fmt.Println("name:", name)
+				if n, ok := node.(internal.IDSetter); ok {
+					if n.GetID() != "" {
+						return nil
+					}
+					genID := db.NamedParam("new-id", "id")
+					mergeOptsP.Merge.OnCreate = append(
+						mergeOptsP.Merge.OnCreate,
+						db.SetPropValue(name+".id", genID),
+					)
 				}
-				genID := db.NamedParam("new-id", "id")
-				mergeOptsP.Merge.OnCreate = append(
-					mergeOptsP.Merge.OnCreate,
-					db.SetPropValue(name+".id", genID),
-				)
+
+				pat = pat.Next()
+				if pat == nil {
+					break
+				}
 			}
 			return nil
 		})
@@ -46,6 +52,10 @@ func Example() {
 		Merge(db.Node(db.Qual(&p, "p"))).
 		Return(&p).
 		Compile()
+		// hooks.Use[client.Yielder](
+		// 	c.Merge(nil),
+		// 	hooks.Paginate(),
+		// ).Yield()
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +63,7 @@ func Example() {
 	fmt.Println(cy.Cypher)
 	// Output:
 	// MERGE (p:Person)
-	//   ON CREATE
-	//     SET p.id = $id
+	// ON CREATE
+	//   SET p.id = $id
 	// RETURN p
 }

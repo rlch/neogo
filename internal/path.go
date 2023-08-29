@@ -58,7 +58,7 @@ func PatternsHeads(ps Patterns) []*NodePattern {
 
 func (n *NodePattern) Next() *NodePattern {
 	if n.Relationship == nil {
-		return n
+		return nil
 	}
 	if n.Relationship.From != nil {
 		return n.Relationship.From

@@ -8,10 +8,8 @@ type (
 	Hook struct {
 		*hookState
 		Name   string
-		Before HookFn
-		After  HookFn
+		Mutate func(scope client.Scope) error
 	}
-	HookFn func(scope client.Scope) error
 
 	HookClient interface {
 		State() *hookState
@@ -21,17 +19,12 @@ type (
 	}
 )
 
-func (r *registrant) Before(do HookFn) *Hook {
+func (r *registrant) Mutate(
+	mutateFn func(scope client.Scope) error,
+) *Hook {
 	return &Hook{
 		hookState: r.hookState,
-		Before:    do,
-	}
-}
-
-func (r *registrant) After(do HookFn) *Hook {
-	return &Hook{
-		hookState: r.hookState,
-		After:     do,
+		Mutate:    mutateFn,
 	}
 }
 
@@ -41,9 +34,7 @@ func New(createHook func(*Client) HookClient) *registrant {
 	to := createHook(c)
 	state := to.State()
 	state.Restart()
-	return &registrant{
-		hookState: state,
-	}
+	return &registrant{hookState: state}
 }
 
 type ClauseType int
@@ -85,26 +76,26 @@ type (
 
 	Client struct {
 		*hookState
-		*reader
-		*updater
+		*Reader
+		*Updater
 	}
-	querier struct {
+	Querier struct {
 		*hookState
-		*reader
-		*runner
-		*updater
+		*Reader
+		*Runner
+		*Updater
 	}
-	reader struct {
-		*hookState
-	}
-	yielder struct {
-		*hookState
-		*querier
-	}
-	updater struct {
+	Reader struct {
 		*hookState
 	}
-	runner struct {
+	Yielder struct {
+		*hookState
+		*Querier
+	}
+	Updater struct {
+		*hookState
+	}
+	Runner struct {
 		*hookState
 	}
 )
@@ -135,112 +126,112 @@ func (h *hookState) State() *hookState {
 func (s *hookState) newClient() *Client {
 	return &Client{
 		hookState: s,
-		reader:    s.newReader(),
-		updater:   s.newUpdater(),
+		Reader:    s.newReader(),
+		Updater:   s.newUpdater(),
 	}
 }
 
-func (s *hookState) newQuerier() *querier {
-	return &querier{
+func (s *hookState) newQuerier() *Querier {
+	return &Querier{
 		hookState: s,
-		reader:    s.newReader(),
-		runner:    s.newRunner(),
-		updater:   s.newUpdater(),
+		Reader:    s.newReader(),
+		Runner:    s.newRunner(),
+		Updater:   s.newUpdater(),
 	}
 }
 
-func (s *hookState) newReader() *reader {
-	return &reader{hookState: s}
+func (s *hookState) newReader() *Reader {
+	return &Reader{hookState: s}
 }
 
-func (s *hookState) newYielder() *yielder {
-	return &yielder{hookState: s}
+func (s *hookState) newYielder() *Yielder {
+	return &Yielder{hookState: s}
 }
 
-func (s *hookState) newUpdater() *updater {
-	return &updater{hookState: s}
+func (s *hookState) newUpdater() *Updater {
+	return &Updater{hookState: s}
 }
 
-func (s *hookState) newRunner() *runner {
-	return &runner{hookState: s}
+func (s *hookState) newRunner() *Runner {
+	return &Runner{hookState: s}
 }
 
-func (c *Client) Use(graphExpr *StringMatcher) *querier {
+func (c *Client) Use(graphExpr *StringMatcher) *Querier {
 	c.Extend(clauseUse, graphExpr)
 	return c.newQuerier()
 }
 
-func (c *reader) OptionalMatch(patterns GraphPatternMatcher) *querier {
+func (c *Reader) OptionalMatch(patterns GraphPatternMatcher) *Querier {
 	c.Extend(clauseOptionalMatch, patterns)
 	return c.newQuerier()
 }
 
-func (c *reader) Match(patterns GraphPatternMatcher) *querier {
+func (c *Reader) Match(patterns GraphPatternMatcher) *Querier {
 	c.Extend(clauseMatch, patterns)
 	return c.newQuerier()
 }
 
-func (c *reader) With(identifiers ...*IdentifierMatcher) *querier {
+func (c *Reader) With(identifiers ...*IdentifierMatcher) *Querier {
 	c.Extend(clauseWith, toMatcherList(identifiers...)...)
 	return c.newQuerier()
 }
 
-func (c *reader) Unwind(expr *IdentifierMatcher, as *StringMatcher) *querier {
+func (c *Reader) Unwind(expr *IdentifierMatcher, as *StringMatcher) *Querier {
 	c.Extend(clauseUnwind, expr, as)
 	return c.newQuerier()
 }
 
-func (c *reader) Call(procedure *StringMatcher) *yielder {
+func (c *Reader) Call(procedure *StringMatcher) *Yielder {
 	c.Extend(clauseCall, procedure)
 	return c.newYielder()
 }
 
-func (c *reader) Show(command *StringMatcher) *yielder {
+func (c *Reader) Show(command *StringMatcher) *Yielder {
 	c.Extend(clauseShow, command)
 	return c.newYielder()
 }
 
-func (c *querier) Where(opts ...*WhereMatcher) *querier {
+func (c *Querier) Where(opts ...*WhereMatcher) *Querier {
 	c.Extend(clauseWhere, toMatcherList(opts...)...)
 	return c.newQuerier()
 }
 
-func (c *yielder) Yield(identifiers ...*IdentifierMatcher) *querier {
+func (c *Yielder) Yield(identifiers ...*IdentifierMatcher) *Querier {
 	c.Extend(clauseYield, toMatcherList(identifiers...)...)
 	return c.newQuerier()
 }
 
-func (c *reader) Return(identifiers ...*IdentifierMatcher) *runner {
+func (c *Reader) Return(identifiers ...*IdentifierMatcher) *Runner {
 	c.Extend(clauseReturn, toMatcherList(identifiers...)...)
 	return c.newRunner()
 }
 
-func (c *updater) Create(pattern GraphPatternMatcher) *querier {
+func (c *Updater) Create(pattern GraphPatternMatcher) *Querier {
 	c.Extend(clauseCreate, pattern)
 	return c.newQuerier()
 }
 
-func (c *updater) Merge(pattern GraphPatternMatcher, opts *MergeMatcher) *querier {
+func (c *Updater) Merge(pattern GraphPatternMatcher, opts *MergeMatcher) *Querier {
 	c.Extend(clauseMerge, pattern, opts)
 	return c.newQuerier()
 }
 
-func (c *updater) DetachDelete(identifiers ...*IdentifierMatcher) *querier {
+func (c *Updater) DetachDelete(identifiers ...*IdentifierMatcher) *Querier {
 	c.Extend(clauseDetachDelete, toMatcherList(identifiers...)...)
 	return c.newQuerier()
 }
 
-func (c *updater) Delete(identifiers ...*IdentifierMatcher) *querier {
+func (c *Updater) Delete(identifiers ...*IdentifierMatcher) *Querier {
 	c.Extend(clauseDelete, toMatcherList(identifiers...)...)
 	return c.newQuerier()
 }
 
-func (c *updater) Set(items ...*SetItemMatcher) *querier {
+func (c *Updater) Set(items ...*SetItemMatcher) *Querier {
 	c.Extend(clauseSet, toMatcherList(items...)...)
 	return c.newQuerier()
 }
 
-func (c *updater) Remove(items ...*RemoveItemMatcher) *querier {
+func (c *Updater) Remove(items ...*RemoveItemMatcher) *Querier {
 	c.Extend(clauseRemove, toMatcherList(items...)...)
 	return c.newQuerier()
 }

@@ -1,6 +1,10 @@
 package hooks
 
-import "github.com/rlch/neogo/client"
+import (
+	"errors"
+
+	"github.com/rlch/neogo/client"
+)
 
 type Registry struct {
 	*reconcilerClient
@@ -36,6 +40,8 @@ type hookSequence struct {
 	*Hook
 	clauseParams [][]any
 }
+
+var errHookFn = errors.New("hook function returned error")
 
 func (r *Registry) Reconcile(scope client.Scope, clause ClauseType, params ...any) {
 	nextSeqs := make(map[ClauseType][]*hookSequence)
@@ -99,8 +105,10 @@ Matches:
 			i++
 			n.hookNode = n.next
 		}
-		if match.After != nil {
-			match.After(scope)
+		if match.Mutate != nil {
+			if err := match.Mutate(scope); err != nil {
+				panic(errors.Join(errHookFn, err))
+			}
 		}
 	}
 	r.current = nextSeqs
