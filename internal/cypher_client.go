@@ -230,5 +230,4 @@ func (c *CypherRunner) Compile() (*CompiledCypher, error) {
 
 func (c *CypherRunner) Print() {
 	fmt.Println(c.String())
-	c.Reset()
 }

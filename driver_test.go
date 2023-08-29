@@ -223,14 +223,16 @@ func ExampleDriver_runWithParams() {
 		}
 	}()
 
-	var params = map[string]interface{}{
-		"ns": []int{1, 2, 3},
-	}
-
 	var ns []int
-	err := d.Exec().Return(db.Qual(&ns, "$ns")).RunWithParams(ctx, params)
+	err := d.Exec().
+		Return(db.Qual(&ns, "$ns")).
+		RunWithParams(ctx, map[string]interface{}{
+			"ns": []int{1, 2, 3},
+		})
+
 	fmt.Printf("err: %v\n", err)
-	fmt.Printf("ns:       %v\n", ns)
+	fmt.Printf("ns: %v\n", ns)
+
 	// Output: err: <nil>
-	// ns:       [1 2 3]
+	// ns: [1 2 3]
 }
