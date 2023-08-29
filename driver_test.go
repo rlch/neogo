@@ -236,3 +236,50 @@ func ExampleDriver_runWithParams() {
 	// Output: err: <nil>
 	// ns: [1 2 3]
 }
+
+func ExampleDriver_streamWithParams() {
+	if testing.Short() {
+		fmt.Printf("err: %v\n", nil)
+		fmt.Printf("ns: %v\n", []int{0, 1, 2, 3})
+		return
+	}
+
+	ctx := context.Background()
+	neo4j, cancel := startNeo4J(ctx)
+	d := New(neo4j)
+	defer func() {
+		if err := cancel(ctx); err != nil {
+			panic(err)
+		}
+	}()
+
+	ns := []int{}
+	session := d.ReadSession(ctx)
+	defer func() {
+		if err := session.Close(ctx); err != nil {
+			panic(err)
+		}
+	}()
+	err := session.ReadTx(ctx, func(begin func() client.Client) error {
+		var num int
+		params := map[string]interface{}{
+			"total": 3,
+		}
+		return d.Exec().Unwind("range(0, $total)", "i").
+			Return(db.Qual(&num, "i")).
+			StreamWithParams(ctx, params, func(r client.Result) error {
+				for i := 0; r.Next(ctx); i++ {
+					if err := r.Read(); err != nil {
+						return err
+					}
+					ns = append(ns, num)
+				}
+				return nil
+			})
+	})
+
+	fmt.Printf("err: %v\n", err)
+	fmt.Printf("ns: %v\n", ns)
+	// Output: err: <nil>
+	// ns: [0 1 2 3]
+}
