@@ -204,6 +204,9 @@ type Runner interface {
 	// at once like Run. This is useful for large or undefined results that may
 	// not necessarily fit in memory.
 	Stream(ctx context.Context, sink func(r Result) error) error
+
+	// StreamWithParams is the same as Stream, but injects the provided parameters
+	StreamWithParams(ctx context.Context, params map[string]any, sink func(r Result) error) error
 }
 
 type Result interface {
