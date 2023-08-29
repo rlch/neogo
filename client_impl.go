@@ -221,12 +221,12 @@ func (c *runnerImpl) Print() client.Runner {
 	return c
 }
 
-func (c *runnerImpl) Run(ctx context.Context) (err error) {
-	cy, err := c.cy.Compile()
+func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (err error) {
+	cy, err := c.cy.CompileWithParams(params)
 	if err != nil {
 		return fmt.Errorf("cannot compile cypher: %w", err)
 	}
-	params, err := canonicalizeParams(cy.Parameters)
+	canonicalizedParams, err := canonicalizeParams(cy.Parameters)
 	if err != nil {
 		return fmt.Errorf("cannot serialize parameters: %w", err)
 	}
@@ -234,7 +234,7 @@ func (c *runnerImpl) Run(ctx context.Context) (err error) {
 		ctx, cy,
 		func(tx neo4j.ManagedTransaction) (any, error) {
 			var result neo4j.ResultWithContext
-			result, err = tx.Run(ctx, cy.Cypher, params)
+			result, err = tx.Run(ctx, cy.Cypher, canonicalizedParams)
 			if err != nil {
 				return nil, fmt.Errorf("cannot run cypher: %w", err)
 			}
@@ -266,6 +266,10 @@ func (c *runnerImpl) Run(ctx context.Context) (err error) {
 			}
 			return nil, nil
 		})
+}
+
+func (c *runnerImpl) Run(ctx context.Context) (err error) {
+	return c.RunWithParams(ctx, nil)
 }
 
 func (c *runnerImpl) Stream(ctx context.Context, sink func(r client.Result) error) (err error) {

@@ -206,3 +206,31 @@ func ExampleDriver_writeSession() {
 	// Output: err: <nil>
 	// ids: [1 2 3 4 5 6 7 8 9 10]
 }
+
+func ExampleDriver_runWithParams() {
+	if testing.Short() {
+		fmt.Printf("err: %v\n", nil)
+		fmt.Printf("ns: %v\n", []int{1, 2, 3})
+		return
+	}
+
+	ctx := context.Background()
+	neo4j, cancel := startNeo4J(ctx)
+	d := New(neo4j)
+	defer func() {
+		if err := cancel(ctx); err != nil {
+			panic(err)
+		}
+	}()
+
+	var params = map[string]interface{}{
+		"ns": []int{1, 2, 3},
+	}
+
+	var ns []int
+	err := d.Exec().Return(db.Qual(&ns, "$ns")).RunWithParams(ctx, params)
+	fmt.Printf("err: %v\n", err)
+	fmt.Printf("ns:       %v\n", ns)
+	// Output: err: <nil>
+	// ns:       [1 2 3]
+}
