@@ -273,25 +273,35 @@ func (s *Scope) replaceBinding(m *member) {
 		inner = inner.Elem()
 	}
 	if canElem && inner.Kind() == reflect.Struct {
-		vsT := inner.Type()
-		for i := 0; i < vsT.NumField(); i++ {
-			vf := inner.Field(i)
-			jsTag, ok := vsT.Field(i).Tag.Lookup("json")
-			if !ok {
-				continue
-			}
-			accessor := strings.Split(jsTag, ",")[0]
-			ptr := uintptr(vf.Addr().UnsafePointer())
-			f := field{
-				name:       accessor,
-				identifier: name,
-			}
-			s.fields[ptr] = f
+		s.bindFields(inner, name)
+	}
+}
 
-			fieldName := f.identifier + "." + f.name
-			vfAddr := vf.Addr()
-			s.names[vfAddr] = fieldName
+func (s *Scope) bindFields(strct reflect.Value, memberName string) {
+	vsT := strct.Type()
+	for i := 0; i < vsT.NumField(); i++ {
+		vf := strct.Field(i)
+		vfT := vsT.Field(i)
+
+		jsTag, ok := vsT.Field(i).Tag.Lookup("json")
+		if !ok {
+			// Recurse into composite fields
+			if vfT.Anonymous {
+				s.bindFields(vf, memberName)
+			}
+			continue
 		}
+		accessor := strings.Split(jsTag, ",")[0]
+		ptr := uintptr(vf.Addr().UnsafePointer())
+		f := field{
+			name:       accessor,
+			identifier: memberName,
+		}
+		s.fields[ptr] = f
+
+		fieldName := f.identifier + "." + f.name
+		vfAddr := vf.Addr()
+		s.names[vfAddr] = fieldName
 	}
 }
 
