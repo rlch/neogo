@@ -77,7 +77,7 @@ func TestParameter(t *testing.T) {
 			With(db.Qual(&num2, "numbers[0]")).
 			Return(&num1, &num2).Compile()
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, internal.ErrExpresionAlreadyBound)
+		assert.ErrorIs(t, err, internal.ErrExpressionAlreadyBound)
 		assert.Nil(t, cy)
 	})
 }

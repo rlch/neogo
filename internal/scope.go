@@ -67,10 +67,10 @@ type (
 )
 
 var (
-	nodeType                       = reflect.TypeOf((*INode)(nil)).Elem()
-	relationshipType               = reflect.TypeOf((*IRelationship)(nil)).Elem()
-	ErrExpresionAlreadyBound error = errors.New("expression already bound to different value")
-	ErrAliasAlreadyBound     error = errors.New("alias already bound to expression")
+	nodeType                        = reflect.TypeOf((*INode)(nil)).Elem()
+	relationshipType                = reflect.TypeOf((*IRelationship)(nil)).Elem()
+	ErrExpressionAlreadyBound error = errors.New("expression already bound to different value")
+	ErrAliasAlreadyBound      error = errors.New("alias already bound to expression")
 )
 
 func (m *member) Print() {
@@ -353,7 +353,7 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		// Find the name of the identifier
 	if m.expr != "" {
 		if exst, ok := s.bindings[m.expr]; ok && exst != v {
-			panic(fmt.Errorf("%w (%s): want: %v, have: %v", ErrExpresionAlreadyBound, m.expr, v, exst))
+			panic(fmt.Errorf("%w (%s): want: %v, have: %v", ErrExpressionAlreadyBound, m.expr, v, exst))
 		} else if ok {
 			m.isNew = false
 			currentName := s.names[exst]
