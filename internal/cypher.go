@@ -72,14 +72,14 @@ func (cy *cypher) newline() {
 func (cy *cypher) writeNode(m *member) {
 	if m != nil {
 		if !m.isNew {
-			fmt.Fprintf(cy, "(%s)", m.name)
+			fmt.Fprintf(cy, "(%s)", m.expr)
 		} else {
 			nodeLabels := ExtractNodeLabels(m.identifier)
 			cy.WriteString("(")
 			padProps := false
-			if m.name != "" {
+			if m.expr != "" {
 				padProps = true
-				cy.WriteString(m.name)
+				cy.WriteString(m.expr)
 			}
 			if m.variable != nil && m.variable.Pattern != "" {
 				padProps = true
@@ -126,8 +126,8 @@ func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
 	if m != nil {
 		var inner string
 		if !m.isNew {
-			if m.name != "" {
-				inner = m.name + inner
+			if m.expr != "" {
+				inner = m.expr + inner
 			}
 		} else {
 			label := ExtractRelationshipType(m.identifier)
@@ -136,8 +136,8 @@ func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
 			} else if label != "" {
 				inner = ":" + label
 			}
-			if m.name != "" {
-				inner = m.name + inner
+			if m.expr != "" {
+				inner = m.expr + inner
 			}
 			if m.variable != nil && m.variable.VarLength != "" {
 				inner = inner + string(m.variable.VarLength)
@@ -408,7 +408,7 @@ func (cy *cypher) writeWhereClause(where *Where, inline bool) {
 func (cy *cypher) writeUnwindClause(expr any, as string) {
 	cy.WriteString("UNWIND ")
 	m := cy.register(expr, false, nil)
-	fmt.Fprintf(cy, "%s AS %s", m.name, as)
+	fmt.Fprintf(cy, "%s AS %s", m.expr, as)
 	// Replace name with alias
 	m.alias = as
 	cy.replaceBinding(m)
@@ -465,7 +465,7 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 		)
 		for i, v := range vars {
 			m, allowAlias := register(v)
-			if m.name != "" {
+			if m.expr != "" {
 				if i > 0 {
 					cy.WriteString(", ")
 				}
@@ -476,7 +476,7 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 				}
 				registeredNames[m.alias] = struct{}{}
 			} else {
-				registeredNames[m.name] = struct{}{}
+				registeredNames[m.expr] = struct{}{}
 			}
 			if m.projectionBody != nil {
 				if m.projectionBody.hasProjectionClauses() {
@@ -528,7 +528,7 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 					cy.WriteString("DISTINCT ")
 				}
 			}
-			cy.WriteString(m.name)
+			cy.WriteString(m.expr)
 			if m.alias != "" {
 				fmt.Fprintf(cy, " AS %s", m.alias)
 			}
@@ -624,7 +624,7 @@ func (cy *cypher) writeForEachClause(identifier, elementsExpr any, do func(c *Cy
 
 		foreach := newCypher()
 		m := foreach.register(identifier, false, nil)
-		fmt.Fprintf(cy, "%s IN %s | ", m.name, value)
+		fmt.Fprintf(cy, "%s IN %s | ", m.expr, value)
 
 		b := &strings.Builder{}
 		foreach.Builder = b
@@ -655,7 +655,7 @@ func (cy *cypher) writeYieldClause(identifiers ...any) {
 	cy.writeSinglelineQuery("YIELD", len(identifiers), func(i int) {
 		v := identifiers[i]
 		m := cy.register(v, false, nil)
-		cy.WriteString(m.name)
+		cy.WriteString(m.expr)
 		if m.alias != "" {
 			fmt.Fprintf(cy, " AS %s", m.alias)
 		}

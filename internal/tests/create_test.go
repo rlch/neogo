@@ -16,7 +16,7 @@ func TestCreate(t *testing.T) {
 				Create(db.Node("n")).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					CREATE (n)
 					`,
@@ -34,7 +34,7 @@ func TestCreate(t *testing.T) {
 				).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					CREATE
 					  (n),
@@ -49,7 +49,7 @@ func TestCreate(t *testing.T) {
 				Create(db.Node(db.Qual(Person{}, "n"))).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					CREATE (n:Person)
 					`,
@@ -65,7 +65,7 @@ func TestCreate(t *testing.T) {
 				Create(db.Node(db.Qual(SwedishPerson{}, "n"))).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					CREATE (n:Person:Swedish)
 					`,
@@ -82,7 +82,7 @@ func TestCreate(t *testing.T) {
 				Return(db.Qual(&name, "a.name")).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					CREATE (a {name: 'Andy'})
 					RETURN a.name
@@ -122,7 +122,7 @@ func TestCreate(t *testing.T) {
 				Return(db.Qual(&typeR, "type(r)")).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH
 					  (a:Person),
@@ -175,7 +175,7 @@ func TestCreate(t *testing.T) {
 				).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH
 					  (a:Person),
@@ -204,7 +204,7 @@ func TestCreate(t *testing.T) {
 				Return(db.Qual(&p, "p")).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					CREATE p = (:Person {name: 'Andy'})-[:WORKS_AT]->(:Company {name: 'Neo4j'})<-[:WORKS_AT]-(:Person {name: 'Michael'})
 					RETURN p
@@ -228,7 +228,7 @@ func TestCreate(t *testing.T) {
 				Return(&n).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					CREATE (n:Person $n)
 					RETURN n
@@ -260,7 +260,7 @@ func TestCreate(t *testing.T) {
 				Set(db.SetPropValue("n", "map")).
 				Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					UNWIND $props AS map
 					CREATE (n)

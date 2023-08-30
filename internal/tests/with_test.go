@@ -21,7 +21,7 @@ func TestWith(t *testing.T) {
 			Where(db.Cond("upperCaseName", "STARTS WITH", "'C'")).
 			Return(db.Qual(&otherPersonName, "otherPerson.name")).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (george {name: 'George'})<--(otherPerson)
 					WITH otherPerson, toUpper(otherPerson.name) AS upperCaseName
@@ -50,7 +50,7 @@ func TestWith(t *testing.T) {
 				db.Qual(&connectionType, "connectionType"),
 			).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (person)-[r]->(otherPerson)
 					WITH *, type(r) AS connectionType
@@ -79,7 +79,7 @@ func TestWith(t *testing.T) {
 				db.Qual(&otherPersonName, "otherPerson.name"),
 			).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (david {name: 'David'})--(otherPerson)-->()
 					WITH otherPerson, count(*) AS foaf
@@ -105,7 +105,7 @@ func TestWith(t *testing.T) {
 				db.Qual(names, "collect(n.name)"),
 			).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n)
 					WITH n
@@ -136,7 +136,7 @@ func TestWith(t *testing.T) {
 				db.Qual(names, "o.name"),
 			).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n {name: 'Anders'})--(m)
 					WITH m
@@ -159,7 +159,7 @@ func TestWith(t *testing.T) {
 			With(db.With("x", db.Limit("5"), db.Where(db.Cond(db.Expr("x"), ">", "2")))).
 			Return(db.Bind("x", &x)).Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					UNWIND [1, 2, 3, 4, 5, 6] AS x
 					WITH x
