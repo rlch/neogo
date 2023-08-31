@@ -94,6 +94,7 @@ func (s *session) newYielder(cy *internal.CypherYielder) *yielderImpl {
 	return &yielderImpl{
 		session: s,
 		cy:      cy,
+		Querier: s.newQuerier(cy.CypherQuerier),
 	}
 }
 
