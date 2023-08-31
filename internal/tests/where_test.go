@@ -20,7 +20,7 @@ func TestWhere(t *testing.T) {
 						To(Knows{}, db.Qual(&b, "b", db.Where(db.Cond("age", ">", "minAge")))),
 				).Return(&b.Name).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					WITH 30 AS minAge
 					MATCH (a:Person WHERE a.name = 'Andy')-[:KNOWS]->(b:Person WHERE b.age > minAge)
@@ -39,7 +39,7 @@ func TestWhere(t *testing.T) {
 				).
 				Return(db.Qual(&names, "[(a)-->(b WHERE b:Person) | b.name]", db.Name("friends"))).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (a:Person {name: 'Andy'})
 					RETURN [(a)-->(b WHERE b:Person) | b.name] AS friends
@@ -75,7 +75,7 @@ func TestWhere(t *testing.T) {
 					db.Qual(&n.Age, "age"),
 				).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Person)
 					WHERE (n.name = 'Peter' XOR (n.age < 30 AND n.name = 'Timothy')) OR NOT (n.name = 'Timothy' OR n.name = 'Peter')
@@ -103,7 +103,7 @@ func TestWhere(t *testing.T) {
 					db.Qual(&age, "n.age"),
 				).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n)
 					WHERE n:Swedish
@@ -127,7 +127,7 @@ func TestWhere(t *testing.T) {
 					&n.Age,
 				).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Person)
 					WHERE n.age < 30
@@ -159,7 +159,7 @@ func TestWhere(t *testing.T) {
 					db.Qual(&email, "f.email"),
 				).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Person)-[k:KNOWS]->(f)
 					WHERE k.since < 2000
@@ -187,7 +187,7 @@ func TestWhere(t *testing.T) {
 					&n.Age,
 				).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					WITH 'AGE' AS propname
 					MATCH (n:Person)
@@ -214,7 +214,7 @@ func TestWhere(t *testing.T) {
 					&n.Belt,
 				).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Person)
 					WHERE n.belt IS NOT NULL
@@ -240,7 +240,7 @@ func TestWhere(t *testing.T) {
 				)).
 				Return(&n.Name).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Person)
 					WITH n.name AS name
@@ -263,7 +263,7 @@ func TestWhere(t *testing.T) {
 				Where(db.Cond(&n.Name, "STARTS WITH", "'Pet'")).
 				Return(&n.Name, &n.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Person)
 					WHERE n.name STARTS WITH 'Pet'
@@ -284,7 +284,7 @@ func TestWhere(t *testing.T) {
 				Where(db.Cond(&n.Name, "ENDS WITH", "'ter'")).
 				Return(&n.Name, &n.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Person)
 					WHERE n.name ENDS WITH 'ter'
@@ -305,7 +305,7 @@ func TestWhere(t *testing.T) {
 				Where(db.Cond(&n.Name, "CONTAINS", "'ete'")).
 				Return(&n.Name, &n.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Person)
 					WHERE n.name CONTAINS 'ete'
@@ -326,7 +326,7 @@ func TestWhere(t *testing.T) {
 				Where(db.Not(db.Cond(&n.Name, "ENDS WITH", "'y'"))).
 				Return(&n.Name, &n.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Person)
 					WHERE NOT n.name ENDS WITH 'y'
@@ -349,7 +349,7 @@ func TestWhere(t *testing.T) {
 				Where(db.Cond(&n.Name, "=~", "'Tim.*'")).
 				Return(&n.Name, &n.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Person)
 					WHERE n.name =~ 'Tim.*'
@@ -370,7 +370,7 @@ func TestWhere(t *testing.T) {
 				Where(db.Cond(&n.Email, "=~", "'.*\\\\.com'")).
 				Return(&n.Name, &n.Age, &n.Email).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 					MATCH (n:Person)
 					WHERE n.email =~ '.*\\.com'
@@ -392,7 +392,7 @@ func TestWhere(t *testing.T) {
 				Where(db.Cond(&n.Name, "=~", "'(?i)AND.*'")).
 				Return(&n.Name, &n.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				MATCH (n:Person)
 				WHERE n.name =~ '(?i)AND.*'
@@ -426,7 +426,7 @@ func TestWhere(t *testing.T) {
 				)).
 				Return(&other.Name, &other.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				MATCH
 				  (timothy:Person {name: 'Timothy'}),
@@ -459,7 +459,7 @@ func TestWhere(t *testing.T) {
 				)).
 				Return(&person.Name, &person.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				MATCH
 				  (person:Person),
@@ -487,7 +487,7 @@ func TestWhere(t *testing.T) {
 				).
 				Return(&n.Name, &n.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				MATCH (n:Person)
 				WHERE (n)-[:KNOWS]-({name: 'Timothy'})
@@ -523,7 +523,7 @@ func TestWhere(t *testing.T) {
 					db.Qual(&since, "r.since"),
 				).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				MATCH (n:Person)-[r]->()
 				WHERE n.name = 'Andy' AND type(r) =~ 'K.*'
@@ -548,7 +548,7 @@ func TestWhere(t *testing.T) {
 				).
 				Return(&a.Name, &a.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				MATCH (a:Person)
 				WHERE a.name IN ['Peter', 'Timothy']
@@ -573,7 +573,7 @@ func TestWhere(t *testing.T) {
 				).
 				Return(&n.Name, &n.Age, &n.Belt).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				MATCH (n:Person)
 				WHERE n.belt = 'white'
@@ -603,7 +603,7 @@ func TestWhere(t *testing.T) {
 					&n.Age, &n.Belt,
 				).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				MATCH (n:Person)
 				WHERE n.belt = 'white' OR n.belt IS NULL
@@ -631,7 +631,7 @@ func TestWhere(t *testing.T) {
 				).
 				Return(&person.Name, &person.Age, &person.Belt).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				MATCH (person:Person)
 				WHERE person.name = 'Peter' AND person.belt IS NULL
@@ -657,7 +657,7 @@ func TestWhere(t *testing.T) {
 				).
 				Return(&a.Name, &a.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				MATCH (a:Person)
 				WHERE a.name >= 'Peter'
@@ -683,7 +683,7 @@ func TestWhere(t *testing.T) {
 				).
 				Return(&a.Name, &a.Age).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				MATCH (a:Person)
 				WHERE a.name > 'Andy' AND a.name < 'Timothy'
@@ -715,7 +715,7 @@ func TestWhere(t *testing.T) {
 				).
 				Return(&r.Since).Compile()
 
-			check(t, cy, err, internal.CompiledCypher{
+			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
 				WITH 2000 AS minYear
 				MATCH (a:Person)-[r:KNOWS WHERE r.since < minYear]->(b:Person)

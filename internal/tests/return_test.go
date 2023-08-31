@@ -20,7 +20,7 @@ func TestReturn(t *testing.T) {
 				},
 			))).
 			Return(&p).Compile()
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Keanu Reeves'})
 					RETURN p
@@ -45,7 +45,7 @@ func TestReturn(t *testing.T) {
 				)).To(db.Qual(ActedIn{}, "r"), db.Var("m")),
 			).
 			Return(db.Qual(&r, "type(r)")).Compile()
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Keanu Reeves'})-[r:ACTED_IN]->(m)
 					RETURN type(r)
@@ -67,7 +67,7 @@ func TestReturn(t *testing.T) {
 				},
 			))).
 			Return(&p.BornIn).Compile()
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Keanu Reeves'})
 					RETURN p.bornIn
@@ -93,7 +93,7 @@ func TestReturn(t *testing.T) {
 		cy, err := c.
 			Match(db.Node(db.Qual(&p, "p", db.Props{"name": "'Keanu Reeves'"}))).
 			Return(db.Qual(&p.Nationality, "citizenship")).Compile()
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Keanu Reeves'})
 					RETURN p.nationality AS citizenship
@@ -110,7 +110,7 @@ func TestReturn(t *testing.T) {
 		cy, err := c.
 			Match(db.Node(db.Var("n"))).
 			Return(db.Qual(&bornIn, "n.bornIn")).Compile()
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n)
 					RETURN n.bornIn
@@ -134,7 +134,7 @@ func TestReturn(t *testing.T) {
 					To(nil, db.Qual(m, "m")),
 			).
 			Return(db.Return(m, db.Distinct)).Compile()
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Keanu Reeves'})-->(m)
 					RETURN DISTINCT m

@@ -16,7 +16,7 @@ func TestDelete(t *testing.T) {
 			Delete(&n).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Tom Hanks'})
 					DELETE n
@@ -38,7 +38,7 @@ func TestDelete(t *testing.T) {
 			Delete(&r).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Laurence Fishburne'})-[r:ACTED_IN]->()
 					DELETE r
@@ -60,7 +60,7 @@ func TestDelete(t *testing.T) {
 			DetachDelete(&n).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Carrie-Anne Moss'})
 					DETACH DELETE n
@@ -76,7 +76,7 @@ func TestDelete(t *testing.T) {
 			DetachDelete(&n).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n)
 					DETACH DELETE n

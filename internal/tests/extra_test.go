@@ -20,7 +20,7 @@ func TestCypher(t *testing.T) {
 		Return(&n).
 		Compile()
 
-	check(t, cy, err, internal.CompiledCypher{
+	Check(t, cy, err, internal.CompiledCypher{
 		Cypher: `
 					MATCH (n)
 					WHERE n.name = 'Bob'

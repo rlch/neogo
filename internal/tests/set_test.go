@@ -18,7 +18,7 @@ func TestSet(t *testing.T) {
 			Return(&n.Name, &n.Surname).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Andy'})
 					SET n.surname = 'Taylor'
@@ -40,7 +40,7 @@ func TestSet(t *testing.T) {
 			Return(&n.Name, &n.Age).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Andy'})
 					SET n.age = toString(n.age)
@@ -62,7 +62,7 @@ func TestSet(t *testing.T) {
 			Return(&n.Name, &n.Age).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Andy'})
 					SET n.name = null
@@ -93,7 +93,7 @@ func TestSet(t *testing.T) {
 			Return(&at.Name, &at.Age, db.Qual(&hungry, "at.hungry"), &pn.Name, &pn.Age).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH
 					  (at:Person {name: 'Andy'}),
@@ -122,7 +122,7 @@ func TestSet(t *testing.T) {
 			Return(&p.Name, &p.Age, &p.Position).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Peter'})
 					SET p = {name: 'Peter Smith', position: 'Entrepreneur'}
@@ -147,7 +147,7 @@ func TestSet(t *testing.T) {
 			Return(&p.Name, &p.Age).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Peter'})
 					SET p = {}
@@ -172,7 +172,7 @@ func TestSet(t *testing.T) {
 			Return(&p.Name, &p.Age, db.Qual(&hungry, "p.hungry"), &p.Position).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Peter'})
 					SET p += {age: 38, hungry: true, position: 'Entrepreneur'}
@@ -200,7 +200,7 @@ func TestSet(t *testing.T) {
 			).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Andy'})
 					SET
@@ -223,7 +223,7 @@ func TestSet(t *testing.T) {
 			Return(&n.Name, &n.Surname).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Andy'})
 					SET n.surname = $surname
@@ -256,7 +256,7 @@ func TestSet(t *testing.T) {
 			Return(&n.Name).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Andy'})
 					SET n = $props
@@ -283,7 +283,7 @@ func TestSet(t *testing.T) {
 			Return(&n.Name, db.Qual(&labels, "labels(n)", db.Name("labels"))).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'Stefan'})
 					SET n:German
@@ -308,7 +308,7 @@ func TestSet(t *testing.T) {
 			Return(&n.Name, db.Qual(&labels, "labels(n)", db.Name("labels"))).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n:Person {name: 'George'})
 					SET n:Swedish:Bossman

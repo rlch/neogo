@@ -19,7 +19,7 @@ func TestLimit(t *testing.T) {
 			).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n)
 					RETURN n.name
@@ -46,7 +46,7 @@ func TestLimit(t *testing.T) {
 			).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n)
 					RETURN n.name
@@ -69,7 +69,7 @@ func TestLimit(t *testing.T) {
 			).
 			Compile()
 
-		check(t, cy, err, internal.CompiledCypher{
+		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (n)
 					RETURN n.name

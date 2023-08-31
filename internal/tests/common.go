@@ -16,7 +16,7 @@ func canon(cypher string) string {
 	return s
 }
 
-func check(t *testing.T, cy *internal.CompiledCypher, err error, want internal.CompiledCypher) {
+func Check(t *testing.T, cy *internal.CompiledCypher, err error, want internal.CompiledCypher) {
 	require.NoError(t, err)
 	want.Cypher = canon(want.Cypher)
 	if want.Parameters == nil {
