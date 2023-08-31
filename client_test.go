@@ -2,11 +2,13 @@ package neogo
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/rlch/neogo/client"
 	"github.com/rlch/neogo/db"
@@ -267,24 +269,17 @@ func TestUnmarshalResult(t *testing.T) {
 	})
 }
 
-func TestStreamImpl(t *testing.T) {
-	if testing.Short() {
-		return
-	}
-
+func TestStream(t *testing.T) {
 	ctx := context.Background()
-	neo4j, cancel := startNeo4J(ctx)
-	d := New(neo4j)
-
-	t.Cleanup(func() {
-		if err := cancel(ctx); err != nil {
-			t.Fatal(err)
-		}
-	})
 
 	t.Run("should fail when invalid parameters passed", func(t *testing.T) {
+		fmt.Println("first")
+		d, m := newHybridDriver(t, ctx)
+		m.Bind(nil)
+
 		var nums []chan int
-		err := d.Exec().Unwind(db.NamedParam(nums, "nums"), "i").
+		err := d.Exec().
+			Unwind(db.NamedParam(nums, "nums"), "i").
 			Return(db.Qual(&nums, "i")).
 			Stream(ctx, func(r client.Result) error {
 				return nil
@@ -293,6 +288,14 @@ func TestStreamImpl(t *testing.T) {
 	})
 
 	t.Run("should stream when valid query", func(t *testing.T) {
+		fmt.Println("second")
+		records := make([]map[string]any, 11)
+		for i := range records {
+			records[i] = map[string]any{"i": i}
+		}
+		d, m := newHybridDriver(t, ctx)
+		m.BindRecords(records)
+
 		expectedOut := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 		var num int
 		err := d.Exec().
@@ -314,7 +317,7 @@ func TestStreamImpl(t *testing.T) {
 	})
 }
 
-func TestResultImpl(t *testing.T) {
+func TestResult(t *testing.T) {
 	if testing.Short() {
 		return
 	}
@@ -336,39 +339,51 @@ func TestResultImpl(t *testing.T) {
 
 	t.Run("Peek", func(t *testing.T) {
 		var num int
-		err := d.Exec().Unwind("range(0, 1)", "i").Return(db.Qual(&num, "i")).Stream(ctx, func(r client.Result) error {
-			assert.True(t, r.Next(ctx))
-			assert.True(t, r.Peek(ctx), "should be true when there is one record to process after current record")
-			assert.True(t, r.Next(ctx))
-			assert.False(t, r.Peek(ctx), "should be false when there is no record to process after current record")
-			return nil
-		})
+		err := d.Exec().
+			Unwind("range(0, 1)", "i").
+			Return(db.Qual(&num, "i")).
+			Stream(ctx, func(r client.Result) error {
+				assert.True(t, r.Next(ctx))
+				assert.True(t, r.Peek(ctx), "should be true when there is one record to process after current record")
+				assert.True(t, r.Next(ctx))
+				assert.False(t, r.Peek(ctx), "should be false when there is no record to process after current record")
+				return nil
+			})
 		assert.NoError(t, err)
 	})
 
 	t.Run("Next", func(t *testing.T) {
 		var num int
-		err := d.Exec().Unwind("range(0, 0)", "i").Return(db.Qual(&num, "i")).Stream(ctx, func(r client.Result) error {
-			assert.True(t, r.Next(ctx), "should be true when there is one record to process")
-			assert.False(t, r.Next(ctx), "should be false when there is no record to process")
-			return nil
-		})
+		err := d.Exec().
+			Unwind("range(0, 0)", "i").
+			Return(db.Qual(&num, "i")).
+			Stream(ctx, func(r client.Result) error {
+				assert.True(t, r.Next(ctx), "should be true when there is one record to process")
+				assert.False(t, r.Next(ctx), "should be false when there is no record to process")
+				return nil
+			})
 		assert.NoError(t, err)
 	})
 
 	t.Run("Err", func(t *testing.T) {
 		t.Run("should not throw error for valid resultWithContext", func(t *testing.T) {
 			var num int
-			err := d.Exec().Unwind("range(0, 0)", "i").Return(db.Qual(&num, "i")).Stream(ctx, func(r client.Result) error {
-				return r.Err()
-			})
+			err := d.Exec().
+				Unwind("range(0, 0)", "i").
+				Return(db.Qual(&num, "i")).
+				Stream(ctx, func(r client.Result) error {
+					return r.Err()
+				})
 			assert.NoError(t, err)
 		})
 
 		t.Run("should throw error when there is error in resultWithContext", func(t *testing.T) {
 			var n []any
 			c := internal.NewCypherClient()
-			cy, err := c.Match(db.Node(db.Var(n, db.Name("n")))).Return(n).Compile()
+			cy, err := c.
+				Match(db.Node(db.Var(n, db.Name("n")))).
+				Return(n).
+				Compile()
 			assert.NoError(t, err)
 			params, err := canonicalizeParams(cy.Parameters)
 			assert.NoError(t, err)
@@ -418,5 +433,68 @@ func TestResultImpl(t *testing.T) {
 				})
 			assert.Error(t, err)
 		})
+	})
+}
+
+func TestClient(t *testing.T) {
+	t.Run("all methods", func(t *testing.T) {
+		// This is simply to test the clientImpl wrapper around CypherClient to
+		// ensure no nil dereferences etc. Obviously syntax is not tested here.
+		c := NewMock()
+		c.Bind(nil)
+		err := c.Exec().
+			// All Client methods
+			Subquery(func(c client.Client) client.Runner {
+				return c.Union(
+					func(c client.Client) client.Runner {
+						return c.Return("n")
+					},
+					func(c client.Client) client.Runner {
+						return c.Use("graph").Return("n")
+					},
+				)
+			}).
+			Subquery(func(c client.Client) client.Runner {
+				return c.UnionAll(
+					func(c client.Client) client.Runner {
+						return c.Call("aff")
+					},
+					func(c client.Client) client.Runner {
+						return c.Return("n")
+					},
+				)
+			}).
+
+			// All Querier methods
+			Where(db.Cond("x", "=", "2")).
+
+			// All Updater[Querier] methods
+			Create(db.Node("n")).
+			Merge(db.Node("m")).
+			Delete().
+			DetachDelete().
+			Set().
+			Remove().
+			ForEach("a", "m", func(c client.Updater[any]) {
+				c.Set()
+			}).
+
+			// All Reader methods
+			OptionalMatch(db.Node("p")).
+			Match(db.Node("o")).
+			With("n").
+			Call("call").
+			Yield("yield").
+			Show("").
+			Subquery(func(c client.Client) client.Runner {
+				return c.Match(db.Node("m"))
+			}).
+			Cypher(func(scope client.Scope) string {
+				return ""
+			}).
+			Unwind("a", "a").
+			Print().
+			Run(context.Background())
+		require.NoError(t, err)
 	})
 }

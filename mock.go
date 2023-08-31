@@ -58,6 +58,7 @@ type (
 		neo4j.ResultWithContext
 		records []*neo4j.Record
 		cursor  int
+		started bool
 	}
 )
 
@@ -245,6 +246,11 @@ func (r *mockNeo4jResult) NextRecord(ctx context.Context, record **neo4j.Record)
 }
 
 func (r *mockNeo4jResult) Next(ctx context.Context) bool {
+	if r.cursor == 0 && !r.started {
+		r.started = true
+	} else {
+		r.cursor++
+	}
 	return r.cursor < len(r.records)
 }
 

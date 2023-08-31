@@ -50,6 +50,10 @@ type (
 		neo4j.ResultWithContext
 		compiled *internal.CompiledCypher
 	}
+
+	baseRunner interface {
+		GetRunner() *internal.CypherRunner
+	}
 )
 
 func (s *session) newClient(cy *internal.CypherClient) *clientImpl {
@@ -94,6 +98,7 @@ func (s *session) newYielder(cy *internal.CypherYielder) *yielderImpl {
 	return &yielderImpl{
 		session: s,
 		cy:      cy,
+		Querier: s.newQuerier(cy.CypherQuerier),
 	}
 }
 
@@ -120,8 +125,9 @@ func (c *clientImpl) Use(graphExpr string) client.Querier {
 func (c *clientImpl) Union(unions ...func(c client.Client) client.Runner) client.Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
+		union := union
 		inUnions[i] = func(cc *internal.CypherClient) *internal.CypherRunner {
-			return union(c.newClient(cc)).(*runnerImpl).cy
+			return union(c.newClient(cc)).(baseRunner).GetRunner()
 		}
 	}
 	return c.newQuerier(c.cy.Union(inUnions...))
@@ -130,8 +136,9 @@ func (c *clientImpl) Union(unions ...func(c client.Client) client.Runner) client
 func (c *clientImpl) UnionAll(unions ...func(c client.Client) client.Runner) client.Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
+		union := union
 		inUnions[i] = func(cc *internal.CypherClient) *internal.CypherRunner {
-			return union(c.newClient(cc)).(*runnerImpl).cy
+			return union(c.newClient(cc)).(baseRunner).GetRunner()
 		}
 	}
 	return c.newQuerier(c.cy.UnionAll(inUnions...))
@@ -147,7 +154,8 @@ func (c *readerImpl) Match(patterns internal.Patterns) client.Querier {
 
 func (c *readerImpl) Subquery(subquery func(c client.Client) client.Runner) client.Querier {
 	inSubquery := func(cc *internal.CypherClient) *internal.CypherRunner {
-		return subquery(c.newClient(cc)).(*runnerImpl).cy
+		runner := subquery(c.newClient(cc))
+		return runner.(baseRunner).GetRunner()
 	}
 	return c.newQuerier(c.cy.Subquery(inSubquery))
 }
@@ -214,6 +222,18 @@ func (c *updaterImpl[To, ToCypher]) ForEach(identifier, elementsExpr any, do fun
 
 func (c *yielderImpl) Yield(identifiers ...any) client.Querier {
 	return c.newQuerier(c.cy.Yield(identifiers...))
+}
+
+func (c *yielderImpl) GetRunner() *internal.CypherRunner {
+	return c.cy.CypherRunner
+}
+
+func (c *querierImpl) GetRunner() *internal.CypherRunner {
+	return c.cy.CypherRunner
+}
+
+func (c *runnerImpl) GetRunner() *internal.CypherRunner {
+	return c.cy
 }
 
 func (c *runnerImpl) Print() client.Runner {
