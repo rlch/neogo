@@ -4,9 +4,6 @@ package client
 import (
 	"context"
 
-	_ "github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	_ "github.com/sanity-io/litter"
-
 	"github.com/rlch/neogo/internal"
 )
 
