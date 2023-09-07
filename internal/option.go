@@ -17,7 +17,7 @@ func ConfigureWhere(w *Where, configurer WhereOption) {
 }
 
 type Configurer struct {
-	Merge   func(*Merge)
+	Merge          func(*Merge)
 	Variable       func(*Variable)
 	ProjectionBody func(*ProjectionBody)
 	Where          func(*Where)
@@ -68,6 +68,7 @@ type (
 		Expr      Expr
 		Where     *Where
 		Props     Props
+		PropsExpr Expr
 		Pattern   Expr
 		VarLength Expr
 	}

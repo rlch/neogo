@@ -203,6 +203,9 @@ func (s *Scope) unfoldIdentifier(value any) (
 		if variable.VarLength == "" {
 			variable.VarLength = v.VarLength
 		}
+		if variable.PropsExpr == "" {
+			variable.PropsExpr = v.PropsExpr
+		}
 	}
 RecurseToEntity:
 	for {

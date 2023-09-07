@@ -106,3 +106,13 @@ func VarLength(varLengthExpr internal.Expr) internal.VariableOption {
 // - Keys behave as [pkg/github.com/rlch/neogo/client.PropertyIdentifier]'s
 // - Values behave as [pkg/github.com/rlch/neogo/client.ValueIdentifier]'s
 type Props = internal.Props
+
+// PropsExpr sets the properties of a node or relationship to the provided
+// expression.
+func PropsExpr(propsExpr internal.Expr) internal.VariableOption {
+	return &internal.Configurer{
+		Variable: func(v *internal.Variable) {
+			v.PropsExpr = propsExpr
+		},
+	}
+}
