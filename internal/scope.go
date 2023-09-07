@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/goccy/go-json"
 	"github.com/iancoleman/strcase"
 )
 
@@ -35,9 +34,8 @@ type (
 		paramCounter int
 		paramPrefix  string
 
-		parameters       map[string]any
-		parameterFilters map[string]*json.FieldQuery
-		paramAddrs       map[uintptr]string
+		parameters map[string]any
+		paramAddrs map[uintptr]string
 	}
 	// An instance of a node/relationship in the cypher query
 	member struct {
@@ -109,23 +107,18 @@ func (s *Scope) clone() *Scope {
 	for k, v := range s.parameters {
 		parameters[k] = v
 	}
-	parameterFilters := make(map[string]*json.FieldQuery, len(s.parameterFilters))
-	for k, v := range s.parameterFilters {
-		parameterFilters[k] = v
-	}
 	paramAddrs := make(map[uintptr]string, len(s.paramAddrs))
 	for k, v := range s.paramAddrs {
 		paramAddrs[k] = v
 	}
 	return &Scope{
-		bindings:         bindings,
-		generatedNames:   generatedNames,
-		names:            names,
-		fields:           fields,
-		paramCounter:     paramCounter,
-		parameters:       parameters,
-		parameterFilters: parameterFilters,
-		paramAddrs:       paramAddrs,
+		bindings:       bindings,
+		generatedNames: generatedNames,
+		names:          names,
+		fields:         fields,
+		paramCounter:   paramCounter,
+		parameters:     parameters,
+		paramAddrs:     paramAddrs,
 	}
 }
 
@@ -152,7 +145,6 @@ func (s *Scope) clear() {
 	s.fields = map[uintptr]field{}
 	s.parameters = map[string]any{}
 	s.paramAddrs = map[uintptr]string{}
-	s.parameterFilters = map[string]*json.FieldQuery{}
 }
 
 func (s *Scope) mergeChildScope(child *Scope) {
@@ -173,9 +165,6 @@ func (s *Scope) mergeChildScope(child *Scope) {
 	}
 	for k, v := range child.paramAddrs {
 		s.paramAddrs[k] = v
-	}
-	for k, v := range child.parameterFilters {
-		s.parameterFilters[k] = v
 	}
 	s.paramCounter = child.paramCounter
 }
@@ -213,9 +202,6 @@ func (s *Scope) unfoldIdentifier(value any) (
 		}
 		if variable.VarLength == "" {
 			variable.VarLength = v.VarLength
-		}
-		if variable.Select == nil {
-			variable.Select = v.Select
 		}
 	}
 RecurseToEntity:
@@ -464,9 +450,6 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 				effProp = reflect.ValueOf(prop)
 			}
 			param := s.addParameter(effProp, effName)
-			if m.variable != nil && m.variable.Select != nil {
-				s.parameterFilters[param] = m.variable.Select
-			}
 			if canHaveProps {
 				m.props = param
 			} else {
@@ -525,8 +508,8 @@ func (s *Scope) propertyIdentifier(identifier any) func(v any) string {
 		if name, ok := s.names[vv]; ok {
 			return name
 		}
-		if field, ok := s.fields[ptr]; ok {
-			return fmt.Sprintf("%s.%s", field.identifier, field.name)
+		if f, ok := s.fields[ptr]; ok {
+			return fmt.Sprintf("%s.%s", f.identifier, f.name)
 		}
 		panic(fmt.Errorf("could not find a property-representation for %v", v))
 	}
@@ -562,8 +545,8 @@ func (s *Scope) valueIdentifier(v any) string {
 		if name, ok := s.names[vv]; ok {
 			return name
 		}
-		if field, ok := s.fields[ptr]; ok {
-			return fmt.Sprintf("%s.%s", field.identifier, field.name)
+		if f, ok := s.fields[ptr]; ok {
+			return fmt.Sprintf("%s.%s", f.identifier, f.name)
 		}
 	default:
 		panic(fmt.Errorf("unsupported value-type %T", v))

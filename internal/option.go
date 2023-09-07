@@ -1,7 +1,5 @@
 package internal
 
-import "github.com/goccy/go-json"
-
 func ConfigureMerge(o *Merge, configurer MergeOption) {
 	configurer.configureMerge(o)
 }
@@ -69,7 +67,6 @@ type (
 		// If both name and expr are provided, name is used as an alias
 		Expr      Expr
 		Where     *Where
-		Select    *json.FieldQuery
 		Props     Props
 		Pattern   Expr
 		VarLength Expr
