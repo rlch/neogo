@@ -317,6 +317,33 @@ func TestStream(t *testing.T) {
 	})
 }
 
+func TestRun(t *testing.T) {
+	ctx := context.Background()
+	var d Driver
+	if testing.Short() {
+		m := NewMock()
+		m.BindRecords([]map[string]any{{"i": 1}})
+		d = m
+	} else {
+		neo4jDriver, cancel := startNeo4J(ctx)
+		d = New(neo4jDriver)
+		t.Cleanup(func() {
+			if err := cancel(ctx); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+
+	t.Run("unmarshals slice of length 1", func(t *testing.T) {
+		var is []int
+		err := d.Exec().
+			Unwind("range(1, 1)", "i").
+			Return(db.Qual(&is, "i")).Run(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, []int{1}, is)
+	})
+}
+
 func TestResultImpl(t *testing.T) {
 	// TODO: Setup mocks
 	if testing.Short() {

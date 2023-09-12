@@ -262,7 +262,63 @@ func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (
 				return nil, nil
 			}
 			first := result.Record()
-			if result.Peek(ctx) {
+
+			// If we have more than one record, we know we should be unmarhsalling
+			// into slices. If we have a single record, we don't necessarily know if
+			// we want to marshal into slices or not.
+			//
+			// Compare the depth of nesting for the bindings and their corresponding
+			// record values:
+			// - If any of the bindings have a non-zero depth, i.e. non-slice, we
+			//   assume single.
+			// - If any of the bindings have a different depth than the correpodning
+			//   record-values, assume we have multiple records.
+			isRecords, err := (func() (bool, error) {
+				if result.Peek(ctx) {
+					return true, nil
+				}
+				allSlices := true
+				bindingTypes := map[string]reflect.Type{}
+				for k, binding := range cy.Bindings {
+					typ := binding.Type()
+					for typ.Kind() == reflect.Ptr {
+						typ = typ.Elem()
+					}
+					bindingTypes[k] = typ
+					if typ.Kind() == reflect.Slice ||
+						typ.Kind() == reflect.Array {
+						continue
+					}
+					allSlices = false
+				}
+				if !allSlices {
+					return false, nil
+				}
+				for k, bindingType := range bindingTypes {
+					recordV, ok := first.Get(k)
+					if !ok {
+						return false, fmt.Errorf("no value associated with key %q", k)
+					}
+					recordType := reflect.TypeOf(recordV)
+					for {
+						bindingNext := bindingType.Kind() == reflect.Array || bindingType.Kind() == reflect.Slice
+						recordNext := recordType.Kind() == reflect.Array || recordType.Kind() == reflect.Slice
+						if bindingNext && recordNext {
+							bindingType = bindingType.Elem()
+							recordType = recordType.Elem()
+							continue
+						} else if !bindingNext && !recordNext {
+							break
+						}
+						return true, nil
+					}
+				}
+				return false, nil
+			})()
+			if err != nil {
+				return nil, err
+			}
+			if isRecords {
 				var records []*neo4j.Record
 				records, err = result.Collect(ctx)
 				if err != nil {
@@ -277,9 +333,6 @@ func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (
 				if single == nil {
 					return nil, nil
 				}
-				if err != nil {
-					return nil, fmt.Errorf("cannot get single record: %w", err)
-				}
 				if err = c.unmarshalRecord(cy, single); err != nil {
 					return nil, fmt.Errorf("cannot unmarshal record: %w", err)
 				}
@@ -288,7 +341,7 @@ func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (
 		})
 }
 
-func (c *runnerImpl) Run(ctx context.Context) (err error) {
+func (c *runnerImpl) Run(ctx context.Context) error {
 	return c.RunWithParams(ctx, nil)
 }
 
