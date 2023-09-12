@@ -315,6 +315,7 @@ func TestStreamImpl(t *testing.T) {
 }
 
 func TestResultImpl(t *testing.T) {
+	// TODO: Setup mocks
 	if testing.Short() {
 		return
 	}
