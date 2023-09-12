@@ -3,14 +3,17 @@ package neogo
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/rlch/neogo/client"
-	"github.com/rlch/neogo/db"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/rlch/neogo/client"
+	"github.com/rlch/neogo/db"
+	"github.com/rlch/neogo/internal"
 )
 
 func startNeo4J(ctx context.Context) (neo4j.DriverWithContext, func(context.Context) error) {
@@ -59,27 +62,28 @@ type Person struct {
 }
 
 func ExampleDriver() {
-	if testing.Short() {
-		fmt.Println("err: <nil>")
-		fmt.Printf("person: %v\n", Person{
-			Node: Node{
-				ID: "some-unique-id",
-			},
-			Name:    "Spongebob",
-			Surname: "Squarepants",
-			Age:     20,
-		})
-		return
-	}
-
 	ctx := context.Background()
-	neo4j, cancel := startNeo4J(ctx)
-	d := New(neo4j)
-	defer func() {
-		if err := cancel(ctx); err != nil {
-			panic(err)
-		}
-	}()
+	var d Driver
+	if testing.Short() {
+		m := NewMock()
+		m.Bind(map[string]any{
+			"person": Person{
+				Node:    internal.Node{ID: "some-unique-id"},
+				Name:    "Spongebob",
+				Surname: "Squarepants",
+				Age:     20,
+			},
+		})
+		d = m
+	} else {
+		neo4j, cancel := startNeo4J(ctx)
+		d = New(neo4j)
+		defer func() {
+			if err := cancel(ctx); err != nil {
+				panic(err)
+			}
+		}()
+	}
 
 	person := Person{
 		Name:    "Spongebob",
@@ -98,25 +102,31 @@ func ExampleDriver() {
 }
 
 func ExampleDriver_readSession() {
-	if testing.Short() {
-		fmt.Printf("err: %v\n", nil)
-		fmt.Printf("ns:       %v\n", []int{
-			0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-		})
-		fmt.Printf("nsTimes2: %v\n", []int{
-			0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
-		})
-		return
-	}
-
 	ctx := context.Background()
-	neo4j, cancel := startNeo4J(ctx)
-	d := New(neo4j)
-	defer func() {
-		if err := cancel(ctx); err != nil {
-			panic(err)
+	var d Driver
+
+	if testing.Short() {
+		m := NewMock()
+		records := make([]map[string]any, 11)
+		for i := range records {
+			records[i] = map[string]any{"i": i}
 		}
-	}()
+		m.BindRecords(records)
+		records2x := make([]map[string]any, 11)
+		for i := range records2x {
+			records2x[i] = map[string]any{"i * 2": i * 2}
+		}
+		m.BindRecords(records2x)
+		d = m
+	} else {
+		neo4j, cancel := startNeo4J(ctx)
+		d = New(neo4j)
+		defer func() {
+			if err := cancel(ctx); err != nil {
+				panic(err)
+			}
+		}()
+	}
 
 	var ns, nsTimes2 []int
 	session := d.ReadSession(ctx)
@@ -148,22 +158,30 @@ func ExampleDriver_readSession() {
 }
 
 func ExampleDriver_writeSession() {
-	if testing.Short() {
-		fmt.Printf("err: %v\n", nil)
-		fmt.Printf("ids: %v\n", []int{
-			1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-		})
-		return
-	}
-
 	ctx := context.Background()
-	neo4j, cancel := startNeo4J(ctx)
-	d := New(neo4j)
-	defer func() {
-		if err := cancel(ctx); err != nil {
-			panic(err)
+	var d Driver
+	if testing.Short() {
+		m := NewMock()
+		m.Bind(nil)
+		records := make([]map[string]any, 10)
+		for i := range records {
+			records[i] = map[string]any{"p": &Person{
+				Node: internal.Node{
+					ID: strconv.Itoa(i + 1),
+				},
+			}}
 		}
-	}()
+		m.BindRecords(records)
+		d = m
+	} else {
+		neo4j, cancel := startNeo4J(ctx)
+		d = New(neo4j)
+		defer func() {
+			if err := cancel(ctx); err != nil {
+				panic(err)
+			}
+		}()
+	}
 
 	var people []*Person
 	session := d.WriteSession(ctx)
@@ -208,20 +226,23 @@ func ExampleDriver_writeSession() {
 }
 
 func ExampleDriver_runWithParams() {
-	if testing.Short() {
-		fmt.Printf("err: %v\n", nil)
-		fmt.Printf("ns: %v\n", []int{1, 2, 3})
-		return
-	}
-
 	ctx := context.Background()
-	neo4j, cancel := startNeo4J(ctx)
-	d := New(neo4j)
-	defer func() {
-		if err := cancel(ctx); err != nil {
-			panic(err)
-		}
-	}()
+	var d Driver
+	if testing.Short() {
+		m := NewMock()
+		m.Bind(map[string]any{
+			"$ns": []int{1, 2, 3},
+		})
+		d = m
+	} else {
+		neo4j, cancel := startNeo4J(ctx)
+		d = New(neo4j)
+		defer func() {
+			if err := cancel(ctx); err != nil {
+				panic(err)
+			}
+		}()
+	}
 
 	var ns []int
 	err := d.Exec().
@@ -238,20 +259,27 @@ func ExampleDriver_runWithParams() {
 }
 
 func ExampleDriver_streamWithParams() {
-	if testing.Short() {
-		fmt.Printf("err: %v\n", nil)
-		fmt.Printf("ns: %v\n", []int{0, 1, 2, 3})
-		return
-	}
-
 	ctx := context.Background()
-	neo4j, cancel := startNeo4J(ctx)
-	d := New(neo4j)
-	defer func() {
-		if err := cancel(ctx); err != nil {
-			panic(err)
+	var d Driver
+	n := 3
+
+	if testing.Short() {
+		m := NewMock()
+		records := make([]map[string]any, n+1)
+		for i := range records {
+			records[i] = map[string]any{"i": i}
 		}
-	}()
+		m.BindRecords(records)
+		d = m
+	} else {
+		neo4j, cancel := startNeo4J(ctx)
+		d = New(neo4j)
+		defer func() {
+			if err := cancel(ctx); err != nil {
+				panic(err)
+			}
+		}()
+	}
 
 	ns := []int{}
 	session := d.ReadSession(ctx)
@@ -263,7 +291,7 @@ func ExampleDriver_streamWithParams() {
 	err := session.ReadTx(ctx, func(begin func() client.Client) error {
 		var num int
 		params := map[string]interface{}{
-			"total": 3,
+			"total": n,
 		}
 		return begin().
 			Unwind("range(0, $total)", "i").
