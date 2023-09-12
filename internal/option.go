@@ -1,7 +1,5 @@
 package internal
 
-import "github.com/goccy/go-json"
-
 func ConfigureMerge(o *Merge, configurer MergeOption) {
 	configurer.configureMerge(o)
 }
@@ -19,7 +17,7 @@ func ConfigureWhere(w *Where, configurer WhereOption) {
 }
 
 type Configurer struct {
-	Merge   func(*Merge)
+	Merge          func(*Merge)
 	Variable       func(*Variable)
 	ProjectionBody func(*ProjectionBody)
 	Where          func(*Where)
@@ -69,8 +67,8 @@ type (
 		// If both name and expr are provided, name is used as an alias
 		Expr      Expr
 		Where     *Where
-		Select    *json.FieldQuery
 		Props     Props
+		PropsExpr Expr
 		Pattern   Expr
 		VarLength Expr
 	}

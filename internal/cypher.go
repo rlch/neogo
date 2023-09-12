@@ -41,6 +41,7 @@ var (
 	errWhereReturnSubclause   = errors.New("WHERE clause in RETURN sub-clause is not allowed")
 	errInvalidPropExpr        = errors.New("invalid property expression. Property expressions must be strings or an identifier")
 	errSubqueryImportAlias    = errors.New("aliasing or expressions are not supported in importing WITH clauses")
+	errUnresolvedProps        = errors.New("resolving from multiple properties is not allowed")
 )
 
 func (s *cypher) catch(op func()) {
@@ -88,16 +89,32 @@ func (cy *cypher) writeNode(m *member) {
 				padProps = true
 				fmt.Fprintf(cy, ":%s", strings.Join(nodeLabels, ":"))
 			}
-			if m.variable != nil && m.variable.Props != nil {
-				if padProps {
-					cy.WriteRune(' ')
+			var resolvedProps int
+			if m.variable != nil {
+				if m.variable.Props != nil {
+					resolvedProps++
+					if padProps {
+						cy.WriteRune(' ')
+					}
+					cy.writeProps(m.variable.Props)
 				}
-				cy.writeProps(m.variable.Props)
-			} else if m.props != "" {
+				if m.variable.PropsExpr != "" {
+					resolvedProps++
+					if padProps {
+						cy.WriteRune(' ')
+					}
+					cy.WriteString(string(m.variable.PropsExpr))
+				}
+			}
+			if m.props != "" {
+				resolvedProps++
 				if padProps {
 					cy.WriteRune(' ')
 				}
 				cy.WriteString(m.props)
+			}
+			if resolvedProps > 1 {
+				panic(errUnresolvedProps)
 			}
 			if m.where != nil {
 				cy.WriteRune(' ')
@@ -142,12 +159,25 @@ func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
 			if m.variable != nil && m.variable.VarLength != "" {
 				inner = inner + string(m.variable.VarLength)
 			}
-			if m.variable != nil && m.variable.Props != nil {
-				inner = inner + " " + cy.writeToString(func(cy *cypher) {
-					cy.writeProps(m.variable.Props)
-				})
-			} else if m.props != "" {
+			var resolvedProps int
+			if m.variable != nil {
+				if m.variable.Props != nil {
+					resolvedProps++
+					inner = inner + " " + cy.writeToString(func(cy *cypher) {
+						cy.writeProps(m.variable.Props)
+					})
+				}
+				if m.variable.PropsExpr != "" {
+					resolvedProps++
+					inner = inner + " " + string(m.variable.PropsExpr)
+				}
+			}
+			if m.props != "" {
+				resolvedProps++
 				inner = inner + " " + m.props
+			}
+			if resolvedProps > 1 {
+				panic(errUnresolvedProps)
 			}
 			if m.where != nil {
 				m.where.Identifier = m.identifier

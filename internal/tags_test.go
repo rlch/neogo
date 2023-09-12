@@ -40,7 +40,11 @@ func TestExtractNodeLabel(t *testing.T) {
 		assert.Equal(t, []string{"Person"}, ExtractNodeLabels([]*person{}))
 	})
 
-	t.Run("Only extract the labels from structs", func(t *testing.T) {
+	t.Run("extract node label from pointer to slice of node", func(t *testing.T) {
+		assert.Equal(t, []string{"Person"}, ExtractNodeLabels(&[]*person{}))
+	})
+
+	t.Run("only extract the labels from structs", func(t *testing.T) {
 		assert.Equal(t, []string{"Person", "Swedish"}, ExtractNodeLabels(personWithNonStructLabels{}))
 	})
 }
@@ -73,5 +77,9 @@ func TestExtractRelationshipType(t *testing.T) {
 
 	t.Run("extract relationship type from slice of relationship", func(t *testing.T) {
 		assert.Equal(t, "Friendship", ExtractRelationshipType([]*friendship{}))
+	})
+
+	t.Run("extract relationship type from pointer to slice of relationship", func(t *testing.T) {
+		assert.Equal(t, "Friendship", ExtractRelationshipType(&[]*friendship{}))
 	})
 }

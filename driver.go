@@ -11,7 +11,7 @@ import (
 )
 
 // New creates a new neogo [Driver] from a [neo4j.DriverWithContext].
-func New(neo4j neo4j.DriverWithContext, configurers ...config) Driver {
+func New(neo4j neo4j.DriverWithContext, configurers ...Config) Driver {
 	d := driver{db: neo4j}
 	for _, c := range configurers {
 		c(&d)
@@ -45,7 +45,7 @@ type Driver interface {
 	Exec(configurers ...func(*execConfig)) client.Client
 }
 
-type config func(*driver)
+type Config func(*driver)
 
 type execConfig struct {
 	*neo4j.SessionConfig

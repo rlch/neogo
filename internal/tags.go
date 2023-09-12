@@ -14,6 +14,9 @@ func ExtractNodeLabels(node any) []string {
 	}
 	if _, ok := node.(INode); !ok {
 		v := reflect.ValueOf(node)
+		for v.Kind() == reflect.Ptr {
+			v = v.Elem()
+		}
 		if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
 			return ExtractNodeLabels(reflect.Zero(v.Type().Elem()).Interface())
 		}
@@ -32,6 +35,9 @@ func ExtractRelationshipType(relationship any) string {
 	}
 	if _, ok := relationship.(IRelationship); !ok {
 		v := reflect.ValueOf(relationship)
+		for v.Kind() == reflect.Ptr {
+			v = v.Elem()
+		}
 		if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
 			return ExtractRelationshipType(reflect.Zero(v.Type().Elem()).Interface())
 		}

@@ -317,7 +317,8 @@ func TestStream(t *testing.T) {
 	})
 }
 
-func TestResult(t *testing.T) {
+func TestResultImpl(t *testing.T) {
+	// TODO: Setup mocks
 	if testing.Short() {
 		return
 	}

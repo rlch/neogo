@@ -293,7 +293,8 @@ func ExampleDriver_streamWithParams() {
 		params := map[string]interface{}{
 			"total": n,
 		}
-		return begin().Unwind("range(0, $total)", "i").
+		return begin().
+			Unwind("range(0, $total)", "i").
 			Return(db.Qual(&num, "i")).
 			StreamWithParams(ctx, params, func(r client.Result) error {
 				for i := 0; r.Next(ctx); i++ {

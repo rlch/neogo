@@ -264,6 +264,18 @@ func ExampleProps() {
 	//   ({name: p.name})
 }
 
+func ExamplePropsExpr() {
+	var p tests.Person
+	c().
+		Create(
+			Node(Qual(&p, "p", PropsExpr("$someVar"))).
+				To(Var("e", PropsExpr("$anotherVar")), nil),
+		).
+		Print()
+	// Output:
+	// CREATE (p:Person $someVar)-[e $anotherVar]->()
+}
+
 func ExampleWhere() {
 	c().
 		Match(Node("n")).
