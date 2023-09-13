@@ -251,13 +251,16 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 		isNodeLabel[label] = struct{}{}
 	}
 
-	var abs IAbstract
+	var (
+		abs                IAbstract
+		inheritanceCounter int
+	)
 	ptrTo := false
 	if to.Type().Implements(rAbstract) {
 		if !to.IsNil() {
 			return fmt.Errorf(
-				"cannot bind abstract node to non-nil abstract type, as the type should not be deterministic.\nTry using *%T",
-				abs,
+				"cannot bind abstract node to non-nil abstract type, as the type should not be deterministic.\nTry using *%s",
+				to.Type(),
 			)
 		}
 	} else if to.Type().Elem().Implements(rAbstract) {
@@ -268,6 +271,10 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 	} else {
 		return errors.New("cannot bind abstract node to non-abstract type")
 	}
+	// We find the abstract node (or exact implementation if registered) that has
+	// a inheritance chain closest to the database node we're extracting from.
+	// i.e. If we have a concrete-node with inheritance chain A > B > C, we prefer
+	// A > B as a potential subtype over A.
 	if abs == nil {
 	Bases:
 		for _, base := range r.abstractNodes {
@@ -275,13 +282,17 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 			if len(labels) == 0 {
 				continue
 			}
-			fmt.Println(labels)
+			currentInheritanceCounter := 0
 			for _, label := range labels {
 				if _, ok := isNodeLabel[label]; !ok {
 					continue Bases
 				}
+				currentInheritanceCounter++
 			}
-			abs = base
+			if currentInheritanceCounter > inheritanceCounter {
+				abs = base
+				inheritanceCounter = currentInheritanceCounter
+			}
 		}
 		if abs == nil {
 			return fmt.Errorf(
@@ -291,31 +302,37 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 		}
 	}
 
-	abstractLabels := internal.ExtractNodeLabels(abs)
-	isAbstractLabel := make(map[string]struct{}, len(abstractLabels))
-	for _, label := range abstractLabels {
-		isAbstractLabel[label] = struct{}{}
-	}
-	for _, impl := range abs.Implementers() {
-		for _, label := range internal.ExtractNodeLabels(impl) {
-			if _, ok := isAbstractLabel[label]; ok {
-				continue
+	// We found our impl
+	var impl IAbstract
+	if inheritanceCounter == len(nodeLabels) {
+		impl = abs
+	} else {
+	Impls:
+		for _, nextImpl := range abs.Implementers() {
+			for _, label := range internal.ExtractNodeLabels(nextImpl) {
+				if _, ok := isNodeLabel[label]; !ok {
+					continue Impls
+				}
 			}
-			if _, ok := isNodeLabel[label]; !ok {
-				continue
-			}
-			toImpl := reflect.New(reflect.TypeOf(impl).Elem())
-			err := r.bindValue(node.Props, toImpl)
-			if err != nil {
-				return err
-			}
-			if ptrTo {
-				to.Elem().Set(toImpl)
-			} else {
-				to.Set(toImpl)
-			}
-			return nil
+			impl = nextImpl
+			break
 		}
+	}
+	if impl == nil {
+		return fmt.Errorf(
+			"no concrete implementation found for labels: %s\nDid you forget to register the base node using neogo.WithTypes(...)?",
+			strings.Join(nodeLabels, ", "),
+		)
+	}
+	toImpl := reflect.New(reflect.TypeOf(impl).Elem())
+	err := r.bindValue(node.Props, toImpl)
+	if err != nil {
+		return err
+	}
+	if ptrTo {
+		to.Elem().Set(toImpl)
+	} else {
+		to.Set(toImpl)
 	}
 	return nil
 }
