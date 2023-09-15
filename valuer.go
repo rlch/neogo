@@ -256,12 +256,10 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 		inheritanceCounter int
 	)
 	ptrTo := false
+	canBindSubtype := true
 	if to.Type().Implements(rAbstract) {
 		if !to.IsNil() {
-			return fmt.Errorf(
-				"cannot bind abstract node to non-nil abstract type, as the type should not be deterministic.\nTry using *%s",
-				to.Type(),
-			)
+			canBindSubtype = false
 		}
 	} else if to.Type().Elem().Implements(rAbstract) {
 		ptrTo = true
@@ -307,6 +305,12 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 	if inheritanceCounter == len(nodeLabels) {
 		impl = abs
 	} else {
+		if !canBindSubtype {
+			return fmt.Errorf(
+				"cannot bind abstract subtype to non-nil abstract type, as value-types cannot be reassigned.\nTry using *%s",
+				to.Type(),
+			)
+		}
 	Impls:
 		for _, nextImpl := range abs.Implementers() {
 			for _, label := range internal.ExtractNodeLabels(nextImpl) {
