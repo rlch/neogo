@@ -541,7 +541,7 @@ func canonicalizeParams(params map[string]any) (map[string]any, error) {
 			if err != nil {
 				return nil, fmt.Errorf("cannot marshal map: %w", err)
 			}
-			var js map[string]any
+			var js any
 			if err := json.Unmarshal(bytes, &js); err != nil {
 				return nil, fmt.Errorf("cannot unmarshal map: %w", err)
 			}

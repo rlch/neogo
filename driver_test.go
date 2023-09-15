@@ -99,7 +99,7 @@ func ExampleDriver() {
 	fmt.Printf("err: %v\n", err)
 	fmt.Printf("person: %v\n", person)
 	// Output:
-	// CREATE (person:Person {name: $person_name, surname: $person_surname})
+	// CREATE (person:Person {id: $person_id, name: $person_name, surname: $person_surname})
 	// SET person.age = $v1
 	// RETURN person
 	// err: <nil>
