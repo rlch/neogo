@@ -473,26 +473,36 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 			// qualified parameters. This allows props to be used in MATCH and MERGE
 			// clause for instance, where a property expression is not allowed.
 			props := make(Props)
-			innerT := inner.Type()
-			for i := 0; i < innerT.NumField(); i++ {
-				f := inner.Field(i)
-				if !f.IsValid() || !f.CanInterface() || f.IsZero() {
-					continue
+			var bindFieldsFrom func(reflect.Value)
+			bindFieldsFrom = func(value reflect.Value) {
+				inner := value
+				for inner.Kind() == reflect.Ptr {
+					inner = inner.Elem()
 				}
-				fT := innerT.Field(i)
-				name, ok := extractJsonFieldName(fT)
-				if !ok {
-					continue
-				}
-				propName := name
-				if m.expr != "" {
-					propName = m.expr + "_" + name
-				}
+				innerT := value.Type()
+				for i := 0; i < innerT.NumField(); i++ {
+					f := inner.Field(i)
+					if !f.IsValid() || !f.CanInterface() || f.IsZero() {
+						continue
+					}
+					fT := innerT.Field(i)
+					name, ok := extractJsonFieldName(fT)
+					if !ok {
+						if fT.Anonymous {
+							bindFieldsFrom(f)
+						}
+						continue
+					}
+					propName := name
+					if m.expr != "" {
+						propName = m.expr + "_" + name
+					}
 
-				prop := f.Interface()
-				props[name] = Param{
-					Name:  propName,
-					Value: &prop,
+					prop := f.Interface()
+					props[name] = Param{
+						Name:  propName,
+						Value: &prop,
+					}
 				}
 			}
 			if len(props) > 0 {
