@@ -72,7 +72,7 @@ func main() {
 
     fmt.Printf("person: %v\n", person)
     // Output:
-	// person: {{some-unique-id} Spongebob Squarepants 20}
+    // person: {{some-unique-id} Spongebob Squarepants 20}
 }
 ```
 
