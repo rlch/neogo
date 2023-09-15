@@ -103,10 +103,11 @@ func bindCasted[C any](
 var emptyInterface = reflect.TypeOf((*any)(nil)).Elem()
 
 func (r *registry) bindValue(from any, to reflect.Value) error {
-	if to.Kind() == reflect.Ptr && to.Type().Elem() == emptyInterface {
+	toT := to.Type()
+	if to.Kind() == reflect.Ptr && toT.Elem() == emptyInterface {
 		to.Elem().Set(reflect.ValueOf(from))
 		return nil
-	} else if to.Type() == emptyInterface && to.CanSet() {
+	} else if toT == emptyInterface && to.CanSet() {
 		to.Set(reflect.ValueOf(from))
 		return nil
 	}
@@ -120,8 +121,15 @@ func (r *registry) bindValue(from any, to reflect.Value) error {
 		if ok {
 			return nil
 		}
-		if to.Type().Implements(rAbstract) ||
-			to.Elem().Type().Implements(rAbstract) {
+		innerT := toT
+		for innerT.Kind() == reflect.Ptr {
+			innerT = innerT.Elem()
+		}
+		if (toT.Implements(rAbstract) ||
+			toT.Elem().Implements(rAbstract)) &&
+			// We enforce that abstract nodes must be interfaces. Some hacking could
+			// relax this.
+			innerT.Kind() == reflect.Interface {
 			return r.bindAbstractNode(fromVal, to)
 		}
 		// TODO: Support abstract nodes
