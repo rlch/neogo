@@ -94,10 +94,15 @@ func ExampleDriver() {
 		Create(db.Node(&person)).
 		Set(db.SetPropValue(&person.Age, 20)).
 		Return(&person).
+		Print().
 		Run(ctx)
 	fmt.Printf("err: %v\n", err)
 	fmt.Printf("person: %v\n", person)
-	// Output: err: <nil>
+	// Output:
+	// CREATE (person:Person {name: $person_name, surname: $person_surname})
+	// SET person.age = $v1
+	// RETURN person
+	// err: <nil>
 	// person: {{some-unique-id} Spongebob Squarepants 20}
 }
 

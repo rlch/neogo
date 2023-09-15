@@ -63,10 +63,16 @@ func main() {
         Create(db.Node(&person)).
         Set(db.SetPropValue(&person.Age, 20)).
         Return(&person).
+        Print().
         Run(ctx)
+    // Output:
+    // CREATE (person:Person {name: $person_name, surname: $person_surname})
+    // SET person.age = $v1
+    // RETURN person
 
     fmt.Printf("person: %v\n", person)
-    // person: {{some-unique-id} Spongebob Squarepants 20}
+    // Output:
+	// person: {{some-unique-id} Spongebob Squarepants 20}
 }
 ```
 
