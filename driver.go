@@ -52,17 +52,18 @@ type execConfig struct {
 	*neo4j.TransactionConfig
 }
 
-type txWork func(begin func() client.Client) error
+// TxWork is a function that allows Cypher to be executed within a transaction.
+type TxWork func(begin func() client.Client) error
 
 type readSession interface {
 	Session() neo4j.SessionWithContext
 	Close(ctx context.Context) error
-	ReadTx(ctx context.Context, work txWork, configurers ...func(*neo4j.TransactionConfig)) error
+	ReadTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error
 }
 
 type writeSession interface {
 	readSession
-	WriteTx(ctx context.Context, work txWork, configurers ...func(*neo4j.TransactionConfig)) error
+	WriteTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error
 }
 
 type (
@@ -143,7 +144,7 @@ func (s *session) Close(ctx context.Context) error {
 	return s.session.Close(ctx)
 }
 
-func (s *session) ReadTx(ctx context.Context, work txWork, configurers ...func(*neo4j.TransactionConfig)) error {
+func (s *session) ReadTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		return nil, work(func() client.Client {
 			c := s.newClient(internal.NewCypherClient())
@@ -154,7 +155,7 @@ func (s *session) ReadTx(ctx context.Context, work txWork, configurers ...func(*
 	return err
 }
 
-func (s *session) WriteTx(ctx context.Context, work txWork, configurers ...func(*neo4j.TransactionConfig)) error {
+func (s *session) WriteTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		return nil, work(func() client.Client {
 			c := s.newClient(internal.NewCypherClient())
