@@ -475,13 +475,12 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 			props := make(Props)
 			var bindFieldsFrom func(reflect.Value)
 			bindFieldsFrom = func(value reflect.Value) {
-				inner := value
-				for inner.Kind() == reflect.Ptr {
-					inner = inner.Elem()
+				for value.Kind() == reflect.Ptr {
+					value = value.Elem()
 				}
 				innerT := value.Type()
 				for i := 0; i < innerT.NumField(); i++ {
-					f := inner.Field(i)
+					f := value.Field(i)
 					if !f.IsValid() || !f.CanInterface() || f.IsZero() {
 						continue
 					}
@@ -505,6 +504,7 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 					}
 				}
 			}
+			bindFieldsFrom(inner)
 			if len(props) > 0 {
 				if m.variable == nil {
 					m.variable = &Variable{}
