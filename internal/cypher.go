@@ -106,12 +106,12 @@ func (cy *cypher) writeNode(m *member) {
 					cy.WriteString(string(m.variable.PropsExpr))
 				}
 			}
-			if m.props != "" {
+			if m.propsParam != "" {
 				resolvedProps++
 				if padProps {
 					cy.WriteRune(' ')
 				}
-				cy.WriteString(m.props)
+				cy.WriteString(m.propsParam)
 			}
 			if resolvedProps > 1 {
 				panic(errUnresolvedProps)
@@ -172,9 +172,9 @@ func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
 					inner = inner + " " + string(m.variable.PropsExpr)
 				}
 			}
-			if m.props != "" {
+			if m.propsParam != "" {
 				resolvedProps++
-				inner = inner + " " + m.props
+				inner = inner + " " + m.propsParam
 			}
 			if resolvedProps > 1 {
 				panic(errUnresolvedProps)

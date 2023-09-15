@@ -404,9 +404,9 @@ func TestCallSubquery(t *testing.T) {
 
 	t.Run("Variable collisions are avoided", func(t *testing.T) {
 		c := internal.NewCypherClient()
-		v1 := db.Var([]int{1, 2, 3})
-		v2 := db.Var([]int{4, 5, 6})
-		v3 := db.Var([]int{7, 8, 9})
+		v1 := []int{1, 2, 3}
+		v2 := []int{4, 5, 6}
+		v3 := []int{7, 8, 9}
 		cy, err := c.
 			With(&v1).
 			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
@@ -420,27 +420,27 @@ func TestCallSubquery(t *testing.T) {
 
 		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
-			WITH $ptr AS ptr
+			WITH $slice AS slice
 			CALL {
-			  WITH ptr
-			  RETURN $ptr1 AS ptr1
+			  WITH slice
+			  RETURN $slice1 AS slice1
 			}
-			WITH ptr, ptr1
+			WITH slice, slice1
 			CALL {
-			  WITH ptr, ptr1
-			  RETURN $ptr2 AS ptr2
+			  WITH slice, slice1
+			  RETURN $slice2 AS slice2
 			}
-			RETURN ptr, ptr1, ptr2
+			RETURN slice, slice1, slice2
 					`,
 			Bindings: map[string]reflect.Value{
-				"ptr":  reflect.ValueOf(&v1),
-				"ptr1": reflect.ValueOf(&v2),
-				"ptr2": reflect.ValueOf(&v3),
+				"slice":  reflect.ValueOf(&v1),
+				"slice1": reflect.ValueOf(&v2),
+				"slice2": reflect.ValueOf(&v3),
 			},
 			Parameters: map[string]any{
-				"ptr":  &v1,
-				"ptr1": &v2,
-				"ptr2": &v3,
+				"slice":  &v1,
+				"slice1": &v2,
+				"slice2": &v3,
 			},
 		})
 	})

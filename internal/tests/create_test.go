@@ -230,11 +230,12 @@ func TestCreate(t *testing.T) {
 
 			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
-					CREATE (n:Person $n)
+					CREATE (n:Person {name: $n_name, position: $n_position})
 					RETURN n
 					`,
 				Parameters: map[string]any{
-					"n": &n,
+					"n_name":     n.Name,
+					"n_position": n.Position,
 				},
 				Bindings: map[string]reflect.Value{
 					"n": reflect.ValueOf(&n),

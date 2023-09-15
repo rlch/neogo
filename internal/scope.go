@@ -47,8 +47,8 @@ type (
 		expr string
 		// alias is the qualified name of the variable
 		alias string
-		// The name of the property in the cypher query
-		props string
+		// The name of the properties as a parameter in the cypher query
+		propsParam string
 
 		variable *Variable
 
@@ -82,7 +82,7 @@ func (m *member) Print() {
   variable: %+v,
   where: %+v,
   projection: %+v,
-}`+"\n", m.identifier, m.isNew, m.expr, m.alias, m.props, m.variable, m.where, m.projectionBody)
+}`+"\n", m.identifier, m.isNew, m.expr, m.alias, m.propsParam, m.variable, m.where, m.projectionBody)
 }
 
 func (s *Scope) clone() *Scope {
@@ -275,7 +275,7 @@ func (s *Scope) bindFields(strct reflect.Value, memberName string) {
 		vf := strct.Field(i)
 		vfT := vsT.Field(i)
 
-		jsTag, ok := vsT.Field(i).Tag.Lookup("json")
+		accessor, ok := extractJsonFieldName(vsT.Field(i))
 		if !ok {
 			// Recurse into composite fields
 			if vfT.Anonymous {
@@ -283,7 +283,6 @@ func (s *Scope) bindFields(strct reflect.Value, memberName string) {
 			}
 			continue
 		}
-		accessor := strings.Split(jsTag, ",")[0]
 		ptr := uintptr(vf.Addr().UnsafePointer())
 		f := field{
 			name:       accessor,
@@ -440,8 +439,8 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		if m.alias != "" {
 			panic(fmt.Errorf("%w: alias %s already bound to expression %s", ErrAliasAlreadyBound, m.alias, m.expr))
 		}
-		switch inner.Kind() {
-		case reflect.Struct, reflect.Slice:
+
+		injectParams := func() {
 			effProp := v
 			effName := m.alias
 			if effName == "" {
@@ -454,15 +453,56 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 			}
 			param := s.addParameter(effProp, effName)
 			if canHaveProps {
-				m.props = param
+				m.propsParam = param
 			} else {
 				m.alias = m.expr
 				m.expr = param
 			}
-		case reflect.Map:
-			param := s.addParameter(v, m.expr)
-			m.alias = m.expr
-			m.expr = param
+		}
+		switch inner.Kind() {
+		case reflect.Struct:
+			if inner.CanInterface() {
+				// Special case, we don't inject the fields of a Param.
+				if _, ok := inner.Interface().(Param); ok {
+					injectParams()
+					break
+				}
+			}
+
+			// Instead of injecting struct as parameter, inject its fields as
+			// qualified parameters. This allows props to be used in MATCH and MERGE
+			// clause for instance, where a property expression is not allowed.
+			props := make(Props)
+			innerT := inner.Type()
+			for i := 0; i < innerT.NumField(); i++ {
+				f := inner.Field(i)
+				if !f.IsValid() || !f.CanInterface() || f.IsZero() {
+					continue
+				}
+				fT := innerT.Field(i)
+				name, ok := extractJsonFieldName(fT)
+				if !ok {
+					continue
+				}
+				propName := name
+				if m.expr != "" {
+					propName = m.expr + "_" + name
+				}
+
+				prop := f.Interface()
+				props[name] = Param{
+					Name:  propName,
+					Value: &prop,
+				}
+			}
+			if len(props) > 0 {
+				if m.variable == nil {
+					m.variable = &Variable{}
+				}
+				m.variable.Props = props
+			}
+		case reflect.Slice, reflect.Map:
+			injectParams()
 		}
 	}
 	return m
