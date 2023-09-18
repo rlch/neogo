@@ -149,6 +149,7 @@ func (c *CypherReader) Return(identifiers ...any) *CypherRunner {
 }
 
 func (c *CypherReader) Cypher(query func(scope *Scope) string) *CypherQuerier {
+	c.isWrite = true
 	q := query(c.Scope)
 	c.WriteString(q + "\n")
 	return newCypherQuerier(c.cypher)

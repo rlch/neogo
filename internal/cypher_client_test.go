@@ -34,12 +34,34 @@ func TestCypherClient(t *testing.T) {
 			assert.Equal(t, true, cy.isWrite)
 		})
 
+		t.Run("true when using Cypher", func(t *testing.T) {
+			cy := newCypher()
+			newCypherClient(cy).
+				Cypher(func(scope *Scope) string {
+					return ""
+				}).
+				Return("y")
+			assert.Equal(t, true, cy.isWrite)
+		})
+
 		t.Run("true when using write clauses in subquery", func(t *testing.T) {
 			cy := newCypher()
 			newCypherClient(cy).
 				Subquery(func(c *CypherClient) *CypherRunner {
 					return c.Create(&CypherPattern{
 						ns: []*nodePattern{{data: "n"}},
+					}).CypherRunner
+				}).
+				Return("n")
+			assert.Equal(t, true, cy.isWrite)
+		})
+
+		t.Run("true when using Cypher in subquery", func(t *testing.T) {
+			cy := newCypher()
+			newCypherClient(cy).
+				Subquery(func(c *CypherClient) *CypherRunner {
+					return c.Cypher(func(scope *Scope) string {
+						return ""
 					}).CypherRunner
 				}).
 				Return("n")
