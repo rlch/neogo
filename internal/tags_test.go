@@ -6,6 +6,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type organism interface {
+	IAbstract
+}
+
+type baseOrganism struct {
+	Abstract `neo4j:"Organism"`
+	Node
+}
+
+func (baseOrganism) Implementers() []IAbstract {
+	return []IAbstract{}
+}
+
 type person struct {
 	Node `neo4j:"Person"`
 }
@@ -46,6 +59,11 @@ func TestExtractNodeLabel(t *testing.T) {
 
 	t.Run("only extract the labels from structs", func(t *testing.T) {
 		assert.Equal(t, []string{"Person", "Swedish"}, ExtractNodeLabels(personWithNonStructLabels{}))
+	})
+
+	t.Run("extracts from abstract types", func(t *testing.T) {
+		var o organism = &baseOrganism{}
+		assert.Equal(t, []string{"Organism"}, ExtractNodeLabels(o))
 	})
 }
 

@@ -2,7 +2,6 @@ package neogo
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
