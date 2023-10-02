@@ -8,21 +8,24 @@ import (
 
 const neo4jTag = "neo4j"
 
-func ExtractNodeLabels(node any) []string {
-	if node == nil {
+func ExtractNodeLabels(i any) []string {
+	if i == nil {
 		return nil
 	}
-	if _, ok := node.(INode); !ok {
-		v := reflect.ValueOf(node)
+	if _, ok := i.(INode); !ok {
+		v := reflect.ValueOf(i)
 		for v.Kind() == reflect.Ptr {
 			v = v.Elem()
+			if n, ok := v.Interface().(INode); ok {
+				return ExtractNodeLabels(n)
+			}
 		}
 		if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
 			return ExtractNodeLabels(reflect.Zero(v.Type().Elem()).Interface())
 		}
 		return nil
 	}
-	tags, err := extractNeo4JName(node)
+	tags, err := extractNeo4JName(i)
 	if err != nil {
 		return nil
 	}

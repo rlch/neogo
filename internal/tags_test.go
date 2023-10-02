@@ -65,6 +65,13 @@ func TestExtractNodeLabel(t *testing.T) {
 		var o organism = &baseOrganism{}
 		assert.Equal(t, []string{"Organism"}, ExtractNodeLabels(o))
 	})
+
+	t.Run("extracts from pointers to abstract types", func(t *testing.T) {
+		var o organism = &baseOrganism{}
+		o1 := &o
+		o2 := &o1
+		assert.Equal(t, []string{"Organism"}, ExtractNodeLabels(o2))
+	})
 }
 
 type friendship struct {
