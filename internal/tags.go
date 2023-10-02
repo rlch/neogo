@@ -103,7 +103,7 @@ func extractNeo4JName(instance any, fields ...string) ([]string, error) {
 	return tags, nil
 }
 
-func extractJsonFieldName(field reflect.StructField) (string, bool) {
+func extractJSONFieldName(field reflect.StructField) (string, bool) {
 	jsTag, ok := field.Tag.Lookup("json")
 	if !ok {
 		return "", false

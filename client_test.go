@@ -272,7 +272,6 @@ func TestStream(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("should fail when invalid parameters passed", func(t *testing.T) {
-		fmt.Println("first")
 		d, m := newHybridDriver(t, ctx)
 		m.Bind(nil)
 
@@ -287,7 +286,6 @@ func TestStream(t *testing.T) {
 	})
 
 	t.Run("should stream when valid query", func(t *testing.T) {
-		fmt.Println("second")
 		records := make([]map[string]any, 11)
 		for i := range records {
 			records[i] = map[string]any{"i": i}

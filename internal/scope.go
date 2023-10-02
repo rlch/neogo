@@ -275,7 +275,7 @@ func (s *Scope) bindFields(strct reflect.Value, memberName string) {
 		vf := strct.Field(i)
 		vfT := vsT.Field(i)
 
-		accessor, ok := extractJsonFieldName(vsT.Field(i))
+		accessor, ok := extractJSONFieldName(vsT.Field(i))
 		if !ok {
 			// Recurse into composite fields
 			if vfT.Anonymous {
@@ -485,7 +485,7 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 						continue
 					}
 					fT := innerT.Field(i)
-					name, ok := extractJsonFieldName(fT)
+					name, ok := extractJSONFieldName(fT)
 					if !ok {
 						if fT.Anonymous {
 							bindFieldsFrom(f)
