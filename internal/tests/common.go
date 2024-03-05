@@ -114,6 +114,7 @@ func (b BaseOrganism) Implementers() []internal.IAbstract {
 	return []internal.IAbstract{
 		&Human{},
 		&Dog{},
+		&Chimera{},
 	}
 }
 
@@ -125,4 +126,22 @@ type Human struct {
 type Dog struct {
 	BaseOrganism `neo4j:"Dog"`
 	Borfs        bool `json:"borfs"`
+}
+
+type CursedOrganism interface {
+	Organism
+	Masochistic() bool
+}
+
+type BaseCursedOrganism struct {
+	internal.Abstract `neo4j:"CursedOrganism"`
+}
+
+type Chimera struct {
+	Human
+	BaseCursedOrganism `neo4j:"Chimera"`
+}
+
+func (c Chimera) Masochistic() bool {
+	return true
 }

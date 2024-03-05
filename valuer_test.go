@@ -13,33 +13,6 @@ import (
 	"github.com/rlch/neogo/internal/tests"
 )
 
-// TODO: Multi-inheritance tests
-// type (
-// 	// 	     leaf
-// 	//      ┌──────┐
-// 	//      ▼      ▼
-// 	//   branch  stick
-// 	//   ┌────┐
-// 	//   ▼    ▼
-// 	// tree  log
-// 	Leaf struct {
-// 		internal.Abstract `neo4j:"Leaf"`
-// 		internal.Node
-// 	}
-// 	Branch struct {
-// 		Leaf `neo4j:"Branch"`
-// 	}
-// 	Stick struct {
-// 		Leaf `neo4j:"Stick"`
-// 	}
-// 	Tree struct {
-// 		Branch `neo4j:"Tree"`
-// 	}
-// 	Log struct {
-// 		Branch `neo4j:"Log"`
-// 	}
-// )
-
 type (
 	simpleValuer[T neo4j.RecordValue] struct {
 		shouldErr bool
@@ -471,6 +444,32 @@ func TestBindValue(t *testing.T) {
 				Alive: true,
 			},
 			Name: "Raqeeb",
+		}, to)
+	})
+
+	t.Run("Abstract using multi-inherited concrete types", func(t *testing.T) {
+		rWithAbstract := &registry{
+			abstractNodes: []IAbstract{
+				&tests.Human{},
+				&tests.Chimera{},
+			},
+		}
+		var to tests.Organism
+		err := rWithAbstract.bindValue(neo4j.Node{
+			Labels: []string{"Chimera", "CursedOrganism", "Human", "Organism"},
+			Props: map[string]any{
+				"alive": true,
+				"name":  "Richard",
+			},
+		}, reflect.ValueOf(&to))
+		assert.NoError(t, err)
+		assert.Equal(t, &tests.Chimera{
+			Human: tests.Human{
+				Name: "Richard",
+				BaseOrganism: tests.BaseOrganism{
+					Alive: true,
+				},
+			},
 		}, to)
 	})
 
