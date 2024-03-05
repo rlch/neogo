@@ -454,7 +454,7 @@ func TestBindValue(t *testing.T) {
 				&tests.Chimera{},
 			},
 		}
-		var to tests.Organism
+		var to tests.CursedOrganism
 		err := rWithAbstract.bindValue(neo4j.Node{
 			Labels: []string{"Chimera", "CursedOrganism", "Human", "Organism"},
 			Props: map[string]any{
