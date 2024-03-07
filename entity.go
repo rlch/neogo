@@ -31,6 +31,14 @@ func NodeWithID[N any, PN interface {
 
 var rAbstract = reflect.TypeOf((*IAbstract)(nil)).Elem()
 
+func ExtractNodeLabels(i any) []string {
+	return internal.ExtractNodeLabels(i)
+}
+
+func ExtractRelationshipType(relationship any) string {
+	return internal.ExtractRelationshipType(relationship)
+}
+
 type (
 	// INode is an interface for nodes.
 	// See [Node] for the default implementation.
