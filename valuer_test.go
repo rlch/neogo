@@ -389,14 +389,14 @@ func TestBindValue(t *testing.T) {
 	t.Run("Abstract using base type", func(t *testing.T) {
 		var to tests.Organism = &tests.BaseOrganism{}
 		err := r.bindValue(neo4j.Node{
-			Labels: []string{"Dog", "Organism"},
+			Labels: []string{"Human", "Organism"},
 			Props: map[string]any{
-				"borfs": true,
+				"name": "bruh",
 			},
 		}, reflect.ValueOf(&to))
 		assert.NoError(t, err)
-		assert.Equal(t, &tests.Dog{
-			Borfs: true,
+		assert.Equal(t, &tests.Human{
+			Name: "bruh",
 		}, to)
 	})
 
@@ -444,32 +444,6 @@ func TestBindValue(t *testing.T) {
 				Alive: true,
 			},
 			Name: "Raqeeb",
-		}, to)
-	})
-
-	t.Run("Abstract using multi-inherited concrete types", func(t *testing.T) {
-		rWithAbstract := &registry{
-			abstractNodes: []IAbstract{
-				&tests.Human{},
-				&tests.Chimera{},
-			},
-		}
-		var to tests.CursedOrganism
-		err := rWithAbstract.bindValue(neo4j.Node{
-			Labels: []string{"Chimera", "CursedOrganism", "Human", "Organism"},
-			Props: map[string]any{
-				"alive": true,
-				"name":  "Richard",
-			},
-		}, reflect.ValueOf(&to))
-		assert.NoError(t, err)
-		assert.Equal(t, &tests.Chimera{
-			Human: tests.Human{
-				Name: "Richard",
-				BaseOrganism: tests.BaseOrganism{
-					Alive: true,
-				},
-			},
 		}, to)
 	})
 

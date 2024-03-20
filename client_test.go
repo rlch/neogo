@@ -239,6 +239,7 @@ func TestUnmarshalResult(t *testing.T) {
 				registry: registry{
 					abstractNodes: []IAbstract{
 						&tests.BaseOrganism{},
+						&tests.BasePet{},
 					},
 				},
 			}
@@ -255,6 +256,7 @@ func TestUnmarshalResult(t *testing.T) {
 						neo4j.Node{
 							Labels: []string{
 								"Organism",
+								"Pet",
 								"Dog",
 							},
 							Props: map[string]any{
