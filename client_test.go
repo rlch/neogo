@@ -78,6 +78,42 @@ func TestUnmarshalResult(t *testing.T) {
 					neo4j.Node{
 						Labels: []string{
 							"Organism",
+							"Human",
+						},
+						Props: map[string]any{
+							"id":   "human",
+							"name": "waltuh",
+						},
+					},
+				},
+			}
+			err := s.unmarshalRecord(cy, record)
+			assert.NoError(t, err)
+			assert.Equal(t, &tests.Human{
+				BaseOrganism: tests.BaseOrganism{
+					Node: internal.Node{
+						ID: "human",
+					},
+					Alive: false,
+				},
+				Name: "waltuh",
+			}, n)
+		})
+
+		t.Run("binds to multi-polymorphic abstract node", func(t *testing.T) {
+			var n tests.Pet = &tests.BasePet{}
+			cy := &internal.CompiledCypher{
+				Bindings: map[string]reflect.Value{
+					"n": reflect.ValueOf(&n),
+				},
+			}
+			record := &neo4j.Record{
+				Keys: []string{"n"},
+				Values: []any{
+					neo4j.Node{
+						Labels: []string{
+							"Organism",
+							"Pet",
 							"Dog",
 						},
 						Props: map[string]any{
@@ -91,11 +127,13 @@ func TestUnmarshalResult(t *testing.T) {
 			err := s.unmarshalRecord(cy, record)
 			assert.NoError(t, err)
 			assert.Equal(t, &tests.Dog{
-				BaseOrganism: tests.BaseOrganism{
-					Node: internal.Node{
-						ID: "dog",
+				BasePet: tests.BasePet{
+					BaseOrganism: tests.BaseOrganism{
+						Node: internal.Node{
+							ID: "dog",
+						},
+						Alive: true,
 					},
-					Alive: true,
 				},
 				Borfs: true,
 			}, n)
@@ -247,11 +285,13 @@ func TestUnmarshalResult(t *testing.T) {
 			err := s.unmarshalRecords(cy, records)
 			assert.NoError(t, err)
 			assert.Equal(t, &tests.Dog{
-				BaseOrganism: tests.BaseOrganism{
-					Node: internal.Node{
-						ID: "dog",
+				BasePet: tests.BasePet{
+					BaseOrganism: tests.BaseOrganism{
+						Node: internal.Node{
+							ID: "dog",
+						},
+						Alive: true,
 					},
-					Alive: true,
 				},
 				Borfs: true,
 			}, n[0])

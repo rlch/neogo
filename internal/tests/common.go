@@ -104,10 +104,33 @@ type Organism interface {
 	internal.IAbstract
 }
 
+type Pet interface {
+	internal.IAbstract
+	Organism
+	IsCute() bool
+}
+
 type BaseOrganism struct {
 	internal.Abstract `neo4j:"Organism"`
 	internal.Node
 	Alive bool `json:"alive"`
+}
+
+type BasePet struct {
+	internal.Abstract `neo4j:"Pet"`
+	BaseOrganism
+
+	Cute bool `json:"cute"`
+}
+
+func (b BasePet) IsCute() bool {
+	return b.Cute
+}
+
+func (b BasePet) Implementers() []internal.IAbstract {
+	return []internal.IAbstract{
+		&Dog{},
+	}
 }
 
 func (b BaseOrganism) Implementers() []internal.IAbstract {
@@ -124,8 +147,8 @@ type Human struct {
 }
 
 type Dog struct {
-	BaseOrganism `neo4j:"Dog"`
-	Borfs        bool `json:"borfs"`
+	BasePet `neo4j:"Dog"`
+	Borfs   bool `json:"borfs"`
 }
 
 type CursedOrganism interface {
