@@ -154,41 +154,41 @@ func (r *registry) bindValue(from any, to reflect.Value) error {
 		i := value.Interface()
 		switch i.(type) {
 		case bool:
-			return true, bindCasted[bool](cast.ToBoolE, from, value)
+			return true, bindCasted(cast.ToBoolE, from, value)
 		case string:
-			return true, bindCasted[string](cast.ToStringE, from, value)
+			return true, bindCasted(cast.ToStringE, from, value)
 		case int:
-			return true, bindCasted[int](cast.ToIntE, from, value)
+			return true, bindCasted(cast.ToIntE, from, value)
 		case int8:
-			return true, bindCasted[int8](cast.ToInt8E, from, value)
+			return true, bindCasted(cast.ToInt8E, from, value)
 		case int16:
-			return true, bindCasted[int16](cast.ToInt16E, from, value)
+			return true, bindCasted(cast.ToInt16E, from, value)
 		case int32:
-			return true, bindCasted[int32](cast.ToInt32E, from, value)
+			return true, bindCasted(cast.ToInt32E, from, value)
 		case int64:
-			return true, bindCasted[int64](cast.ToInt64E, from, value)
+			return true, bindCasted(cast.ToInt64E, from, value)
 		case uint:
-			return true, bindCasted[uint](cast.ToUintE, from, value)
+			return true, bindCasted(cast.ToUintE, from, value)
 		case uint8:
-			return true, bindCasted[uint8](cast.ToUint8E, from, value)
+			return true, bindCasted(cast.ToUint8E, from, value)
 		case uint16:
-			return true, bindCasted[uint16](cast.ToUint16E, from, value)
+			return true, bindCasted(cast.ToUint16E, from, value)
 		case uint32:
-			return true, bindCasted[uint32](cast.ToUint32E, from, value)
+			return true, bindCasted(cast.ToUint32E, from, value)
 		case uint64:
-			return true, bindCasted[uint64](cast.ToUint64E, from, value)
+			return true, bindCasted(cast.ToUint64E, from, value)
 		case float32:
-			return true, bindCasted[float32](cast.ToFloat32E, from, value)
+			return true, bindCasted(cast.ToFloat32E, from, value)
 		case float64:
-			return true, bindCasted[float64](cast.ToFloat64E, from, value)
+			return true, bindCasted(cast.ToFloat64E, from, value)
 		case []int:
-			return true, bindCasted[[]int](cast.ToIntSliceE, from, value)
+			return true, bindCasted(cast.ToIntSliceE, from, value)
 		case []string:
-			return true, bindCasted[[]string](cast.ToStringSliceE, from, value)
+			return true, bindCasted(cast.ToStringSliceE, from, value)
 		case time.Time:
-			return true, bindCasted[time.Time](cast.ToTimeE, from, value)
+			return true, bindCasted(cast.ToTimeE, from, value)
 		case time.Duration:
-			return true, bindCasted[time.Duration](cast.ToDurationE, from, value)
+			return true, bindCasted(cast.ToDurationE, from, value)
 		}
 		return false, nil
 	}()
