@@ -430,6 +430,9 @@ func (s *session) unmarshalRecords(
 			} else {
 				to.Set(reflect.New(to.Type()).Elem())
 			}
+			if to.CanAddr() {
+				to = to.Addr()
+			}
 			if err := s.bindValue(value, to); err != nil {
 				return fmt.Errorf(
 					"error binding key %q to type %s: %w",

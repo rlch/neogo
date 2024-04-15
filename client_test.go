@@ -234,6 +234,29 @@ func TestUnmarshalResult(t *testing.T) {
 			assert.Equal(t, 2, n[1])
 		})
 
+		t.Run("binds to [][]any", func(t *testing.T) {
+			var n [][]any
+			cy := &internal.CompiledCypher{
+				Bindings: map[string]reflect.Value{
+					"n": reflect.ValueOf(&n),
+				},
+			}
+			records := []*neo4j.Record{
+				{
+					Keys:   []string{"n"},
+					Values: []any{[]any{"a", "b"}},
+				},
+				{
+					Keys:   []string{"n"},
+					Values: []any{[]any{"c", "d"}},
+				},
+			}
+			err := s.unmarshalRecords(cy, records)
+			assert.NoError(t, err)
+			assert.Equal(t, []any{"a", "b"}, n[0])
+			assert.Equal(t, []any{"c", "d"}, n[1])
+		})
+
 		t.Run("binds to abstract nodes", func(t *testing.T) {
 			s := &session{
 				registry: registry{
