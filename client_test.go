@@ -579,9 +579,7 @@ func TestClient(t *testing.T) {
 			Subquery(func(c client.Client) client.Runner {
 				return c.Match(db.Node("m"))
 			}).
-			Cypher(func(scope client.Scope) string {
-				return ""
-			}).
+			Cypher("").
 			Unwind("a", "a").
 			Print().
 			Run(context.Background())
