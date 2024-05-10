@@ -37,9 +37,7 @@ func TestCypherClient(t *testing.T) {
 		t.Run("true when using Cypher", func(t *testing.T) {
 			cy := newCypher()
 			newCypherClient(cy).
-				Cypher(func(scope *Scope) string {
-					return ""
-				}).
+				Cypher("").
 				Return("y")
 			assert.Equal(t, true, cy.isWrite)
 		})
@@ -60,9 +58,7 @@ func TestCypherClient(t *testing.T) {
 			cy := newCypher()
 			newCypherClient(cy).
 				Subquery(func(c *CypherClient) *CypherRunner {
-					return c.Cypher(func(scope *Scope) string {
-						return ""
-					}).CypherRunner
+					return c.Cypher("").CypherRunner
 				}).
 				Return("n")
 			assert.Equal(t, true, cy.isWrite)
