@@ -140,13 +140,13 @@ func ExampleDriver_readSession() {
 			panic(err)
 		}
 	}()
-	err := session.ReadTx(ctx, func(begin func() query.Query) error {
-		if err := begin().
+	err := session.ReadTx(ctx, func(start func() query.Query) error {
+		if err := start().
 			Unwind("range(0, 10)", "i").
 			Return(db.Qual(&ns, "i")).Run(ctx); err != nil {
 			return err
 		}
-		if err := begin().
+		if err := start().
 			Unwind(&ns, "i").
 			Return(db.Qual(&nsTimes2, "i * 2")).Run(ctx); err != nil {
 			return err
