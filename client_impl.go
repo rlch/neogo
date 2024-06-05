@@ -9,23 +9,23 @@ import (
 	"github.com/goccy/go-json"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
-	"github.com/rlch/neogo/client"
 	"github.com/rlch/neogo/internal"
+	"github.com/rlch/neogo/query"
 )
 
 type (
 	clientImpl struct {
 		*session
 		cy *internal.CypherClient
-		client.Reader
-		client.Updater[client.Querier]
+		query.Reader
+		query.Updater[query.Querier]
 	}
 	querierImpl struct {
 		*session
 		cy *internal.CypherQuerier
-		client.Reader
-		client.Runner
-		client.Updater[client.Querier]
+		query.Reader
+		query.Runner
+		query.Updater[query.Querier]
 	}
 	readerImpl struct {
 		*session
@@ -34,7 +34,7 @@ type (
 	yielderImpl struct {
 		*session
 		cy *internal.CypherYielder
-		client.Querier
+		query.Querier
 	}
 	updaterImpl[To, ToCypher any] struct {
 		*session
@@ -61,10 +61,10 @@ func (s *session) newClient(cy *internal.CypherClient) *clientImpl {
 		session: s,
 		cy:      cy,
 		Reader:  s.newReader(cy.CypherReader),
-		Updater: newUpdater[client.Querier, *internal.CypherQuerier](
+		Updater: newUpdater[query.Querier, *internal.CypherQuerier](
 			s,
 			cy.CypherUpdater,
-			func(c *internal.CypherQuerier) client.Querier {
+			func(c *internal.CypherQuerier) query.Querier {
 				return s.newQuerier(c)
 			},
 		),
@@ -77,10 +77,10 @@ func (s *session) newQuerier(cy *internal.CypherQuerier) *querierImpl {
 		cy:      cy,
 		Reader:  s.newReader(cy.CypherReader),
 		Runner:  s.newRunner(cy.CypherRunner),
-		Updater: newUpdater[client.Querier, *internal.CypherQuerier](
+		Updater: newUpdater[query.Querier, *internal.CypherQuerier](
 			s,
 			cy.CypherUpdater,
-			func(c *internal.CypherQuerier) client.Querier {
+			func(c *internal.CypherQuerier) query.Querier {
 				return s.newQuerier(c)
 			},
 		),
@@ -118,11 +118,11 @@ func (s *session) newRunner(cy *internal.CypherRunner) *runnerImpl {
 	return &runnerImpl{session: s, cy: cy}
 }
 
-func (c *clientImpl) Use(graphExpr string) client.Querier {
+func (c *clientImpl) Use(graphExpr string) query.Querier {
 	return c.newQuerier(c.cy.Use(graphExpr))
 }
 
-func (c *clientImpl) Union(unions ...func(c client.Client) client.Runner) client.Querier {
+func (c *clientImpl) Union(unions ...func(c query.Query) query.Runner) query.Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
 		union := union
@@ -133,7 +133,7 @@ func (c *clientImpl) Union(unions ...func(c client.Client) client.Runner) client
 	return c.newQuerier(c.cy.Union(inUnions...))
 }
 
-func (c *clientImpl) UnionAll(unions ...func(c client.Client) client.Runner) client.Querier {
+func (c *clientImpl) UnionAll(unions ...func(c query.Query) query.Runner) query.Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
 		union := union
@@ -144,15 +144,15 @@ func (c *clientImpl) UnionAll(unions ...func(c client.Client) client.Runner) cli
 	return c.newQuerier(c.cy.UnionAll(inUnions...))
 }
 
-func (c *readerImpl) OptionalMatch(patterns internal.Patterns) client.Querier {
+func (c *readerImpl) OptionalMatch(patterns internal.Patterns) query.Querier {
 	return c.newQuerier(c.cy.OptionalMatch(patterns))
 }
 
-func (c *readerImpl) Match(patterns internal.Patterns) client.Querier {
+func (c *readerImpl) Match(patterns internal.Patterns) query.Querier {
 	return c.newQuerier(c.cy.Match(patterns))
 }
 
-func (c *readerImpl) Subquery(subquery func(c client.Client) client.Runner) client.Querier {
+func (c *readerImpl) Subquery(subquery func(c query.Query) query.Runner) query.Querier {
 	inSubquery := func(cc *internal.CypherClient) *internal.CypherRunner {
 		runner := subquery(c.newClient(cc))
 		return runner.(baseRunner).GetRunner()
@@ -160,23 +160,23 @@ func (c *readerImpl) Subquery(subquery func(c client.Client) client.Runner) clie
 	return c.newQuerier(c.cy.Subquery(inSubquery))
 }
 
-func (c *readerImpl) With(identifiers ...any) client.Querier {
+func (c *readerImpl) With(identifiers ...any) query.Querier {
 	return c.newQuerier(c.cy.With(identifiers...))
 }
 
-func (c *readerImpl) Unwind(expr any, as string) client.Querier {
+func (c *readerImpl) Unwind(expr any, as string) query.Querier {
 	return c.newQuerier(c.cy.Unwind(expr, as))
 }
 
-func (c *readerImpl) Call(procedure string) client.Yielder {
+func (c *readerImpl) Call(procedure string) query.Yielder {
 	return c.newYielder(c.cy.Call(procedure))
 }
 
-func (c *readerImpl) Show(command string) client.Yielder {
+func (c *readerImpl) Show(command string) query.Yielder {
 	return c.newYielder(c.cy.Show(command))
 }
 
-func (c *readerImpl) Return(identifiers ...any) client.Runner {
+func (c *readerImpl) Return(identifiers ...any) query.Runner {
 	return c.newRunner(c.cy.Return(identifiers...))
 }
 
@@ -192,7 +192,7 @@ func (c *readerImpl) CypherWith(query func(s client.Scope) string) client.Querie
 	return c.newQuerier(q)
 }
 
-func (c *querierImpl) Where(opts ...internal.WhereOption) client.Querier {
+func (c *querierImpl) Where(opts ...internal.WhereOption) query.Querier {
 	return c.newQuerier(c.cy.Where(opts...))
 }
 
@@ -220,12 +220,12 @@ func (c *updaterImpl[To, ToCypher]) Remove(items ...internal.RemoveItem) To {
 	return c.to(c.cy.Remove(items...))
 }
 
-func (c *updaterImpl[To, ToCypher]) ForEach(identifier, elementsExpr any, do func(c client.Updater[any])) To {
+func (c *updaterImpl[To, ToCypher]) ForEach(identifier, elementsExpr any, do func(c query.Updater[any])) To {
 	return c.to(c.cy.ForEach(identifier, elementsExpr, func(c *internal.CypherUpdater[any]) {
 	}))
 }
 
-func (c *yielderImpl) Yield(identifiers ...any) client.Querier {
+func (c *yielderImpl) Yield(identifiers ...any) query.Querier {
 	return c.newQuerier(c.cy.Yield(identifiers...))
 }
 
@@ -241,7 +241,7 @@ func (c *runnerImpl) GetRunner() *internal.CypherRunner {
 	return c.cy
 }
 
-func (c *runnerImpl) Print() client.Runner {
+func (c *runnerImpl) Print() query.Runner {
 	c.cy.Print()
 	return c
 }
@@ -350,7 +350,7 @@ func (c *runnerImpl) Run(ctx context.Context) error {
 	return c.RunWithParams(ctx, nil)
 }
 
-func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any, sink func(r client.Result) error) (err error) {
+func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any, sink func(r query.Result) error) (err error) {
 	cy, err := c.cy.CompileWithParams(params)
 	if err != nil {
 		return fmt.Errorf("cannot compile cypher: %w", err)
@@ -377,7 +377,7 @@ func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any
 	})
 }
 
-func (c *runnerImpl) Stream(ctx context.Context, sink func(r client.Result) error) (err error) {
+func (c *runnerImpl) Stream(ctx context.Context, sink func(r query.Result) error) (err error) {
 	return c.StreamWithParams(ctx, nil, sink)
 }
 

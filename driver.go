@@ -6,8 +6,8 @@ import (
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
-	"github.com/rlch/neogo/client"
 	"github.com/rlch/neogo/internal"
+	"github.com/rlch/neogo/query"
 )
 
 // New creates a new neogo [Driver] from a [neo4j.DriverWithContext].
@@ -20,7 +20,7 @@ func New(neo4j neo4j.DriverWithContext, configurers ...Config) Driver {
 }
 
 // Driver represents a pool of connections to a neo4j server or cluster. It
-// provides an entrypoint to a neogo [client.Client], which can be used to build
+// provides an entrypoint to a neogo [query.Client], which can be used to build
 // cypher queries.
 //
 // It's safe for concurrent use.
@@ -42,7 +42,7 @@ type Driver interface {
 	// override the access mode.
 	//
 	// The session is closed after the query is executed.
-	Exec(configurers ...func(*execConfig)) client.Client
+	Exec(configurers ...func(*execConfig)) query.Query
 }
 
 type Config func(*driver)
@@ -53,18 +53,41 @@ type execConfig struct {
 }
 
 // TxWork is a function that allows Cypher to be executed within a transaction.
-type TxWork func(begin func() client.Client) error
-
-type readSession interface {
-	Session() neo4j.SessionWithContext
-	Close(ctx context.Context) error
-	ReadTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error
-}
-
-type writeSession interface {
-	readSession
-	WriteTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error
-}
+type (
+	TxWork      func(begin func() query.Query) error
+	transaction interface {
+		// Run executes a statement on this transaction and returns a result
+		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		Run(ctx context.Context, work TxWork) error
+		// Commit commits the transaction
+		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		Commit(ctx context.Context) error
+		// Rollback rolls back the transaction
+		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		Rollback(ctx context.Context) error
+		// Close rolls back the actual transaction if it's not already committed/rolled back
+		// and closes all resources associated with this transaction
+		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		Close(ctx context.Context) error
+	}
+	readSession interface {
+		// Session returns the underlying Neo4J session.
+		Session() neo4j.SessionWithContext
+		// Close closes any open resources and marks this session as unusable.
+		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		Close(ctx context.Context) error
+		// ReadTx executes the given unit of work in a AccessModeRead transaction with retry logic in place.
+		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		ReadTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error
+		BeginTx(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (transaction, error)
+	}
+	writeSession interface {
+		readSession
+		// ExecuteWrite executes the given unit of work in a AccessModeWrite transaction with retry logic in place.
+		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		WriteTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error
+	}
+)
 
 type (
 	driver struct {
@@ -78,13 +101,34 @@ type (
 		session    neo4j.SessionWithContext
 		currentTx  neo4j.ManagedTransaction
 	}
+	transactionImpl struct {
+		tx neo4j.ExplicitTransaction
+	}
 )
+
+// WithTxConfig configures the transaction used by Exec().
+func WithTxConfig(configurers ...func(*neo4j.TransactionConfig)) func(ec *execConfig) {
+	return func(ec *execConfig) {
+		for _, c := range configurers {
+			c(ec.TransactionConfig)
+		}
+	}
+}
+
+// WithSessionConfig configures the session used by Exec().
+func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execConfig) {
+	return func(ec *execConfig) {
+		for _, c := range configurers {
+			c(ec.SessionConfig)
+		}
+	}
+}
 
 func (d *driver) DB() neo4j.DriverWithContext {
 	return d.db
 }
 
-func (d *driver) Exec(configurers ...func(*execConfig)) client.Client {
+func (d *driver) Exec(configurers ...func(*execConfig)) query.Query {
 	sessionConfig := neo4j.SessionConfig{}
 	txConfig := neo4j.TransactionConfig{}
 	config := execConfig{
@@ -146,7 +190,7 @@ func (s *session) Close(ctx context.Context) error {
 
 func (s *session) ReadTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		return nil, work(func() client.Client {
+		return nil, work(func() query.Query {
 			c := s.newClient(internal.NewCypherClient())
 			c.currentTx = tx
 			return c
@@ -157,7 +201,7 @@ func (s *session) ReadTx(ctx context.Context, work TxWork, configurers ...func(*
 
 func (s *session) WriteTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		return nil, work(func() client.Client {
+		return nil, work(func() query.Query {
 			c := s.newClient(internal.NewCypherClient())
 			c.currentTx = tx
 			return c
@@ -166,20 +210,26 @@ func (s *session) WriteTx(ctx context.Context, work TxWork, configurers ...func(
 	return err
 }
 
-// WithTxConfig configures the transaction used by Exec().
-func WithTxConfig(configurers ...func(*neo4j.TransactionConfig)) func(ec *execConfig) {
-	return func(ec *execConfig) {
-		for _, c := range configurers {
-			c(ec.TransactionConfig)
-		}
+func (s *session) BeginTx(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (transaction, error) {
+	tx, err := s.session.BeginTransaction(ctx, configurers...)
+	if err != nil {
+		return nil, err
 	}
+	return &transactionImpl{tx}, nil
 }
 
-// WithSessionConfig configures the session used by Exec().
-func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execConfig) {
-	return func(ec *execConfig) {
-		for _, c := range configurers {
-			c(ec.SessionConfig)
-		}
-	}
+func (t *transactionImpl) Run(ctx context.Context, work TxWork) error {
+	return nil
+}
+
+func (t *transactionImpl) Commit(ctx context.Context) error {
+	return nil
+}
+
+func (t *transactionImpl) Rollback(ctx context.Context) error {
+	return nil
+}
+
+func (t *transactionImpl) Close(ctx context.Context) error {
+	return nil
 }

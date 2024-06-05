@@ -1,5 +1,5 @@
-// Package client provides client interfaces for constructing and executing Cypher queries.
-package client
+// Package query provides client interfaces for constructing and executing Cypher queries.
+package query
 
 import (
 	"context"
@@ -42,10 +42,10 @@ type (
 	ValueIdentifier = Identifier
 )
 
-// Client is the interface for constructing a Cypher query.
+// Query is the interface for constructing a Cypher query.
 //
 // It can be instantiated using the [pkg/github.com/rlch/neogo.New] function.
-type Client interface {
+type Query interface {
 	Reader
 	Updater[Querier]
 
@@ -61,7 +61,7 @@ type Client interface {
 	//  UNION
 	//  <query>
 	//  ...
-	Union(unions ...func(c Client) Runner) Querier
+	Union(unions ...func(c Query) Runner) Querier
 
 	// Union writes a UNION ALL clause to the query, combining the results of each
 	// subquery.
@@ -70,7 +70,7 @@ type Client interface {
 	//  UNION ALL
 	//  <query>
 	//  ...
-	UnionAll(unions ...func(c Client) Runner) Querier
+	UnionAll(unions ...func(c Query) Runner) Querier
 }
 
 // Scope provides information about the current state of the query.
@@ -111,7 +111,7 @@ type Reader interface {
 	//  SHOW <command>
 	Show(command string) Yielder
 
-	Subquery(func(c Client) Runner) Querier
+	Subquery(func(c Query) Runner) Querier
 
 	// Cypher allows you to inject a raw Cypher query into the query.
 	Cypher(query string) Querier
