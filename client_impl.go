@@ -180,12 +180,12 @@ func (c *readerImpl) Return(identifiers ...any) query.Runner {
 	return c.newRunner(c.cy.Return(identifiers...))
 }
 
-func (c *readerImpl) Cypher(query string) client.Querier {
+func (c *readerImpl) Cypher(query string) query.Querier {
 	q := c.cy.Cypher(query)
 	return c.newQuerier(q)
 }
 
-func (c *readerImpl) CypherWith(query func(s client.Scope) string) client.Querier {
+func (c *readerImpl) CypherWith(query func(s query.Scope) string) query.Querier {
 	q := c.cy.CypherWith(func(scope *internal.Scope) string {
 		return query(scope)
 	})
