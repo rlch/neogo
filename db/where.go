@@ -1,7 +1,7 @@
 package db
 
 import (
-	"github.com/rlch/neogo/client"
+	"github.com/rlch/neogo/query"
 	"github.com/rlch/neogo/internal"
 )
 
@@ -43,9 +43,9 @@ func Where(opts ...internal.WhereOption) interface {
 //
 // [WHERE]: https://neo4j.com/docs/cypher-manual/current/clauses/where/
 func Cond(
-	key client.PropertyIdentifier,
+	key query.PropertyIdentifier,
 	op string,
-	value client.ValueIdentifier,
+	value query.ValueIdentifier,
 ) internal.ICondition {
 	return &internal.Condition{
 		Key:   key,
