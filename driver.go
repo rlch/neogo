@@ -54,11 +54,11 @@ type execConfig struct {
 
 // TxWork is a function that allows Cypher to be executed within a transaction.
 type (
-	TxWork      func(begin func() query.Query) error
+	TxWork      func(start func() query.Query) error
 	transaction interface {
 		// Run executes a statement on this transaction and returns a result
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
-		Run(ctx context.Context, work TxWork) error
+		Run(work TxWork) error
 		// Commit commits the transaction
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
 		Commit(ctx context.Context) error
@@ -102,7 +102,8 @@ type (
 		currentTx  neo4j.ManagedTransaction
 	}
 	transactionImpl struct {
-		tx neo4j.ExplicitTransaction
+		session *session
+		tx      neo4j.ExplicitTransaction
 	}
 )
 
@@ -215,21 +216,25 @@ func (s *session) BeginTx(ctx context.Context, configurers ...func(*neo4j.Transa
 	if err != nil {
 		return nil, err
 	}
-	return &transactionImpl{tx}, nil
+	return &transactionImpl{s, tx}, nil
 }
 
-func (t *transactionImpl) Run(ctx context.Context, work TxWork) error {
-	return nil
+func (t *transactionImpl) Run(work TxWork) error {
+	return work(func() query.Query {
+		c := t.session.newClient(internal.NewCypherClient())
+		c.currentTx = t.tx
+		return c
+	})
 }
 
 func (t *transactionImpl) Commit(ctx context.Context) error {
-	return nil
+	return t.tx.Commit(ctx)
 }
 
 func (t *transactionImpl) Rollback(ctx context.Context) error {
-	return nil
+	return t.tx.Rollback(ctx)
 }
 
 func (t *transactionImpl) Close(ctx context.Context) error {
-	return nil
+	return t.tx.Close(ctx)
 }
