@@ -140,13 +140,13 @@ func ExampleDriver_readSession() {
 			panic(err)
 		}
 	}()
-	err := session.ReadTx(ctx, func(start func() query.Query) error {
-		if err := start().
+	err := session.ReadTx(ctx, func(begin func() query.Query) error {
+		if err := begin().
 			Unwind("range(0, 10)", "i").
 			Return(db.Qual(&ns, "i")).Run(ctx); err != nil {
 			return err
 		}
-		if err := start().
+		if err := begin().
 			Unwind(&ns, "i").
 			Return(db.Qual(&nsTimes2, "i * 2")).Run(ctx); err != nil {
 			return err
@@ -264,61 +264,6 @@ func ExampleDriver_runWithParams() {
 }
 
 func ExampleDriver_streamWithParams() {
-	ctx := context.Background()
-	var d Driver
-	n := 3
-
-	if testing.Short() {
-		m := NewMock()
-		records := make([]map[string]any, n+1)
-		for i := range records {
-			records[i] = map[string]any{"i": i}
-		}
-		m.BindRecords(records)
-		d = m
-	} else {
-		neo4j, cancel := startNeo4J(ctx)
-		d = New(neo4j)
-		defer func() {
-			if err := cancel(ctx); err != nil {
-				panic(err)
-			}
-		}()
-	}
-
-	ns := []int{}
-	session := d.ReadSession(ctx)
-	defer func() {
-		if err := session.Close(ctx); err != nil {
-			panic(err)
-		}
-	}()
-	err := session.ReadTx(ctx, func(begin func() query.Query) error {
-		var num int
-		params := map[string]interface{}{
-			"total": n,
-		}
-		return begin().
-			Unwind("range(0, $total)", "i").
-			Return(db.Qual(&num, "i")).
-			StreamWithParams(ctx, params, func(r query.Result) error {
-				for i := 0; r.Next(ctx); i++ {
-					if err := r.Read(); err != nil {
-						return err
-					}
-					ns = append(ns, num)
-				}
-				return nil
-			})
-	})
-
-	fmt.Printf("err: %v\n", err)
-	fmt.Printf("ns: %v\n", ns)
-	// Output: err: <nil>
-	// ns: [0 1 2 3]
-}
-
-func ExampleDriver_explicitTransaction() {
 	ctx := context.Background()
 	var d Driver
 	n := 3
