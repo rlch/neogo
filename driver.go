@@ -52,10 +52,12 @@ type execConfig struct {
 	*neo4j.TransactionConfig
 }
 
-// TxWork is a function that allows Cypher to be executed within a transaction.
 type (
-	TxWork      func(start func() query.Query) error
-	transaction interface {
+	// TxWork is a function that allows Cypher to be executed within a Transaction.
+	TxWork func(start func() query.Query) error
+
+	// Transaction represents an explicit transaction that can be committed or rolled back.
+	Transaction interface {
 		// Run executes a statement on this transaction and returns a result
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
 		Run(work TxWork) error
@@ -79,7 +81,7 @@ type (
 		// ReadTx executes the given unit of work in a AccessModeRead transaction with retry logic in place.
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
 		ReadTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error
-		BeginTx(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (transaction, error)
+		BeginTx(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (Transaction, error)
 	}
 	writeSession interface {
 		readSession
@@ -211,7 +213,7 @@ func (s *session) WriteTx(ctx context.Context, work TxWork, configurers ...func(
 	return err
 }
 
-func (s *session) BeginTx(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (transaction, error) {
+func (s *session) BeginTx(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (Transaction, error) {
 	tx, err := s.session.BeginTransaction(ctx, configurers...)
 	if err != nil {
 		return nil, err
