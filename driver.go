@@ -19,42 +19,37 @@ func New(neo4j neo4j.DriverWithContext, configurers ...Config) Driver {
 	return &d
 }
 
-// Driver represents a pool of connections to a neo4j server or cluster. It
-// provides an entrypoint to a neogo [query.Client], which can be used to build
-// cypher queries.
-//
-// It's safe for concurrent use.
-type Driver interface {
-	// DB returns the underlying neo4j driver.
-	DB() neo4j.DriverWithContext
-
-	// ReadSession creates a new read-access session based on the specified session configuration.
-	ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) readSession
-
-	// WriteSession creates a new write-access session based on the specified session configuration.
-	WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) writeSession
-
-	// Exec creates a new transaction + session and executes the given Cypher
-	// query.
-	//
-	// The access mode is inferred from the clauses used in the query. If using
-	// Cypher() to inject a write query, one should use [WithSessionConfig] to
-	// override the access mode.
-	//
-	// The session is closed after the query is executed.
-	Exec(configurers ...func(*execConfig)) query.Query
-}
-
-type Config func(*driver)
-
-type execConfig struct {
-	*neo4j.SessionConfig
-	*neo4j.TransactionConfig
-}
-
 type (
+	// Driver represents a pool of connections to a neo4j server or cluster. It
+	// provides an entrypoint to a neogo [query.Client], which can be used to build
+	// cypher queries.
+	//
+	// It's safe for concurrent use.
+	Driver interface {
+		// DB returns the underlying neo4j driver.
+		DB() neo4j.DriverWithContext
+
+		// ReadSession creates a new read-access session based on the specified session configuration.
+		ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) readSession
+
+		// WriteSession creates a new write-access session based on the specified session configuration.
+		WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) writeSession
+
+		// Exec creates a new transaction + session and executes the given Cypher
+		// query.
+		//
+		// The access mode is inferred from the clauses used in the query. If using
+		// Cypher() to inject a write query, one should use [WithSessionConfig] to
+		// override the access mode.
+		//
+		// The session is closed after the query is executed.
+		Exec(configurers ...func(*execConfig)) Query
+	}
+
+	Query = query.Query
+
 	// TxWork is a function that allows Cypher to be executed within a Transaction.
-	TxWork func(start func() query.Query) error
+	TxWork func(start func() Query) error
 
 	// Transaction represents an explicit transaction that can be committed or rolled back.
 	Transaction interface {
@@ -72,6 +67,9 @@ type (
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
 		Close(ctx context.Context) error
 	}
+
+	Config func(*driver)
+
 	readSession interface {
 		// Session returns the underlying Neo4J session.
 		Session() neo4j.SessionWithContext
@@ -88,6 +86,10 @@ type (
 		// ExecuteWrite executes the given unit of work in a AccessModeWrite transaction with retry logic in place.
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
 		WriteTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error
+	}
+	execConfig struct {
+		*neo4j.SessionConfig
+		*neo4j.TransactionConfig
 	}
 )
 
@@ -131,7 +133,7 @@ func (d *driver) DB() neo4j.DriverWithContext {
 	return d.db
 }
 
-func (d *driver) Exec(configurers ...func(*execConfig)) query.Query {
+func (d *driver) Exec(configurers ...func(*execConfig)) Query {
 	sessionConfig := neo4j.SessionConfig{}
 	txConfig := neo4j.TransactionConfig{}
 	config := execConfig{
@@ -193,7 +195,7 @@ func (s *session) Close(ctx context.Context) error {
 
 func (s *session) ReadTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		return nil, work(func() query.Query {
+		return nil, work(func() Query {
 			c := s.newClient(internal.NewCypherClient())
 			c.currentTx = tx
 			return c
@@ -204,7 +206,7 @@ func (s *session) ReadTx(ctx context.Context, work TxWork, configurers ...func(*
 
 func (s *session) WriteTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		return nil, work(func() query.Query {
+		return nil, work(func() Query {
 			c := s.newClient(internal.NewCypherClient())
 			c.currentTx = tx
 			return c
@@ -222,7 +224,7 @@ func (s *session) BeginTx(ctx context.Context, configurers ...func(*neo4j.Transa
 }
 
 func (t *transactionImpl) Run(work TxWork) error {
-	return work(func() query.Query {
+	return work(func() Query {
 		c := t.session.newClient(internal.NewCypherClient())
 		c.currentTx = t.tx
 		return c

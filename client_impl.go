@@ -122,7 +122,7 @@ func (c *clientImpl) Use(graphExpr string) query.Querier {
 	return c.newQuerier(c.cy.Use(graphExpr))
 }
 
-func (c *clientImpl) Union(unions ...func(c query.Query) query.Runner) query.Querier {
+func (c *clientImpl) Union(unions ...func(c Query) query.Runner) query.Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
 		union := union
@@ -133,7 +133,7 @@ func (c *clientImpl) Union(unions ...func(c query.Query) query.Runner) query.Que
 	return c.newQuerier(c.cy.Union(inUnions...))
 }
 
-func (c *clientImpl) UnionAll(unions ...func(c query.Query) query.Runner) query.Querier {
+func (c *clientImpl) UnionAll(unions ...func(c Query) query.Runner) query.Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
 		union := union
@@ -152,7 +152,7 @@ func (c *readerImpl) Match(patterns internal.Patterns) query.Querier {
 	return c.newQuerier(c.cy.Match(patterns))
 }
 
-func (c *readerImpl) Subquery(subquery func(c query.Query) query.Runner) query.Querier {
+func (c *readerImpl) Subquery(subquery func(c Query) query.Runner) query.Querier {
 	inSubquery := func(cc *internal.CypherClient) *internal.CypherRunner {
 		runner := subquery(c.newClient(cc))
 		return runner.(baseRunner).GetRunner()
