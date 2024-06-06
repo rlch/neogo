@@ -534,22 +534,22 @@ func TestClient(t *testing.T) {
 		c.Bind(nil)
 		err := c.Exec().
 			// All Client methods
-			Subquery(func(c query.Query) query.Runner {
+			Subquery(func(c Query) query.Runner {
 				return c.Union(
-					func(c query.Query) query.Runner {
+					func(c Query) query.Runner {
 						return c.Return("n")
 					},
-					func(c query.Query) query.Runner {
+					func(c Query) query.Runner {
 						return c.Use("graph").Return("n")
 					},
 				)
 			}).
-			Subquery(func(c query.Query) query.Runner {
+			Subquery(func(c Query) query.Runner {
 				return c.UnionAll(
-					func(c query.Query) query.Runner {
+					func(c Query) query.Runner {
 						return c.Call("aff")
 					},
-					func(c query.Query) query.Runner {
+					func(c Query) query.Runner {
 						return c.Return("n")
 					},
 				)
@@ -576,7 +576,7 @@ func TestClient(t *testing.T) {
 			Call("call").
 			Yield("yield").
 			Show("").
-			Subquery(func(c query.Query) query.Runner {
+			Subquery(func(c Query) query.Runner {
 				return c.Match(db.Node("m"))
 			}).
 			Cypher("").
