@@ -159,6 +159,13 @@ func (e *Client) UnionAll(unions ...func(*Client) Runner) *Querier {
 	return newQuerier(q)
 }
 
+func (e *Reader) Eval(expression neogo.Expression) *Querier {
+	q := e.buffer.Eval(func(s *internal.Scope, b *strings.Builder) {
+		expression.Compile(s, b)
+	})
+	return newQuerier(q)
+}
+
 func OptionalMatch(pattern internal.Patterns) *Querier {
 	e := empty()
 	q := e.buffer.OptionalMatch(pattern)

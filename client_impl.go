@@ -186,8 +186,8 @@ func (c *readerImpl) Cypher(query string) query.Querier {
 	return c.newQuerier(q)
 }
 
-func (c *readerImpl) CypherWith(expression query.Expression) query.Querier {
-	q := c.cy.CypherWith(func(s *internal.Scope, b *strings.Builder) {
+func (c *readerImpl) Eval(expression query.Expression) query.Querier {
+	q := c.cy.Eval(func(s *internal.Scope, b *strings.Builder) {
 		expression.Compile(s, b)
 	})
 	return c.newQuerier(q)
