@@ -561,8 +561,8 @@ func TestScope_test(t *testing.T) {
 		Match(db.Node(db.Qual(&n, "n"))).
 		CypherWith(func(s *internal.Scope, b *strings.Builder) {
 			bob := s.Name(&n)
-			expr.Subquery(func(c *expr.Client) *expr.Runner {
-				return c.With(bob).Runner
+			expr.Subquery(func(c *expr.Client) expr.Runner {
+				return c.With(bob)
 			}).Compile(s, b)
 		}).
 		Return(&n).

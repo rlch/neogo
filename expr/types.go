@@ -32,8 +32,8 @@ func newClient(cy *internal.CypherClient) *Client {
 	}
 }
 
-func newRunner(cy *internal.CypherRunner) *Runner {
-	return &Runner{cy}
+func newRunner(cy *internal.CypherRunner) *runner {
+	return &runner{cy}
 }
 
 func newQuerier(cy *internal.CypherQuerier) *Querier {
@@ -44,14 +44,14 @@ func newQuerier(cy *internal.CypherQuerier) *Querier {
 			cy.CypherUpdater,
 			newQuerier,
 		),
-		Runner: newRunner(cy.CypherRunner),
+		runner: newRunner(cy.CypherRunner),
 	}
 }
 
 func newReader(cy *internal.CypherReader) *Reader {
 	return &Reader{
 		buffer: cy,
-		Runner: newRunner(cy.CypherRunner),
+		runner: newRunner(cy.CypherRunner),
 	}
 }
 
@@ -59,7 +59,7 @@ func newYielder(cy *internal.CypherYielder) *Yielder {
 	return &Yielder{
 		buffer:  cy,
 		Querier: newQuerier(cy.CypherQuerier),
-		Runner:  newRunner(cy.CypherRunner),
+		runner:  newRunner(cy.CypherRunner),
 	}
 }
 
@@ -79,26 +79,31 @@ type (
 		*Reader
 		*Updater[*Querier, *internal.CypherQuerier]
 	}
-	Runner  struct{ buffer *internal.CypherRunner }
+	runner struct{ buffer *internal.CypherRunner }
+	Runner interface {
+		neogo.Expression
+		Print()
+		getBuffer() *internal.CypherRunner
+	}
 	Querier struct {
 		buffer *internal.CypherQuerier
 		*Reader
 		*Updater[*Querier, *internal.CypherQuerier]
-		*Runner
+		*runner
 	}
 	Reader struct {
 		buffer *internal.CypherReader
-		*Runner
+		*runner
 	}
 	Yielder struct {
 		buffer *internal.CypherYielder
 		*Querier
-		*Runner
+		*runner
 	}
 	Updater[To any, ToCypher any] struct {
 		buffer *internal.CypherUpdater[ToCypher]
 		To     func(ToCypher) To
-		*Runner
+		*runner
 	}
 )
 
@@ -120,34 +125,34 @@ func (e *Client) Use(graphExpr string) *Querier {
 	return newQuerier(q)
 }
 
-func Union(unions ...func(*Client) *Runner) *Querier {
+func Union(unions ...func(*Client) Runner) *Querier {
 	e := empty()
 	return e.Union(unions...)
 }
 
-func (e *Client) Union(unions ...func(*Client) *Runner) *Querier {
+func (e *Client) Union(unions ...func(*Client) Runner) *Querier {
 	in := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, u := range unions {
 		union := u
 		in[i] = func(c *internal.CypherClient) *internal.CypherRunner {
-			return union(newClient(c)).buffer
+			return union(newClient(c)).getBuffer()
 		}
 	}
 	q := e.buffer.Union(in...)
 	return newQuerier(q)
 }
 
-func UnionAll(unions ...func(*Client) *Runner) *Querier {
+func UnionAll(unions ...func(*Client) Runner) *Querier {
 	e := empty()
 	return e.UnionAll(unions...)
 }
 
-func (e *Client) UnionAll(unions ...func(*Client) *Runner) *Querier {
+func (e *Client) UnionAll(unions ...func(*Client) Runner) *Querier {
 	in := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, u := range unions {
 		union := u
 		in[i] = func(c *internal.CypherClient) *internal.CypherRunner {
-			return union(newClient(c)).buffer
+			return union(newClient(c)).getBuffer()
 		}
 	}
 	q := e.buffer.UnionAll(in...)
@@ -176,13 +181,13 @@ func (e *Reader) Match(pattern internal.Patterns) *Querier {
 	return newQuerier(q)
 }
 
-func Return(identifiers ...query.Identifier) *Runner {
+func Return(identifiers ...query.Identifier) *runner {
 	e := empty()
 	q := e.buffer.Return(identifiers...)
 	return newRunner(q)
 }
 
-func (e *Reader) Return(identifiers ...query.Identifier) *Runner {
+func (e *Reader) Return(identifiers ...query.Identifier) *runner {
 	q := e.buffer.Return(identifiers...)
 	return newRunner(q)
 }
@@ -220,20 +225,20 @@ func (e *Reader) Show(command string) *Yielder {
 	return newYielder(q)
 }
 
-func Subquery(subquery func(c *Client) *Runner) *Querier {
+func Subquery(subquery func(c *Client) Runner) *Querier {
 	e := empty()
 	inSubquery := func(cc *internal.CypherClient) *internal.CypherRunner {
 		runner := subquery(newClient(cc))
-		return runner.buffer
+		return runner.getBuffer()
 	}
 	q := e.buffer.Subquery(inSubquery)
 	return newQuerier(q)
 }
 
-func (e *Reader) Subquery(subquery func(c *Client) *Runner) *Querier {
+func (e *Reader) Subquery(subquery func(c *Client) Runner) *Querier {
 	inSubquery := func(cc *internal.CypherClient) *internal.CypherRunner {
 		runner := subquery(newClient(cc))
-		return runner.buffer
+		return runner.getBuffer()
 	}
 	q := e.buffer.Subquery(inSubquery)
 	return newQuerier(q)
@@ -369,7 +374,7 @@ func (e *Updater[To, CypherTo]) ForEach(identifier query.Identifier, inValue que
 	return e.To(q)
 }
 
-func (c *Runner) Compile(s query.Scope, b *strings.Builder) {
+func (c *runner) Compile(s query.Scope, b *strings.Builder) {
 	cy, err := c.buffer.Compile()
 	scope := s.(*internal.Scope)
 	scope.MergeChildScope(c.buffer.Scope)
@@ -377,6 +382,10 @@ func (c *Runner) Compile(s query.Scope, b *strings.Builder) {
 	b.WriteString(cy.Cypher)
 }
 
-func (c *Runner) Print() {
+func (c *runner) Print() {
 	c.buffer.Print()
+}
+
+func (c *runner) getBuffer() *internal.CypherRunner {
+	return c.buffer
 }
