@@ -237,8 +237,8 @@ func (c *CypherRunner) Compile() (*CompiledCypher, error) {
 		Bindings:   c.bindings,
 		IsWrite:    c.isWrite,
 	}
-	if c.Error != nil {
-		return nil, c.Error
+	if c.err != nil {
+		return nil, c.err
 	}
 	return cy, nil
 }

@@ -48,6 +48,10 @@ type (
 	Scope interface {
 		// Name returns the name of previously registered identifier.
 		Name(identifier Identifier) string
+		// Error returns the error that occurred during the query.
+		Error() error
+		// AddError adds an error to the query.
+		AddError(err error)
 	}
 
 	Expression interface {

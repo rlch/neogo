@@ -53,8 +53,8 @@ func (s *cypher) catch(op func()) {
 			if !ok {
 				panic(err)
 			}
-			if s.Error == nil {
-				s.Error = err
+			if s.err == nil {
+				s.AddError(err)
 			}
 		}
 	}()

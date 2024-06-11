@@ -23,7 +23,7 @@ func newScope() *Scope {
 
 type (
 	Scope struct {
-		Error error
+		err error
 
 		isWrite        bool
 		bindings       map[string]reflect.Value
@@ -195,13 +195,7 @@ func (s *Scope) MergeChildScope(child *Scope) {
 	if child.isWrite {
 		s.isWrite = true
 	}
-	if child.Error != nil {
-		if s.Error == nil {
-			s.Error = child.Error
-		} else {
-			s.Error = errors.Join(s.Error, child.Error)
-		}
-	}
+	s.AddError(child.err)
 }
 
 func (s *Scope) unfoldIdentifier(value any) (
@@ -566,6 +560,19 @@ func (s *Scope) registerEdge(n *relationshipPattern) *member {
 func (s *Scope) Name(identifier any) string {
 	return s.lookupName(identifier)
 }
+
+func (s *Scope) AddError(err error) {
+	if err == nil {
+		return
+	}
+	if s.err != nil {
+		s.err = errors.Join(s.err, err)
+	} else {
+		s.err = err
+	}
+}
+
+func (s *Scope) Error() error { return s.err }
 
 func (s *Scope) lookupName(identifier any) string {
 	identifier, _, _ = s.unfoldIdentifier(identifier)

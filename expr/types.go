@@ -373,7 +373,7 @@ func (c *Runner) Compile(s query.Scope, b *strings.Builder) {
 	cy, err := c.buffer.Compile()
 	scope := s.(*internal.Scope)
 	scope.MergeChildScope(c.buffer.Scope)
-	scope.Error = err
+	scope.AddError(err)
 	b.WriteString(cy.Cypher)
 }
 
