@@ -3,9 +3,22 @@ package expr
 import (
 	"strings"
 
+	"github.com/rlch/neogo"
 	"github.com/rlch/neogo/internal"
 	"github.com/rlch/neogo/query"
 )
+
+func New(expr func(scope query.Scope, b *strings.Builder)) neogo.Expression {
+	return &expression{expr}
+}
+
+type expression struct {
+	expr func(scope query.Scope, b *strings.Builder)
+}
+
+func (e *expression) Compile(s query.Scope, b *strings.Builder) {
+	e.expr(s, b)
+}
 
 func empty() *Client {
 	return &Client{buffer: internal.NewCypherClient()}
