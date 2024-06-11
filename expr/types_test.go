@@ -1,34 +1,23 @@
-package query_test
+package expr
 
 import (
-	"fmt"
-	"strings"
-	"testing"
-
 	"github.com/rlch/neogo/db"
-	"github.com/rlch/neogo/expr"
 	"github.com/rlch/neogo/internal"
 	"github.com/rlch/neogo/internal/tests"
-	_ "github.com/rlch/neogo/query"
 )
 
-func c() *internal.CypherClient { return internal.NewCypherClient() }
-
 func ExampleIdentifier_nil() {
-	c().
-		Match(
-			db.Node(nil).To("e", nil),
-		).
-		Print()
+	Match(
+		db.Node(nil).To("e", nil),
+	).Print()
 	// Output:
 	// MATCH ()-[e]->()
 }
 
 func ExampleIdentifier_string() {
-	c().
-		Match(
-			db.Node("n"),
-		).
+	Match(
+		db.Node("n"),
+	).
 		With("n").
 		Print()
 	// Output:
@@ -37,11 +26,10 @@ func ExampleIdentifier_string() {
 }
 
 func ExampleIdentifier_expr() {
-	c().
-		With(db.Qual(
-			"timestamp()", // identifier
-			"t",
-		)).
+	With(db.Qual(
+		"timestamp()", // identifier
+		"t",
+	)).
 		Print()
 	// Output:
 	// WITH timestamp() AS t
@@ -49,8 +37,8 @@ func ExampleIdentifier_expr() {
 
 func ExampleIdentifier_pointer() {
 	var p any
-	c().
-		With(db.Qual(&p, "pName")).
+
+	With(db.Qual(&p, "pName")).
 		Return(db.Qual(&p, "pDiffName")).
 		Print()
 	// Output:
@@ -61,8 +49,8 @@ func ExampleIdentifier_pointer() {
 func ExampleIdentifier_parameter() {
 	data := []string{"a", "b", "c"}
 	var n any
-	c().
-		Unwind(db.NamedParam(&data, "var"), "n").
+
+	Unwind(db.NamedParam(&data, "var"), "n").
 		With(db.Qual(&n, "n")).
 		Return(&n).
 		Print()
@@ -74,16 +62,16 @@ func ExampleIdentifier_parameter() {
 
 func ExampleIdentifier_pointerToField() {
 	var older, younger tests.Person
-	c().
-		Match(
-			db.Node(
-				db.Qual(&older, "older"),
-			).
-				To(
-					tests.Knows{},
-					db.Qual(&younger, "younger"),
-				),
+
+	Match(
+		db.Node(
+			db.Qual(&older, "older"),
 		).
+			To(
+				tests.Knows{},
+				db.Qual(&younger, "younger"),
+			),
+	).
 		Where(db.Cond(&older.Age, ">", &younger.Age)).
 		Return(&older.Name, &younger.Name).
 		Print()
@@ -95,15 +83,15 @@ func ExampleIdentifier_pointerToField() {
 
 func ExampleMatch() {
 	var m tests.Movie
-	c().
-		Match(
-			db.Node(db.Var(
-				tests.Person{},
-				db.Props{
-					"name": "'Oliver Stone'",
-				},
-			)).To(nil, db.Var("movie")),
-		).
+
+	Match(
+		db.Node(db.Var(
+			tests.Person{},
+			db.Props{
+				"name": "'Oliver Stone'",
+			},
+		)).To(nil, db.Var("movie")),
+	).
 		Return(db.Qual(
 			&m.Title,
 			"movie.title",
@@ -116,15 +104,15 @@ func ExampleMatch() {
 func ExampleOptionalMatch() {
 	a := tests.Person{}
 	r := tests.Directed{}
-	c().
-		Match(
-			db.Node(db.Qual(
-				&a, "a",
-				db.Props{
-					"name": "'Martin Sheen'",
-				},
-			)),
-		).
+
+	Match(
+		db.Node(db.Qual(
+			&a, "a",
+			db.Props{
+				"name": "'Martin Sheen'",
+			},
+		)),
+	).
 		OptionalMatch(
 			db.Node(&a).To(db.Qual(&r, "r"), nil),
 		).Return(&a.Name, &r).Print()
@@ -136,8 +124,8 @@ func ExampleOptionalMatch() {
 
 func ExampleReturn() {
 	var p tests.Person
-	c().
-		Match(db.Node(db.Qual(&p, "p", db.Props{"name": "'Keanu Reeves'"}))).
+
+	Match(db.Node(db.Qual(&p, "p", db.Props{"name": "'Keanu Reeves'"}))).
 		Return(db.Qual(&p.Nationality, "citizenship")).Print()
 	// Output:
 	// MATCH (p:Person {name: 'Keanu Reeves'})
@@ -146,11 +134,11 @@ func ExampleReturn() {
 
 func ExampleWith() {
 	var names []string
-	c().
-		Match(
-			db.Node(db.Var("n", db.Props{"name": "'Anders'"})).
-				Related(nil, "m"),
-		).
+
+	Match(
+		db.Node(db.Var("n", db.Props{"name": "'Anders'"})).
+			Related(nil, "m"),
+	).
 		With(
 			db.With("m", db.OrderBy("name", false), db.Limit("1")),
 		).
@@ -171,11 +159,10 @@ func ExampleSubquery() {
 		p       tests.Person
 		numConn int
 	)
-	c().
-		Match(db.Node(db.Qual(&p, "p"))).
-		Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
-			return c.
-				With(&p).
+
+	Match(db.Node(db.Qual(&p, "p"))).
+		Subquery(func(c *Client) *Runner {
+			return c.With(&p).
 				Match(db.Node(&p).Related(nil, db.Var("c"))).
 				Return(
 					db.Qual(&numConn, "count(c)", db.Name("numberOfConnections")),
@@ -196,8 +183,8 @@ func ExampleSubquery() {
 
 func ExampleCall() {
 	var labels []string
-	c().
-		Call("db.labels()").
+
+	Call("db.labels()").
 		Yield(db.Qual(&labels, "label")).
 		Return(&labels).
 		Print()
@@ -213,8 +200,8 @@ func ExampleShow() {
 		name any
 		sig  string
 	)
-	c().
-		Show("PROCEDURES").
+
+	Show("PROCEDURES").
 		Yield(
 			db.Qual(&name, "name"),
 			db.Qual(&sig, "signature"),
@@ -261,8 +248,8 @@ func ExampleUnwind() {
 		y Year
 		e Event
 	)
-	c().
-		Unwind(db.Qual(&events, "events"), "event").
+
+	Unwind(db.Qual(&events, "events"), "event").
 		Merge(
 			db.Node(db.Qual(&y, "y", db.Props{"year": "event.year"})),
 		).
@@ -283,8 +270,8 @@ func ExampleUnwind() {
 
 func ExampleCypher() {
 	var n any
-	c().
-		Match(db.Node(db.Qual(&n, "n"))).
+
+	Match(db.Node(db.Qual(&n, "n"))).
 		Cypher(`WHERE n.name = 'Bob'`).
 		Return(&n).
 		Print()
@@ -297,8 +284,8 @@ func ExampleCypher() {
 
 func ExampleUse() {
 	var n any
-	c().
-		Use("myDatabase").
+
+	Use("myDatabase").
 		Match(db.Node(db.Qual(&n, "n"))).
 		Return("n").
 		Print()
@@ -310,13 +297,13 @@ func ExampleUse() {
 
 func ExampleUnion() {
 	var name string
-	c().Union(
-		func(c *internal.CypherClient) *internal.CypherRunner {
+	Union(
+		func(c *Client) *Runner {
 			return c.
 				Match(db.Node(db.Var("n", db.Label("Person")))).
 				Return(db.Qual(&name, "n.name", db.Name("name")))
 		},
-		func(c *internal.CypherClient) *internal.CypherRunner {
+		func(c *Client) *Runner {
 			return c.
 				Match(db.Node(db.Var("n", db.Label("Movie")))).
 				Return(db.Qual(&name, "n.title", db.Name("name")))
@@ -333,13 +320,13 @@ func ExampleUnion() {
 
 func ExampleUnionAll() {
 	var name string
-	c().UnionAll(
-		func(c *internal.CypherClient) *internal.CypherRunner {
+	UnionAll(
+		func(c *Client) *Runner {
 			return c.
 				Match(db.Node(db.Var("n", db.Label("Person")))).
 				Return(db.Qual(&name, "n.name", db.Name("name")))
 		},
-		func(c *internal.CypherClient) *internal.CypherRunner {
+		func(c *Client) *Runner {
 			return c.
 				Match(db.Node(db.Var("n", db.Label("Movie")))).
 				Return(db.Qual(&name, "n.title", db.Name("name")))
@@ -356,8 +343,8 @@ func ExampleUnionAll() {
 
 func ExampleYield() {
 	var labels []string
-	c().
-		Call("db.labels()").
+
+	Call("db.labels()").
 		Yield(db.Qual(&labels, "label")).
 		Return(&labels).
 		Print()
@@ -370,13 +357,13 @@ func ExampleYield() {
 
 func ExampleCreate() {
 	var p any
-	c().
-		Create(db.Path(
-			db.Node(db.Var(tests.Person{}, db.Props{"name": "'Andy'"})).
-				To(tests.WorksAt{}, db.Var(tests.Company{}, db.Props{"name": "'Neo4j'"})).
-				From(tests.WorksAt{}, db.Var(tests.Person{}, db.Props{"name": "'Michael'"})),
-			"p",
-		)).
+
+	Create(db.Path(
+		db.Node(db.Var(tests.Person{}, db.Props{"name": "'Andy'"})).
+			To(tests.WorksAt{}, db.Var(tests.Company{}, db.Props{"name": "'Neo4j'"})).
+			From(tests.WorksAt{}, db.Var(tests.Person{}, db.Props{"name": "'Michael'"})),
+		"p",
+	)).
 		Return(db.Qual(&p, "p")).
 		Print()
 
@@ -387,14 +374,14 @@ func ExampleCreate() {
 
 func ExampleMerge() {
 	var person tests.Person
-	c().
-		Merge(
-			db.Node(db.Qual(&person, "person")),
-			db.OnMatch(
-				db.SetPropValue(&person.Found, true),
-				db.SetPropValue(&person.LastSeen, "timestamp()"),
-			),
-		).
+
+	Merge(
+		db.Node(db.Qual(&person, "person")),
+		db.OnMatch(
+			db.SetPropValue(&person.Found, true),
+			db.SetPropValue(&person.LastSeen, "timestamp()"),
+		),
+	).
 		Return(&person.Name, &person.Found, &person.LastSeen).
 		Print()
 
@@ -412,11 +399,11 @@ func ExampleDelete() {
 		n tests.Person
 		r tests.ActedIn
 	)
-	c().
-		Match(
-			db.Node(db.Qual(&n, "n", db.Props{"name": "'Laurence Fishburne'"})).
-				To(db.Qual(&r, "r"), nil),
-		).
+
+	Match(
+		db.Node(db.Qual(&n, "n", db.Props{"name": "'Laurence Fishburne'"})).
+			To(db.Qual(&r, "r"), nil),
+	).
 		Delete(&r).
 		Print()
 
@@ -427,14 +414,14 @@ func ExampleDelete() {
 
 func ExampleDetachDelete() {
 	var n tests.Person
-	c().
-		Match(
-			db.Node(
-				db.Qual(&n, "n",
-					db.Props{"name": "'Carrie-Anne Moss'"},
-				),
+
+	Match(
+		db.Node(
+			db.Qual(&n, "n",
+				db.Props{"name": "'Carrie-Anne Moss'"},
 			),
-		).
+		),
+	).
 		DetachDelete(&n).
 		Print()
 
@@ -445,10 +432,10 @@ func ExampleDetachDelete() {
 
 func ExampleSet() {
 	var n tests.Person
-	c().
-		Match(
-			db.Node(db.Qual(&n, "n", db.Props{"name": "'Andy'"})),
-		).
+
+	Match(
+		db.Node(db.Qual(&n, "n", db.Props{"name": "'Andy'"})),
+	).
 		Set(
 			db.SetPropValue(&n.Position, "'Developer'"),
 			db.SetPropValue(&n.Surname, "'Taylor'"),
@@ -465,8 +452,8 @@ func ExampleSet() {
 func ExampleRemove() {
 	var n tests.Person
 	var labels []string
-	c().
-		Match(db.Node(db.Qual(&n, "n", db.Props{"name": "'Peter'"}))).
+
+	Match(db.Node(db.Qual(&n, "n", db.Props{"name": "'Peter'"}))).
 		Remove(db.RemoveLabels(&n, "German", "Swedish")).
 		Return(&n.Name, db.Qual(&labels, "labels(n)")).
 		Print()
@@ -478,15 +465,14 @@ func ExampleRemove() {
 }
 
 func ExampleForEach() {
-	c().
-		Match(
-			db.Path(db.Node("start").To(db.Var(nil, db.VarLength("*")), "finish"), "p"),
-		).
+	Match(
+		db.Path(db.Node("start").To(db.Var(nil, db.VarLength("*")), "finish"), "p"),
+	).
 		Where(db.And(
 			db.Cond("start.name", "=", "'A'"),
 			db.Cond("finish.name", "=", "'D'"),
 		)).
-		ForEach("n", "nodes(p)", func(c *internal.CypherUpdater[any]) {
+		ForEach("n", "nodes(p)", func(c *Updater[any, any]) {
 			c.Set(db.SetPropValue("n.marked", true))
 		}).
 		Print()
@@ -499,8 +485,8 @@ func ExampleForEach() {
 
 func ExampleWhere() {
 	var n tests.Person
-	c().
-		Match(db.Node(db.Qual(&n, "n"))).
+
+	Match(db.Node(db.Qual(&n, "n"))).
 		Where(
 			db.Or(
 				db.Xor(
@@ -526,52 +512,4 @@ func ExampleWhere() {
 	// WHERE (n.name = 'Peter' XOR (n.age < 30 AND n.name = 'Timothy')) OR NOT (n.name = 'Timothy' OR n.name = 'Peter')
 	// RETURN n.name AS name, n.age AS age
 	// ORDER BY name
-}
-
-func ExamplePrint() {
-	c().
-		Match(db.Node("n")).
-		Return("n").
-		Print()
-	// Output:
-	// MATCH (n)
-	// RETURN n
-}
-
-func ExampleScope() {
-	var n any
-	c().
-		Match(db.Node(db.Qual(&n, "n"))).
-		CypherWith(func(s *internal.Scope, b *strings.Builder) {
-			bob := s.Name(&n)
-			fmt.Fprintf(b, `WHERE %s.name = 'Bob'`, bob)
-		}).
-		Return(&n).
-		Print()
-
-	// Output:
-	// MATCH (n)
-	// WHERE n.name = 'Bob'
-	// RETURN n
-}
-
-func TestScope_test(t *testing.T) {
-	var n any
-	c().
-		Match(db.Node(db.Qual(&n, "n"))).
-		CypherWith(func(s *internal.Scope, b *strings.Builder) {
-			bob := s.Name(&n)
-			expr.Subquery(func(c *expr.Client) *expr.Runner {
-				return c.With(bob).Runner
-			}).Compile(s, b)
-		}).
-		Return(&n).
-		Print()
-
-	// Output:
-	// MATCH (n)
-	// CALL {
-	//   WITH n
-	// }
-	// RETURN n
 }

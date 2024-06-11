@@ -39,6 +39,7 @@ type (
 	}
 	CypherReader struct {
 		*cypher
+		*CypherRunner
 		Parent *Scope
 	}
 	CypherYielder struct {
@@ -47,6 +48,7 @@ type (
 	}
 	CypherUpdater[To any] struct {
 		*cypher
+		*CypherRunner
 		To func(*cypher) To
 	}
 	CypherRunner struct {
@@ -57,14 +59,19 @@ type (
 
 func newCypherQuerier(cy *cypher) *CypherQuerier {
 	q := &CypherQuerier{
-		cypher:       cy,
-		CypherReader: newCypherReader(cy, nil), CypherUpdater: newCypherUpdater(cy), CypherRunner: newCypherRunner(cy, false),
+		cypher:        cy,
+		CypherReader:  newCypherReader(cy, nil),
+		CypherUpdater: newCypherUpdater(cy),
+		CypherRunner:  newCypherRunner(cy, false),
 	}
 	return q
 }
 
 func newCypherReader(cy *cypher, parent *Scope) *CypherReader {
-	return &CypherReader{cypher: cy}
+	return &CypherReader{
+		cypher:       cy,
+		CypherRunner: newCypherRunner(cy, false),
+	}
 }
 
 func newCypherUpdater(cy *cypher) *CypherUpdater[*CypherQuerier] {
@@ -75,6 +82,7 @@ func newCypherUpdater(cy *cypher) *CypherUpdater[*CypherQuerier] {
 			c.isWrite = true
 			return newCypherQuerier(c)
 		},
+		CypherRunner: newCypherRunner(cy, true),
 	}
 }
 
@@ -154,10 +162,10 @@ func (c *CypherReader) Cypher(query string) *CypherQuerier {
 	return newCypherQuerier(c.cypher)
 }
 
-func (c *CypherReader) CypherWith(query func(scope *Scope) string) *CypherQuerier {
+func (c *CypherReader) CypherWith(expression func(*Scope, *strings.Builder)) *CypherQuerier {
 	c.isWrite = true
-	q := query(c.Scope)
-	c.WriteString(q + "\n")
+	expression(c.Scope, c.Builder)
+	c.newline()
 	return newCypherQuerier(c.cypher)
 }
 
@@ -229,8 +237,8 @@ func (c *CypherRunner) Compile() (*CompiledCypher, error) {
 		Bindings:   c.bindings,
 		IsWrite:    c.isWrite,
 	}
-	if c.err != nil {
-		return nil, c.err
+	if c.Error != nil {
+		return nil, c.Error
 	}
 	return cy, nil
 }

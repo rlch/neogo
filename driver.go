@@ -46,16 +46,17 @@ type (
 		Exec(configurers ...func(*execConfig)) Query
 	}
 
-	Query = query.Query
+	Expression = query.Expression
+	Query      = query.Query
 
-	// TxWork is a function that allows Cypher to be executed within a Transaction.
-	TxWork func(start func() Query) error
+	// Work is a function that allows Cypher to be executed within a Transaction.
+	Work func(start func() Query) error
 
 	// Transaction represents an explicit transaction that can be committed or rolled back.
 	Transaction interface {
 		// Run executes a statement on this transaction and returns a result
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
-		Run(work TxWork) error
+		Run(work Work) error
 		// Commit commits the transaction
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
 		Commit(ctx context.Context) error
@@ -76,16 +77,16 @@ type (
 		// Close closes any open resources and marks this session as unusable.
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
 		Close(ctx context.Context) error
-		// ReadTx executes the given unit of work in a AccessModeRead transaction with retry logic in place.
+		// ReadTransaction executes the given unit of work in a AccessModeRead transaction with retry logic in place.
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
-		ReadTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error
-		BeginTx(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (Transaction, error)
+		ReadTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error
+		BeginTransaction(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (Transaction, error)
 	}
 	writeSession interface {
 		readSession
 		// ExecuteWrite executes the given unit of work in a AccessModeWrite transaction with retry logic in place.
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
-		WriteTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error
+		WriteTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error
 	}
 	execConfig struct {
 		*neo4j.SessionConfig
@@ -193,7 +194,7 @@ func (s *session) Close(ctx context.Context) error {
 	return s.session.Close(ctx)
 }
 
-func (s *session) ReadTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error {
+func (s *session) ReadTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		return nil, work(func() Query {
 			c := s.newClient(internal.NewCypherClient())
@@ -204,7 +205,7 @@ func (s *session) ReadTx(ctx context.Context, work TxWork, configurers ...func(*
 	return err
 }
 
-func (s *session) WriteTx(ctx context.Context, work TxWork, configurers ...func(*neo4j.TransactionConfig)) error {
+func (s *session) WriteTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		return nil, work(func() Query {
 			c := s.newClient(internal.NewCypherClient())
@@ -215,7 +216,7 @@ func (s *session) WriteTx(ctx context.Context, work TxWork, configurers ...func(
 	return err
 }
 
-func (s *session) BeginTx(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (Transaction, error) {
+func (s *session) BeginTransaction(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (Transaction, error) {
 	tx, err := s.session.BeginTransaction(ctx, configurers...)
 	if err != nil {
 		return nil, err
@@ -223,7 +224,7 @@ func (s *session) BeginTx(ctx context.Context, configurers ...func(*neo4j.Transa
 	return &transactionImpl{s, tx}, nil
 }
 
-func (t *transactionImpl) Run(work TxWork) error {
+func (t *transactionImpl) Run(work Work) error {
 	return work(func() Query {
 		c := t.session.newClient(internal.NewCypherClient())
 		c.currentTx = t.tx

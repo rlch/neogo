@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/goccy/go-json"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -185,9 +186,9 @@ func (c *readerImpl) Cypher(query string) query.Querier {
 	return c.newQuerier(q)
 }
 
-func (c *readerImpl) CypherWith(query func(s query.Scope) string) query.Querier {
-	q := c.cy.CypherWith(func(scope *internal.Scope) string {
-		return query(scope)
+func (c *readerImpl) CypherWith(expression query.Expression) query.Querier {
+	q := c.cy.CypherWith(func(s *internal.Scope, b *strings.Builder) {
+		expression.Compile(s, b)
 	})
 	return c.newQuerier(q)
 }
@@ -221,7 +222,13 @@ func (c *updaterImpl[To, ToCypher]) Remove(items ...internal.RemoveItem) To {
 }
 
 func (c *updaterImpl[To, ToCypher]) ForEach(identifier, elementsExpr any, do func(c query.Updater[any])) To {
-	return c.to(c.cy.ForEach(identifier, elementsExpr, func(c *internal.CypherUpdater[any]) {
+	return c.to(c.cy.ForEach(identifier, elementsExpr, func(cu *internal.CypherUpdater[any]) {
+		u := &updaterImpl[any, any]{
+			session: c.session,
+			cy:      cu,
+			to:      func(tc any) any { return nil },
+		}
+		do(u)
 	}))
 }
 
