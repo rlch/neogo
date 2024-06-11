@@ -127,11 +127,11 @@ type Reader interface {
 	// Cypher allows you to inject a raw Cypher query into the query.
 	Cypher(query string) Querier
 
-	// CypherWith allows you to inject a raw Cypher query into the query.
+	// Eval allows you to inject an expression into the query.
 	//
-	// The function is passed a Scope, which can be used to obtain the information
+	// The expression is passed a Scope, which can be used to obtain the information
 	// about the querys current state.
-	CypherWith(expression Expression) Querier
+	Eval(expression Expression) Querier
 
 	// Unwind writes an UNWIND clause to the query.
 	//

@@ -661,8 +661,8 @@ func (cy *cypher) writeForEachClause(identifier, elementsExpr any, do func(c *Cy
 			To:     func(c *cypher) any { return nil },
 		}
 		do(updater)
-		if updater.Error != nil {
-			panic(updater.Error)
+		if updater.Error() != nil {
+			panic(updater.Error())
 		}
 		cy.WriteString(strings.TrimRight(b.String(), "\n") + ")")
 		cy.newline()

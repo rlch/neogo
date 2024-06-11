@@ -542,7 +542,7 @@ func ExampleScope() {
 	var n any
 	c().
 		Match(db.Node(db.Qual(&n, "n"))).
-		CypherWith(func(s *internal.Scope, b *strings.Builder) {
+		Eval(func(s *internal.Scope, b *strings.Builder) {
 			bob := s.Name(&n)
 			fmt.Fprintf(b, `WHERE %s.name = 'Bob'`, bob)
 		}).
@@ -559,7 +559,7 @@ func TestScope_test(t *testing.T) {
 	var n any
 	c().
 		Match(db.Node(db.Qual(&n, "n"))).
-		CypherWith(func(s *internal.Scope, b *strings.Builder) {
+		Eval(func(s *internal.Scope, b *strings.Builder) {
 			bob := s.Name(&n)
 			expr.Subquery(func(c *expr.Client) expr.Runner {
 				return c.With(bob)

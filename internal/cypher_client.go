@@ -162,7 +162,7 @@ func (c *CypherReader) Cypher(query string) *CypherQuerier {
 	return newCypherQuerier(c.cypher)
 }
 
-func (c *CypherReader) CypherWith(expression func(*Scope, *strings.Builder)) *CypherQuerier {
+func (c *CypherReader) Eval(expression func(*Scope, *strings.Builder)) *CypherQuerier {
 	c.isWrite = true
 	expression(c.Scope, c.Builder)
 	c.newline()
