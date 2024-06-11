@@ -161,7 +161,7 @@ func ExampleSubquery() {
 	)
 
 	Match(db.Node(db.Qual(&p, "p"))).
-		Subquery(func(c *Client) *Runner {
+		Subquery(func(c *Client) Runner {
 			return c.With(&p).
 				Match(db.Node(&p).Related(nil, db.Var("c"))).
 				Return(
@@ -298,12 +298,12 @@ func ExampleUse() {
 func ExampleUnion() {
 	var name string
 	Union(
-		func(c *Client) *Runner {
+		func(c *Client) Runner {
 			return c.
 				Match(db.Node(db.Var("n", db.Label("Person")))).
 				Return(db.Qual(&name, "n.name", db.Name("name")))
 		},
-		func(c *Client) *Runner {
+		func(c *Client) Runner {
 			return c.
 				Match(db.Node(db.Var("n", db.Label("Movie")))).
 				Return(db.Qual(&name, "n.title", db.Name("name")))
@@ -321,12 +321,12 @@ func ExampleUnion() {
 func ExampleUnionAll() {
 	var name string
 	UnionAll(
-		func(c *Client) *Runner {
+		func(c *Client) Runner {
 			return c.
 				Match(db.Node(db.Var("n", db.Label("Person")))).
 				Return(db.Qual(&name, "n.name", db.Name("name")))
 		},
-		func(c *Client) *Runner {
+		func(c *Client) Runner {
 			return c.
 				Match(db.Node(db.Var("n", db.Label("Movie")))).
 				Return(db.Qual(&name, "n.title", db.Name("name")))
