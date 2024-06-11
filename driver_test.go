@@ -140,7 +140,7 @@ func ExampleDriver_readSession() {
 			panic(err)
 		}
 	}()
-	err := session.ReadTx(ctx, func(begin func() Query) error {
+	err := session.ReadTransaction(ctx, func(begin func() Query) error {
 		if err := begin().
 			Unwind("range(0, 10)", "i").
 			Return(db.Qual(&ns, "i")).Run(ctx); err != nil {
@@ -195,7 +195,7 @@ func ExampleDriver_writeSession() {
 			panic(err)
 		}
 	}()
-	err := session.WriteTx(ctx, func(begin func() Query) error {
+	err := session.WriteTransaction(ctx, func(begin func() Query) error {
 		if err := begin().
 			Unwind("range(1, 10)", "i").
 			Merge(db.Node(
@@ -293,7 +293,7 @@ func ExampleDriver_streamWithParams() {
 			panic(err)
 		}
 	}()
-	err := session.ReadTx(ctx, func(begin func() Query) error {
+	err := session.ReadTransaction(ctx, func(begin func() Query) error {
 		var num int
 		params := map[string]interface{}{
 			"total": n,

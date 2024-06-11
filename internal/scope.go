@@ -23,7 +23,7 @@ func newScope() *Scope {
 
 type (
 	Scope struct {
-		err error
+		Error error
 
 		isWrite        bool
 		bindings       map[string]reflect.Value
@@ -122,6 +122,31 @@ func (s *Scope) clone() *Scope {
 	}
 }
 
+func (s *Scope) extend(other *Scope) {
+	for k, v := range other.bindings {
+		s.bindings[k] = v
+	}
+	for k, v := range other.names {
+		s.names[k] = v
+	}
+	for k, v := range other.generatedNames {
+		s.generatedNames[k] = v
+	}
+	for k, v := range other.fields {
+		s.fields[k] = v
+	}
+	for k, v := range other.parameters {
+		s.parameters[k] = v
+	}
+	for k, v := range other.paramAddrs {
+		s.paramAddrs[k] = v
+	}
+	s.paramCounter = other.paramCounter
+	if other.isWrite {
+		s.isWrite = true
+	}
+}
+
 func (child *Scope) mergeParentScope(parent *Scope) {
 	// We merge the param counter for avoiding parameter name collisions; and
 	// bindings to ensure variables cannot be overridden in the child scope.
@@ -147,7 +172,7 @@ func (s *Scope) clear() {
 	s.paramAddrs = map[uintptr]string{}
 }
 
-func (s *Scope) mergeChildScope(child *Scope) {
+func (s *Scope) MergeChildScope(child *Scope) {
 	for k, v := range child.bindings {
 		s.bindings[k] = v
 	}
@@ -167,6 +192,16 @@ func (s *Scope) mergeChildScope(child *Scope) {
 		s.paramAddrs[k] = v
 	}
 	s.paramCounter = child.paramCounter
+	if child.isWrite {
+		s.isWrite = true
+	}
+	if child.Error != nil {
+		if s.Error == nil {
+			s.Error = child.Error
+		} else {
+			s.Error = errors.Join(s.Error, child.Error)
+		}
+	}
 }
 
 func (s *Scope) unfoldIdentifier(value any) (

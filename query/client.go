@@ -3,6 +3,7 @@ package query
 
 import (
 	"context"
+	"strings"
 
 	"github.com/rlch/neogo/internal"
 )
@@ -42,6 +43,18 @@ type (
 	ValueIdentifier = Identifier
 )
 
+type (
+	// Scope provides information about the current state of the query.
+	Scope interface {
+		// Name returns the name of previously registered identifier.
+		Name(identifier Identifier) string
+	}
+
+	Expression interface {
+		Compile(s Scope, b *strings.Builder)
+	}
+)
+
 // Query is the interface for constructing a Cypher query.
 //
 // It can be instantiated using the [pkg/github.com/rlch/neogo.New] function.
@@ -71,12 +84,6 @@ type Query interface {
 	//  <query>
 	//  ...
 	UnionAll(unions ...func(c Query) Runner) Querier
-}
-
-// Scope provides information about the current state of the query.
-type Scope interface {
-	// Name returns the name of previously registered identifier.
-	Name(identifier Identifier) string
 }
 
 // Reader is the interface for reading data from the database.
@@ -120,7 +127,7 @@ type Reader interface {
 	//
 	// The function is passed a Scope, which can be used to obtain the information
 	// about the querys current state.
-	CypherWith(query func(scope Scope) string) Querier
+	CypherWith(expression Expression) Querier
 
 	// Unwind writes an UNWIND clause to the query.
 	//
