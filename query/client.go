@@ -5,6 +5,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rlch/neogo/internal"
 )
 
@@ -209,6 +210,12 @@ type Runner interface {
 	// query.
 	RunWithParams(ctx context.Context, params map[string]any) error
 
+	// RunSummary is the same as Run, and returns a summary of the result.
+	RunSummary(ctx context.Context) (ResultSummary, error)
+
+	// RunSummaryWithParams is the same as RunWithParams, and returns a summary of the result.
+	RunSummaryWithParams(ctx context.Context, params map[string]any) (ResultSummary, error)
+
 	// Stream executes the query and returns an abstraction over a
 	// [pkg/github.com/neo4j/neo4j-go-driver/v5/neo4j.ResultWithContext], which
 	// allows records to be consumed one-by-one as a linked list, instead of all
@@ -220,18 +227,21 @@ type Runner interface {
 	StreamWithParams(ctx context.Context, params map[string]any, sink func(r Result) error) error
 }
 
-type Result interface {
-	// Peek returns true only if there is a record after the current one to be processed without advancing the record
-	// stream
-	Peek(ctx context.Context) bool
+type (
+	Result interface {
+		// Peek returns true only if there is a record after the current one to be processed without advancing the record
+		// stream
+		Peek(ctx context.Context) bool
 
-	// Next returns true only if there is a record to be processed.
-	Next(ctx context.Context) bool
+		// Next returns true only if there is a record to be processed.
+		Next(ctx context.Context) bool
 
-	// Err returns the latest error that caused this Next to return false.
-	Err() error
+		// Err returns the latest error that caused this Next to return false.
+		Err() error
 
-	// Read reads the values of the current record into the values bound within
-	// the query.
-	Read() error
-}
+		// Read reads the values of the current record into the values bound within
+		// the query.
+		Read() error
+	}
+	ResultSummary = neo4j.ResultSummary
+)

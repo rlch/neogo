@@ -46,8 +46,11 @@ type (
 		Exec(configurers ...func(*execConfig)) Query
 	}
 
+	// Expression is an interface for compiling a Cypher expression outside the context of a query.
 	Expression = query.Expression
-	Query      = query.Query
+
+	// Query is the interface for constructing a Cypher query.
+	Query = query.Query
 
 	// Work is a function that allows Cypher to be executed within a Transaction.
 	Work func(start func() Query) error

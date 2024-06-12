@@ -406,6 +406,34 @@ func TestRun(t *testing.T) {
 	})
 }
 
+func TestRunSummary(t *testing.T) {
+	// TODO: Setup mocks
+	if testing.Short() {
+		return
+	}
+	ctx := context.Background()
+	neo4jDriver, cancel := startNeo4J(ctx)
+	d := New(neo4jDriver)
+	t.Cleanup(func() {
+		if err := cancel(ctx); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("reports correct summary", func(t *testing.T) {
+		var p Person
+		p.ID = "Jessie"
+		summary, err := d.Exec().
+			Create(db.Node(&p)).
+			Set(db.SetPropValue(&p.Name, &p.ID)).
+			Return(&p).
+			RunSummary(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, p.ID, p.Name)
+		assert.Equal(t, 1, summary.Counters().NodesCreated())
+	})
+}
+
 func TestResultImpl(t *testing.T) {
 	// TODO: Setup mocks
 	if testing.Short() {
@@ -479,7 +507,7 @@ func TestResultImpl(t *testing.T) {
 			assert.NoError(t, err)
 
 			r := runnerImpl{session: session}
-			err = r.executeTransaction(ctx, cy, func(tx neo4j.ManagedTransaction) (any, error) {
+			_, err = r.executeTransaction(ctx, cy, func(tx neo4j.ManagedTransaction) (any, error) {
 				var result neo4j.ResultWithContext
 				result, err = tx.Run(ctx, cy.Cypher, params)
 				assert.NoError(t, err)

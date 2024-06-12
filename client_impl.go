@@ -253,14 +253,18 @@ func (c *runnerImpl) Print() query.Runner {
 	return c
 }
 
-func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (err error) {
+func (c *runnerImpl) run(
+	ctx context.Context,
+	params map[string]any,
+	mapResult func(r neo4j.ResultWithContext) (any, error),
+) (out any, err error) {
 	cy, err := c.cy.CompileWithParams(params)
 	if err != nil {
-		return fmt.Errorf("cannot compile cypher: %w", err)
+		return nil, fmt.Errorf("cannot compile cypher: %w", err)
 	}
 	canonicalizedParams, err := canonicalizeParams(cy.Parameters)
 	if err != nil {
-		return fmt.Errorf("cannot serialize parameters: %w", err)
+		return nil, fmt.Errorf("cannot serialize parameters: %w", err)
 	}
 	return c.executeTransaction(
 		ctx, cy,
@@ -270,12 +274,39 @@ func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (
 			if err != nil {
 				return nil, fmt.Errorf("cannot run cypher: %w", err)
 			}
-			return nil, c.unmarshalResult(ctx, cy, result)
+			err = c.unmarshalResult(ctx, cy, result)
+			if err != nil {
+				return nil, err
+			}
+			if mapResult == nil {
+				return nil, nil
+			}
+			return mapResult(result)
 		})
 }
 
-func (c *runnerImpl) Run(ctx context.Context) error {
-	return c.RunWithParams(ctx, nil)
+func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (err error) {
+	_, err = c.run(ctx, params, nil)
+	return
+}
+
+func (c *runnerImpl) Run(ctx context.Context) (err error) {
+	_, err = c.run(ctx, nil, nil)
+	return
+}
+
+func (c *runnerImpl) RunSummary(ctx context.Context) (neo4j.ResultSummary, error) {
+	return c.RunSummaryWithParams(ctx, nil)
+}
+
+func (c *runnerImpl) RunSummaryWithParams(ctx context.Context, params map[string]any) (neo4j.ResultSummary, error) {
+	summary, err := c.run(ctx, params, func(r neo4j.ResultWithContext) (any, error) {
+		return r.Consume(ctx)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return summary.(neo4j.ResultSummary), nil
 }
 
 func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any, sink func(r query.Result) error) (err error) {
@@ -287,7 +318,7 @@ func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any
 	if err != nil {
 		return fmt.Errorf("cannot serialize parameters: %w", err)
 	}
-	return c.executeTransaction(ctx, cy, func(tx neo4j.ManagedTransaction) (any, error) {
+	_, err = c.executeTransaction(ctx, cy, func(tx neo4j.ManagedTransaction) (any, error) {
 		var result neo4j.ResultWithContext
 		result, err = tx.Run(ctx, cy.Cypher, canonicalizedParams)
 		if err != nil {
@@ -303,6 +334,7 @@ func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any
 		}
 		return nil, nil
 	})
+	return err
 }
 
 func (c *runnerImpl) Stream(ctx context.Context, sink func(r query.Result) error) (err error) {
@@ -487,7 +519,7 @@ func (c *runnerImpl) executeTransaction(
 	ctx context.Context,
 	cy *internal.CompiledCypher,
 	exec neo4j.ManagedTransactionWork,
-) (err error) {
+) (out any, err error) {
 	if c.currentTx == nil {
 		sess := c.Session()
 		sessConfig := neo4j.SessionConfig{
@@ -519,17 +551,17 @@ func (c *runnerImpl) executeTransaction(
 			}
 		}
 		if cy.IsWrite || sessConfig.AccessMode == neo4j.AccessModeWrite {
-			_, err = sess.ExecuteWrite(ctx, exec, config)
+			out, err = sess.ExecuteWrite(ctx, exec, config)
 		} else {
-			_, err = sess.ExecuteRead(ctx, exec, config)
+			out, err = sess.ExecuteRead(ctx, exec, config)
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 	} else {
-		_, err = exec(c.currentTx)
+		out, err = exec(c.currentTx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	return

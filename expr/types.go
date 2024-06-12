@@ -184,7 +184,7 @@ func Match(pattern internal.Patterns) *Querier {
 }
 
 func (e *Reader) Match(pattern internal.Patterns) *Querier {
-	q := e.buffer.OptionalMatch(pattern)
+	q := e.buffer.Match(pattern)
 	return newQuerier(q)
 }
 
