@@ -552,7 +552,7 @@ func (s *Scope) registerNode(n *nodePattern) *member {
 	return s.register(n.data, false, &t)
 }
 
-func (s *Scope) registerEdge(n *relationshipPattern) *member {
+func (s *Scope) registerRelationship(n *relationshipPattern) *member {
 	f := false
 	return s.register(n.data, false, &f)
 }
