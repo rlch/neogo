@@ -270,86 +270,7 @@ func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (
 			if err != nil {
 				return nil, fmt.Errorf("cannot run cypher: %w", err)
 			}
-			if !result.Next(ctx) {
-				return nil, nil
-			}
-			first := result.Record()
-
-			// If we have more than one record, we know we should be unmarhsalling
-			// into slices. If we have a single record, we don't necessarily know if
-			// we want to marshal into slices or not.
-			//
-			// Compare the depth of nesting for the bindings and their corresponding
-			// record values:
-			// - If any of the bindings have a non-zero depth, i.e. non-slice, we
-			//   assume single.
-			// - If any of the bindings have a different depth than the correpodning
-			//   record-values, assume we have multiple records.
-			isRecords, err := (func() (bool, error) {
-				if result.Peek(ctx) {
-					return true, nil
-				}
-				allSlices := true
-				bindingTypes := map[string]reflect.Type{}
-				for k, binding := range cy.Bindings {
-					typ := binding.Type()
-					for typ.Kind() == reflect.Ptr {
-						typ = typ.Elem()
-					}
-					bindingTypes[k] = typ
-					if typ.Kind() == reflect.Slice ||
-						typ.Kind() == reflect.Array {
-						continue
-					}
-					allSlices = false
-				}
-				if !allSlices {
-					return false, nil
-				}
-				for k, bindingType := range bindingTypes {
-					recordV, ok := first.Get(k)
-					if !ok {
-						return false, fmt.Errorf("no value associated with key %q", k)
-					}
-					recordType := reflect.TypeOf(recordV)
-					for {
-						bindingNext := bindingType.Kind() == reflect.Array || bindingType.Kind() == reflect.Slice
-						recordNext := recordType.Kind() == reflect.Array || recordType.Kind() == reflect.Slice
-						if bindingNext && recordNext {
-							bindingType = bindingType.Elem()
-							recordType = recordType.Elem()
-							continue
-						} else if !bindingNext && !recordNext {
-							break
-						}
-						return true, nil
-					}
-				}
-				return false, nil
-			})()
-			if err != nil {
-				return nil, err
-			}
-			if isRecords {
-				var records []*neo4j.Record
-				records, err = result.Collect(ctx)
-				if err != nil {
-					return nil, fmt.Errorf("cannot collect records: %w", err)
-				}
-				records = append([]*neo4j.Record{first}, records...)
-				if err = c.unmarshalRecords(cy, records); err != nil {
-					return nil, fmt.Errorf("cannot unmarshal records: %w", err)
-				}
-			} else {
-				single := result.Record()
-				if single == nil {
-					return nil, nil
-				}
-				if err = c.unmarshalRecord(cy, single); err != nil {
-					return nil, fmt.Errorf("cannot unmarshal record: %w", err)
-				}
-			}
-			return nil, nil
+			return nil, c.unmarshalResult(ctx, cy, result)
 		})
 }
 
@@ -411,6 +332,93 @@ func (c *resultImpl) Read() error {
 	return nil
 }
 
+func (s *session) unmarshalResult(
+	ctx context.Context,
+	cy *internal.CompiledCypher,
+	result neo4j.ResultWithContext,
+) error {
+	if !result.Next(ctx) {
+		return nil
+	}
+	first := result.Record()
+
+	// If we have more than one record, we know we should be unmarshalling
+	// into slices. If we have a single record, we don't necessarily know if
+	// we want to marshal into slices or not.
+	//
+	// Compare the depth of nesting for the bindings and their corresponding
+	// record values:
+	// - If any of the bindings have a non-zero depth, i.e. non-slice, we
+	//   assume single.
+	// - If any of the bindings have a different depth than the correpodning
+	//   record-values, assume we have multiple records.
+	isRecords, err := (func() (bool, error) {
+		if result.Peek(ctx) {
+			return true, nil
+		}
+		allSlices := true
+		bindingTypes := map[string]reflect.Type{}
+		for k, binding := range cy.Bindings {
+			typ := binding.Type()
+			for typ.Kind() == reflect.Ptr {
+				typ = typ.Elem()
+			}
+			bindingTypes[k] = typ
+			if typ.Kind() == reflect.Slice ||
+				typ.Kind() == reflect.Array {
+				continue
+			}
+			allSlices = false
+		}
+		if !allSlices {
+			return false, nil
+		}
+		for k, bindingType := range bindingTypes {
+			recordV, ok := first.Get(k)
+			if !ok {
+				return false, fmt.Errorf("no value associated with key %q", k)
+			}
+			recordType := reflect.TypeOf(recordV)
+			for {
+				bindingNext := bindingType.Kind() == reflect.Array || bindingType.Kind() == reflect.Slice
+				recordNext := recordType.Kind() == reflect.Array || recordType.Kind() == reflect.Slice
+				if bindingNext && recordNext {
+					bindingType = bindingType.Elem()
+					recordType = recordType.Elem()
+					continue
+				} else if !bindingNext && !recordNext {
+					break
+				}
+				return true, nil
+			}
+		}
+		return false, nil
+	})()
+	if err != nil {
+		return err
+	}
+	if isRecords {
+		var records []*neo4j.Record
+		records, err = result.Collect(ctx)
+		if err != nil {
+			return fmt.Errorf("cannot collect records: %w", err)
+		}
+		records = append([]*neo4j.Record{first}, records...)
+		if err = s.unmarshalRecords(cy, records); err != nil {
+			return fmt.Errorf("cannot unmarshal records: %w", err)
+		}
+	} else {
+		single := result.Record()
+		if single == nil {
+			return nil
+		}
+		if err = s.unmarshalRecord(cy, single); err != nil {
+			return fmt.Errorf("cannot unmarshal record: %w", err)
+		}
+	}
+	return nil
+}
+
 func (s *session) unmarshalRecords(
 	cy *internal.CompiledCypher,
 	records []*neo4j.Record,
@@ -447,8 +455,8 @@ func (s *session) unmarshalRecords(
 			}
 			if err := s.bindValue(value, to); err != nil {
 				return fmt.Errorf(
-					"error binding key %q to type %s: %w",
-					key, binding.Type().Elem().Name(), err,
+					"error binding key %s to type %T: %w",
+					key, binding.Interface(), err,
 				)
 			}
 		}
@@ -467,8 +475,8 @@ func (s *session) unmarshalRecord(
 		}
 		if err := s.bindValue(value, binding); err != nil {
 			return fmt.Errorf(
-				"error binding key %q to type %s: %w",
-				key, binding.Type().Name(), err,
+				"error binding key %q to type %T: %w",
+				key, binding.Interface(), err,
 			)
 		}
 	}

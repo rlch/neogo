@@ -130,9 +130,7 @@ func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execC
 	}
 }
 
-func (d *driver) DB() neo4j.DriverWithContext {
-	return d.db
-}
+func (d *driver) DB() neo4j.DriverWithContext { return d.db }
 
 func (d *driver) Exec(configurers ...func(*execConfig)) Query {
 	sessionConfig := neo4j.SessionConfig{}
