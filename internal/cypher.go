@@ -304,12 +304,12 @@ func (cy *cypher) writePattern(pattern *nodePattern) {
 		for {
 			nodeM := cy.registerNode(pattern)
 			cy.writeNode(nodeM)
-			edge := pattern.relationship
-			if edge == nil {
+			rs := pattern.relationship
+			if rs == nil {
 				break
 			}
-			edgeM := cy.registerEdge(edge)
-			cy.writeRelationship(edgeM, edge)
+			rsM := cy.registerRelationship(rs)
+			cy.writeRelationship(rsM, rs)
 
 			if next := pattern.next(); next != pattern {
 				pattern = next

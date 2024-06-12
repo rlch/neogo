@@ -8,9 +8,9 @@ type (
 		ICondition
 
 		nodePattern() *nodePattern
-		Related(edgeMatch, nodeMatch any) Pattern
-		From(edgeMatch, nodeMatch any) Pattern
-		To(edgeMatch, nodeMatch any) Pattern
+		Related(relationshipMatch, nodeMatch any) Pattern
+		From(relationshipMatch, nodeMatch any) Pattern
+		To(relationshipMatch, nodeMatch any) Pattern
 	}
 
 	Patterns interface {
@@ -52,7 +52,7 @@ func (n *nodePattern) next() *nodePattern {
 	} else if n.relationship.related != nil {
 		return n.relationship.related
 	} else {
-		panic(errors.New("edge has no target"))
+		panic(errors.New("relationship has no target"))
 	}
 }
 
@@ -88,25 +88,25 @@ func Paths(paths ...Pattern) Patterns {
 	return &CypherPattern{ns: ns}
 }
 
-func (c *CypherPath) Related(edgeMatch, nodeMatch any) Pattern {
+func (c *CypherPath) Related(relationshipMatch, nodeMatch any) Pattern {
 	c.n.tail().relationship = &relationshipPattern{
-		data:    edgeMatch,
+		data:    relationshipMatch,
 		related: &nodePattern{data: nodeMatch},
 	}
 	return c
 }
 
-func (c *CypherPath) From(edgeMatch, nodeMatch any) Pattern {
+func (c *CypherPath) From(relationshipMatch, nodeMatch any) Pattern {
 	c.n.tail().relationship = &relationshipPattern{
-		data: edgeMatch,
+		data: relationshipMatch,
 		from: &nodePattern{data: nodeMatch},
 	}
 	return c
 }
 
-func (c *CypherPath) To(edgeMatch, nodeMatch any) Pattern {
+func (c *CypherPath) To(relationshipMatch, nodeMatch any) Pattern {
 	c.n.tail().relationship = &relationshipPattern{
-		data: edgeMatch,
+		data: relationshipMatch,
 		to:   &nodePattern{data: nodeMatch},
 	}
 	return c
