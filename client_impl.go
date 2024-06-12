@@ -300,6 +300,9 @@ func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (
 						return false, fmt.Errorf("no value associated with key %q", k)
 					}
 					recordType := reflect.TypeOf(recordV)
+					if recordType == nil {
+						continue
+					}
 					for {
 						bindingNext := bindingType.Kind() == reflect.Array || bindingType.Kind() == reflect.Slice
 						recordNext := recordType.Kind() == reflect.Array || recordType.Kind() == reflect.Slice
