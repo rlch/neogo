@@ -8,6 +8,11 @@ import (
 
 var defaultEntropySource io.Reader
 
+func init() {
+	// Seed the default entropy source.
+	defaultEntropySource = ulid.DefaultEntropy()
+}
+
 var (
 	_ interface {
 		INode
@@ -16,13 +21,9 @@ var (
 	_ IRelationship = (*Relationship)(nil)
 )
 
-func init() {
-	// Seed the default entropy source.
-	defaultEntropySource = ulid.DefaultEntropy()
-}
-
 type INode interface {
 	IsNode()
+	GetID() string
 }
 
 type IDSetter interface {
@@ -35,6 +36,8 @@ type Node struct {
 }
 
 func (Node) IsNode() {}
+
+func (n Node) GetID() string { return n.ID }
 
 func (n *Node) SetID(id any) {
 	if s, ok := id.(string); ok {
