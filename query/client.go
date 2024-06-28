@@ -1,9 +1,11 @@
-// Package client provides client interfaces for constructing and executing Cypher queries.
-package client
+// Package query provides client interfaces for constructing and executing Cypher queries.
+package query
 
 import (
 	"context"
+	"strings"
 
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rlch/neogo/internal"
 )
 
@@ -42,10 +44,26 @@ type (
 	ValueIdentifier = Identifier
 )
 
-// Client is the interface for constructing a Cypher query.
+type (
+	// Scope provides information about the current state of the query.
+	Scope interface {
+		// Name returns the name of previously registered identifier.
+		Name(identifier Identifier) string
+		// Error returns the error that occurred during the query.
+		Error() error
+		// AddError adds an error to the query.
+		AddError(err error)
+	}
+
+	Expression interface {
+		Compile(s Scope, b *strings.Builder)
+	}
+)
+
+// Query is the interface for constructing a Cypher query.
 //
 // It can be instantiated using the [pkg/github.com/rlch/neogo.New] function.
-type Client interface {
+type Query interface {
 	Reader
 	Updater[Querier]
 
@@ -61,7 +79,7 @@ type Client interface {
 	//  UNION
 	//  <query>
 	//  ...
-	Union(unions ...func(c Client) Runner) Querier
+	Union(unions ...func(c Query) Runner) Querier
 
 	// Union writes a UNION ALL clause to the query, combining the results of each
 	// subquery.
@@ -70,13 +88,7 @@ type Client interface {
 	//  UNION ALL
 	//  <query>
 	//  ...
-	UnionAll(unions ...func(c Client) Runner) Querier
-}
-
-// Scope provides information about the current state of the query.
-type Scope interface {
-	// Name returns the name of previously registered identifier.
-	Name(identifier Identifier) string
+	UnionAll(unions ...func(c Query) Runner) Querier
 }
 
 // Reader is the interface for reading data from the database.
@@ -111,13 +123,16 @@ type Reader interface {
 	//  SHOW <command>
 	Show(command string) Yielder
 
-	Subquery(func(c Client) Runner) Querier
+	Subquery(func(c Query) Runner) Querier
 
 	// Cypher allows you to inject a raw Cypher query into the query.
+	Cypher(query string) Querier
+
+	// Eval allows you to inject an expression into the query.
 	//
-	// The function is passed a Scope, which can be used to obtain the information
+	// The expression is passed a Scope, which can be used to obtain the information
 	// about the querys current state.
-	Cypher(query func(scope Scope) string) Querier
+	Eval(expression Expression) Querier
 
 	// Unwind writes an UNWIND clause to the query.
 	//
@@ -195,6 +210,12 @@ type Runner interface {
 	// query.
 	RunWithParams(ctx context.Context, params map[string]any) error
 
+	// RunSummary is the same as Run, and returns a summary of the result.
+	RunSummary(ctx context.Context) (ResultSummary, error)
+
+	// RunSummaryWithParams is the same as RunWithParams, and returns a summary of the result.
+	RunSummaryWithParams(ctx context.Context, params map[string]any) (ResultSummary, error)
+
 	// Stream executes the query and returns an abstraction over a
 	// [pkg/github.com/neo4j/neo4j-go-driver/v5/neo4j.ResultWithContext], which
 	// allows records to be consumed one-by-one as a linked list, instead of all
@@ -206,18 +227,21 @@ type Runner interface {
 	StreamWithParams(ctx context.Context, params map[string]any, sink func(r Result) error) error
 }
 
-type Result interface {
-	// Peek returns true only if there is a record after the current one to be processed without advancing the record
-	// stream
-	Peek(ctx context.Context) bool
+type (
+	Result interface {
+		// Peek returns true only if there is a record after the current one to be processed without advancing the record
+		// stream
+		Peek(ctx context.Context) bool
 
-	// Next returns true only if there is a record to be processed.
-	Next(ctx context.Context) bool
+		// Next returns true only if there is a record to be processed.
+		Next(ctx context.Context) bool
 
-	// Err returns the latest error that caused this Next to return false.
-	Err() error
+		// Err returns the latest error that caused this Next to return false.
+		Err() error
 
-	// Read reads the values of the current record into the values bound within
-	// the query.
-	Read() error
-}
+		// Read reads the values of the current record into the values bound within
+		// the query.
+		Read() error
+	}
+	ResultSummary = neo4j.ResultSummary
+)

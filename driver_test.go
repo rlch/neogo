@@ -11,9 +11,9 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/rlch/neogo/client"
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
+	"github.com/rlch/neogo/query"
 )
 
 func startNeo4J(ctx context.Context) (neo4j.DriverWithContext, func(context.Context) error) {
@@ -140,7 +140,7 @@ func ExampleDriver_readSession() {
 			panic(err)
 		}
 	}()
-	err := session.ReadTx(ctx, func(begin func() client.Client) error {
+	err := session.ReadTransaction(ctx, func(begin func() Query) error {
 		if err := begin().
 			Unwind("range(0, 10)", "i").
 			Return(db.Qual(&ns, "i")).Run(ctx); err != nil {
@@ -195,7 +195,7 @@ func ExampleDriver_writeSession() {
 			panic(err)
 		}
 	}()
-	err := session.WriteTx(ctx, func(begin func() client.Client) error {
+	err := session.WriteTransaction(ctx, func(begin func() Query) error {
 		if err := begin().
 			Unwind("range(1, 10)", "i").
 			Merge(db.Node(
@@ -293,7 +293,7 @@ func ExampleDriver_streamWithParams() {
 			panic(err)
 		}
 	}()
-	err := session.ReadTx(ctx, func(begin func() client.Client) error {
+	err := session.ReadTransaction(ctx, func(begin func() Query) error {
 		var num int
 		params := map[string]interface{}{
 			"total": n,
@@ -301,7 +301,7 @@ func ExampleDriver_streamWithParams() {
 		return begin().
 			Unwind("range(0, $total)", "i").
 			Return(db.Qual(&num, "i")).
-			StreamWithParams(ctx, params, func(r client.Result) error {
+			StreamWithParams(ctx, params, func(r query.Result) error {
 				for i := 0; r.Next(ctx); i++ {
 					if err := r.Read(); err != nil {
 						return err

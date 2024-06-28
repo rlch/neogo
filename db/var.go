@@ -3,14 +3,14 @@ package db
 import (
 	"fmt"
 
-	"github.com/rlch/neogo/client"
+	"github.com/rlch/neogo/query"
 	"github.com/rlch/neogo/internal"
 )
 
 // Var creates a [variable] from an identifier.
 //
 // [variable]: https://neo4j.com/docs/cypher-manual/current/syntax/variables/
-func Var(identifier client.Identifier, opts ...internal.VariableOption) *internal.Variable {
+func Var(identifier query.Identifier, opts ...internal.VariableOption) *internal.Variable {
 	v := &internal.Variable{}
 	for _, opt := range opts {
 		internal.ConfigureVariable(v, opt)
@@ -40,7 +40,7 @@ func Var(identifier client.Identifier, opts ...internal.VariableOption) *interna
 // [variable]: https://neo4j.com/docs/cypher-manual/current/syntax/variables/
 // [WITH]: https://neo4j.com/docs/cypher-manual/current/clauses/with/
 // [RETURN]: https://neo4j.com/docs/cypher-manual/current/clauses/return/
-func Qual(identifier client.Identifier, expr string, opts ...internal.VariableOption) *internal.Variable {
+func Qual(identifier query.Identifier, expr string, opts ...internal.VariableOption) *internal.Variable {
 	// Check if name is provided in opts, if so we make it an alias.
 	v := Var(identifier, opts...)
 	if v.Name != "" && v.Expr != "" {
@@ -62,7 +62,7 @@ func Qual(identifier client.Identifier, expr string, opts ...internal.VariableOp
 // used and is replaced by toPtr.
 //
 // [variable]: https://neo4j.com/docs/cypher-manual/current/syntax/variables/
-func Bind(identifier client.Identifier, toPtr any) *internal.Variable {
+func Bind(identifier query.Identifier, toPtr any) *internal.Variable {
 	return &internal.Variable{
 		Identifier: identifier,
 		Bind:       toPtr,
@@ -103,8 +103,8 @@ func VarLength(varLengthExpr internal.Expr) internal.VariableOption {
 }
 
 // Props sets the properties of a node or relationship.
-// - Keys behave as [pkg/github.com/rlch/neogo/client.PropertyIdentifier]'s
-// - Values behave as [pkg/github.com/rlch/neogo/client.ValueIdentifier]'s
+// - Keys behave as [pkg/github.com/rlch/neogo/query.PropertyIdentifier]'s
+// - Values behave as [pkg/github.com/rlch/neogo/query.ValueIdentifier]'s
 type Props = internal.Props
 
 // PropsExpr sets the properties of a node or relationship to the provided

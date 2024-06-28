@@ -1,7 +1,7 @@
 package db
 
 import (
-	"github.com/rlch/neogo/client"
+	"github.com/rlch/neogo/query"
 	"github.com/rlch/neogo/internal"
 )
 
@@ -10,7 +10,7 @@ import (
 //	SET <identifier> = <value>
 //
 // [SET]: https://neo4j.com/docs/cypher-manual/current/clauses/set/
-func SetPropValue(identifier client.PropertyIdentifier, value client.ValueIdentifier) internal.SetItem {
+func SetPropValue(identifier query.PropertyIdentifier, value query.ValueIdentifier) internal.SetItem {
 	return internal.SetItem{
 		PropIdentifier: identifier,
 		ValIdentifier:  value,
@@ -22,7 +22,7 @@ func SetPropValue(identifier client.PropertyIdentifier, value client.ValueIdenti
 //	SET <identifier> += <properties>
 //
 // [SET]: https://neo4j.com/docs/cypher-manual/current/clauses/set/
-func SetMerge(identifier client.PropertyIdentifier, properties any) internal.SetItem {
+func SetMerge(identifier query.PropertyIdentifier, properties any) internal.SetItem {
 	return internal.SetItem{
 		PropIdentifier: identifier,
 		ValIdentifier:  properties,
@@ -35,7 +35,7 @@ func SetMerge(identifier client.PropertyIdentifier, properties any) internal.Set
 //	SET <identifier>:<label>:...:<label>
 //
 // [SET]: https://neo4j.com/docs/cypher-manual/current/clauses/set/
-func SetLabels(identifier client.PropertyIdentifier, labels ...string) internal.SetItem {
+func SetLabels(identifier query.PropertyIdentifier, labels ...string) internal.SetItem {
 	return internal.SetItem{
 		PropIdentifier: identifier,
 		Labels:         labels,
@@ -47,7 +47,7 @@ func SetLabels(identifier client.PropertyIdentifier, labels ...string) internal.
 //	SET <identifier>.<prop>
 //
 // [REMOVE]: https://neo4j.com/docs/cypher-manual/current/clauses/remove/
-func RemoveProp(identifier client.PropertyIdentifier) internal.RemoveItem {
+func RemoveProp(identifier query.PropertyIdentifier) internal.RemoveItem {
 	return internal.RemoveItem{
 		PropIdentifier: identifier,
 	}
@@ -58,7 +58,7 @@ func RemoveProp(identifier client.PropertyIdentifier) internal.RemoveItem {
 //	REMOVE <identifier>:<label>:...:<label>
 //
 // [REMOVE]: https://neo4j.com/docs/cypher-manual/current/clauses/remove/
-func RemoveLabels(identifier client.PropertyIdentifier, labels ...string) internal.RemoveItem {
+func RemoveLabels(identifier query.PropertyIdentifier, labels ...string) internal.RemoveItem {
 	return internal.RemoveItem{
 		PropIdentifier: identifier,
 		Labels:         labels,

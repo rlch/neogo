@@ -1,7 +1,7 @@
 package db
 
 import (
-	"github.com/rlch/neogo/client"
+	"github.com/rlch/neogo/query"
 	"github.com/rlch/neogo/internal"
 )
 
@@ -23,7 +23,7 @@ type (
 // Node creates a [node pattern].
 //
 // [node pattern]: https://neo4j.com/docs/cypher-manual/current/patterns/concepts/#node-patterns
-func Node(identifier client.Identifier) Pattern {
+func Node(identifier query.Identifier) Pattern {
 	return internal.NewNode(identifier)
 }
 

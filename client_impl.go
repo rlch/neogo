@@ -5,27 +5,28 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/goccy/go-json"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
-	"github.com/rlch/neogo/client"
 	"github.com/rlch/neogo/internal"
+	"github.com/rlch/neogo/query"
 )
 
 type (
 	clientImpl struct {
 		*session
 		cy *internal.CypherClient
-		client.Reader
-		client.Updater[client.Querier]
+		query.Reader
+		query.Updater[query.Querier]
 	}
 	querierImpl struct {
 		*session
 		cy *internal.CypherQuerier
-		client.Reader
-		client.Runner
-		client.Updater[client.Querier]
+		query.Reader
+		query.Runner
+		query.Updater[query.Querier]
 	}
 	readerImpl struct {
 		*session
@@ -34,7 +35,7 @@ type (
 	yielderImpl struct {
 		*session
 		cy *internal.CypherYielder
-		client.Querier
+		query.Querier
 	}
 	updaterImpl[To, ToCypher any] struct {
 		*session
@@ -61,10 +62,10 @@ func (s *session) newClient(cy *internal.CypherClient) *clientImpl {
 		session: s,
 		cy:      cy,
 		Reader:  s.newReader(cy.CypherReader),
-		Updater: newUpdater[client.Querier, *internal.CypherQuerier](
+		Updater: newUpdater[query.Querier, *internal.CypherQuerier](
 			s,
 			cy.CypherUpdater,
-			func(c *internal.CypherQuerier) client.Querier {
+			func(c *internal.CypherQuerier) query.Querier {
 				return s.newQuerier(c)
 			},
 		),
@@ -77,10 +78,10 @@ func (s *session) newQuerier(cy *internal.CypherQuerier) *querierImpl {
 		cy:      cy,
 		Reader:  s.newReader(cy.CypherReader),
 		Runner:  s.newRunner(cy.CypherRunner),
-		Updater: newUpdater[client.Querier, *internal.CypherQuerier](
+		Updater: newUpdater[query.Querier, *internal.CypherQuerier](
 			s,
 			cy.CypherUpdater,
-			func(c *internal.CypherQuerier) client.Querier {
+			func(c *internal.CypherQuerier) query.Querier {
 				return s.newQuerier(c)
 			},
 		),
@@ -118,11 +119,11 @@ func (s *session) newRunner(cy *internal.CypherRunner) *runnerImpl {
 	return &runnerImpl{session: s, cy: cy}
 }
 
-func (c *clientImpl) Use(graphExpr string) client.Querier {
+func (c *clientImpl) Use(graphExpr string) query.Querier {
 	return c.newQuerier(c.cy.Use(graphExpr))
 }
 
-func (c *clientImpl) Union(unions ...func(c client.Client) client.Runner) client.Querier {
+func (c *clientImpl) Union(unions ...func(c Query) query.Runner) query.Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
 		union := union
@@ -133,7 +134,7 @@ func (c *clientImpl) Union(unions ...func(c client.Client) client.Runner) client
 	return c.newQuerier(c.cy.Union(inUnions...))
 }
 
-func (c *clientImpl) UnionAll(unions ...func(c client.Client) client.Runner) client.Querier {
+func (c *clientImpl) UnionAll(unions ...func(c Query) query.Runner) query.Querier {
 	inUnions := make([]func(c *internal.CypherClient) *internal.CypherRunner, len(unions))
 	for i, union := range unions {
 		union := union
@@ -144,15 +145,15 @@ func (c *clientImpl) UnionAll(unions ...func(c client.Client) client.Runner) cli
 	return c.newQuerier(c.cy.UnionAll(inUnions...))
 }
 
-func (c *readerImpl) OptionalMatch(patterns internal.Patterns) client.Querier {
+func (c *readerImpl) OptionalMatch(patterns internal.Patterns) query.Querier {
 	return c.newQuerier(c.cy.OptionalMatch(patterns))
 }
 
-func (c *readerImpl) Match(patterns internal.Patterns) client.Querier {
+func (c *readerImpl) Match(patterns internal.Patterns) query.Querier {
 	return c.newQuerier(c.cy.Match(patterns))
 }
 
-func (c *readerImpl) Subquery(subquery func(c client.Client) client.Runner) client.Querier {
+func (c *readerImpl) Subquery(subquery func(c Query) query.Runner) query.Querier {
 	inSubquery := func(cc *internal.CypherClient) *internal.CypherRunner {
 		runner := subquery(c.newClient(cc))
 		return runner.(baseRunner).GetRunner()
@@ -160,34 +161,39 @@ func (c *readerImpl) Subquery(subquery func(c client.Client) client.Runner) clie
 	return c.newQuerier(c.cy.Subquery(inSubquery))
 }
 
-func (c *readerImpl) With(identifiers ...any) client.Querier {
+func (c *readerImpl) With(identifiers ...any) query.Querier {
 	return c.newQuerier(c.cy.With(identifiers...))
 }
 
-func (c *readerImpl) Unwind(expr any, as string) client.Querier {
+func (c *readerImpl) Unwind(expr any, as string) query.Querier {
 	return c.newQuerier(c.cy.Unwind(expr, as))
 }
 
-func (c *readerImpl) Call(procedure string) client.Yielder {
+func (c *readerImpl) Call(procedure string) query.Yielder {
 	return c.newYielder(c.cy.Call(procedure))
 }
 
-func (c *readerImpl) Show(command string) client.Yielder {
+func (c *readerImpl) Show(command string) query.Yielder {
 	return c.newYielder(c.cy.Show(command))
 }
 
-func (c *readerImpl) Return(identifiers ...any) client.Runner {
+func (c *readerImpl) Return(identifiers ...any) query.Runner {
 	return c.newRunner(c.cy.Return(identifiers...))
 }
 
-func (c *readerImpl) Cypher(query func(s client.Scope) string) client.Querier {
-	q := c.cy.Cypher(func(scope *internal.Scope) string {
-		return query(scope)
+func (c *readerImpl) Cypher(query string) query.Querier {
+	q := c.cy.Cypher(query)
+	return c.newQuerier(q)
+}
+
+func (c *readerImpl) Eval(expression query.Expression) query.Querier {
+	q := c.cy.Eval(func(s *internal.Scope, b *strings.Builder) {
+		expression.Compile(s, b)
 	})
 	return c.newQuerier(q)
 }
 
-func (c *querierImpl) Where(opts ...internal.WhereOption) client.Querier {
+func (c *querierImpl) Where(opts ...internal.WhereOption) query.Querier {
 	return c.newQuerier(c.cy.Where(opts...))
 }
 
@@ -215,12 +221,18 @@ func (c *updaterImpl[To, ToCypher]) Remove(items ...internal.RemoveItem) To {
 	return c.to(c.cy.Remove(items...))
 }
 
-func (c *updaterImpl[To, ToCypher]) ForEach(identifier, elementsExpr any, do func(c client.Updater[any])) To {
-	return c.to(c.cy.ForEach(identifier, elementsExpr, func(c *internal.CypherUpdater[any]) {
+func (c *updaterImpl[To, ToCypher]) ForEach(identifier, elementsExpr any, do func(c query.Updater[any])) To {
+	return c.to(c.cy.ForEach(identifier, elementsExpr, func(cu *internal.CypherUpdater[any]) {
+		u := &updaterImpl[any, any]{
+			session: c.session,
+			cy:      cu,
+			to:      func(tc any) any { return nil },
+		}
+		do(u)
 	}))
 }
 
-func (c *yielderImpl) Yield(identifiers ...any) client.Querier {
+func (c *yielderImpl) Yield(identifiers ...any) query.Querier {
 	return c.newQuerier(c.cy.Yield(identifiers...))
 }
 
@@ -236,19 +248,23 @@ func (c *runnerImpl) GetRunner() *internal.CypherRunner {
 	return c.cy
 }
 
-func (c *runnerImpl) Print() client.Runner {
+func (c *runnerImpl) Print() query.Runner {
 	c.cy.Print()
 	return c
 }
 
-func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (err error) {
+func (c *runnerImpl) run(
+	ctx context.Context,
+	params map[string]any,
+	mapResult func(r neo4j.ResultWithContext) (any, error),
+) (out any, err error) {
 	cy, err := c.cy.CompileWithParams(params)
 	if err != nil {
-		return fmt.Errorf("cannot compile cypher: %w", err)
+		return nil, fmt.Errorf("cannot compile cypher: %w", err)
 	}
 	canonicalizedParams, err := canonicalizeParams(cy.Parameters)
 	if err != nil {
-		return fmt.Errorf("cannot serialize parameters: %w", err)
+		return nil, fmt.Errorf("cannot serialize parameters: %w", err)
 	}
 	return c.executeTransaction(
 		ctx, cy,
@@ -258,97 +274,42 @@ func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (
 			if err != nil {
 				return nil, fmt.Errorf("cannot run cypher: %w", err)
 			}
-			if !result.Next(ctx) {
-				return nil, nil
-			}
-			first := result.Record()
-
-			// If we have more than one record, we know we should be unmarhsalling
-			// into slices. If we have a single record, we don't necessarily know if
-			// we want to marshal into slices or not.
-			//
-			// Compare the depth of nesting for the bindings and their corresponding
-			// record values:
-			// - If any of the bindings have a non-zero depth, i.e. non-slice, we
-			//   assume single.
-			// - If any of the bindings have a different depth than the correpodning
-			//   record-values, assume we have multiple records.
-			isRecords, err := (func() (bool, error) {
-				if result.Peek(ctx) {
-					return true, nil
-				}
-				allSlices := true
-				bindingTypes := map[string]reflect.Type{}
-				for k, binding := range cy.Bindings {
-					typ := binding.Type()
-					for typ.Kind() == reflect.Ptr {
-						typ = typ.Elem()
-					}
-					bindingTypes[k] = typ
-					if typ.Kind() == reflect.Slice ||
-						typ.Kind() == reflect.Array {
-						continue
-					}
-					allSlices = false
-				}
-				if !allSlices {
-					return false, nil
-				}
-				for k, bindingType := range bindingTypes {
-					recordV, ok := first.Get(k)
-					if !ok {
-						return false, fmt.Errorf("no value associated with key %q", k)
-					}
-					recordType := reflect.TypeOf(recordV)
-					if recordType == nil {
-						continue
-					}
-					for {
-						bindingNext := bindingType.Kind() == reflect.Array || bindingType.Kind() == reflect.Slice
-						recordNext := recordType.Kind() == reflect.Array || recordType.Kind() == reflect.Slice
-						if bindingNext && recordNext {
-							bindingType = bindingType.Elem()
-							recordType = recordType.Elem()
-							continue
-						} else if !bindingNext && !recordNext {
-							break
-						}
-						return true, nil
-					}
-				}
-				return false, nil
-			})()
+			err = c.unmarshalResult(ctx, cy, result)
 			if err != nil {
 				return nil, err
 			}
-			if isRecords {
-				var records []*neo4j.Record
-				records, err = result.Collect(ctx)
-				if err != nil {
-					return nil, fmt.Errorf("cannot collect records: %w", err)
-				}
-				records = append([]*neo4j.Record{first}, records...)
-				if err = c.unmarshalRecords(cy, records); err != nil {
-					return nil, fmt.Errorf("cannot unmarshal records: %w", err)
-				}
-			} else {
-				single := result.Record()
-				if single == nil {
-					return nil, nil
-				}
-				if err = c.unmarshalRecord(cy, single); err != nil {
-					return nil, fmt.Errorf("cannot unmarshal record: %w", err)
-				}
+			if mapResult == nil {
+				return nil, nil
 			}
-			return nil, nil
+			return mapResult(result)
 		})
 }
 
-func (c *runnerImpl) Run(ctx context.Context) error {
-	return c.RunWithParams(ctx, nil)
+func (c *runnerImpl) RunWithParams(ctx context.Context, params map[string]any) (err error) {
+	_, err = c.run(ctx, params, nil)
+	return
 }
 
-func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any, sink func(r client.Result) error) (err error) {
+func (c *runnerImpl) Run(ctx context.Context) (err error) {
+	_, err = c.run(ctx, nil, nil)
+	return
+}
+
+func (c *runnerImpl) RunSummary(ctx context.Context) (neo4j.ResultSummary, error) {
+	return c.RunSummaryWithParams(ctx, nil)
+}
+
+func (c *runnerImpl) RunSummaryWithParams(ctx context.Context, params map[string]any) (neo4j.ResultSummary, error) {
+	summary, err := c.run(ctx, params, func(r neo4j.ResultWithContext) (any, error) {
+		return r.Consume(ctx)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return summary.(neo4j.ResultSummary), nil
+}
+
+func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any, sink func(r query.Result) error) (err error) {
 	cy, err := c.cy.CompileWithParams(params)
 	if err != nil {
 		return fmt.Errorf("cannot compile cypher: %w", err)
@@ -357,7 +318,7 @@ func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any
 	if err != nil {
 		return fmt.Errorf("cannot serialize parameters: %w", err)
 	}
-	return c.executeTransaction(ctx, cy, func(tx neo4j.ManagedTransaction) (any, error) {
+	_, err = c.executeTransaction(ctx, cy, func(tx neo4j.ManagedTransaction) (any, error) {
 		var result neo4j.ResultWithContext
 		result, err = tx.Run(ctx, cy.Cypher, canonicalizedParams)
 		if err != nil {
@@ -373,9 +334,10 @@ func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any
 		}
 		return nil, nil
 	})
+	return err
 }
 
-func (c *runnerImpl) Stream(ctx context.Context, sink func(r client.Result) error) (err error) {
+func (c *runnerImpl) Stream(ctx context.Context, sink func(r query.Result) error) (err error) {
 	return c.StreamWithParams(ctx, nil, sink)
 }
 
@@ -398,6 +360,93 @@ func (c *resultImpl) Read() error {
 	}
 	if err := c.unmarshalRecord(c.compiled, record); err != nil {
 		return fmt.Errorf("cannot unmarshal record: %w", err)
+	}
+	return nil
+}
+
+func (s *session) unmarshalResult(
+	ctx context.Context,
+	cy *internal.CompiledCypher,
+	result neo4j.ResultWithContext,
+) error {
+	if !result.Next(ctx) {
+		return nil
+	}
+	first := result.Record()
+
+	// If we have more than one record, we know we should be unmarshalling
+	// into slices. If we have a single record, we don't necessarily know if
+	// we want to marshal into slices or not.
+	//
+	// Compare the depth of nesting for the bindings and their corresponding
+	// record values:
+	// - If any of the bindings have a non-zero depth, i.e. non-slice, we
+	//   assume single.
+	// - If any of the bindings have a different depth than the correpodning
+	//   record-values, assume we have multiple records.
+	isRecords, err := (func() (bool, error) {
+		if result.Peek(ctx) {
+			return true, nil
+		}
+		allSlices := true
+		bindingTypes := map[string]reflect.Type{}
+		for k, binding := range cy.Bindings {
+			typ := binding.Type()
+			for typ.Kind() == reflect.Ptr {
+				typ = typ.Elem()
+			}
+			bindingTypes[k] = typ
+			if typ.Kind() == reflect.Slice ||
+				typ.Kind() == reflect.Array {
+				continue
+			}
+			allSlices = false
+		}
+		if !allSlices {
+			return false, nil
+		}
+		for k, bindingType := range bindingTypes {
+			recordV, ok := first.Get(k)
+			if !ok {
+				return false, fmt.Errorf("no value associated with key %q", k)
+			}
+			recordType := reflect.TypeOf(recordV)
+			for {
+				bindingNext := bindingType.Kind() == reflect.Array || bindingType.Kind() == reflect.Slice
+				recordNext := recordType.Kind() == reflect.Array || recordType.Kind() == reflect.Slice
+				if bindingNext && recordNext {
+					bindingType = bindingType.Elem()
+					recordType = recordType.Elem()
+					continue
+				} else if !bindingNext && !recordNext {
+					break
+				}
+				return true, nil
+			}
+		}
+		return false, nil
+	})()
+	if err != nil {
+		return err
+	}
+	if isRecords {
+		var records []*neo4j.Record
+		records, err = result.Collect(ctx)
+		if err != nil {
+			return fmt.Errorf("cannot collect records: %w", err)
+		}
+		records = append([]*neo4j.Record{first}, records...)
+		if err = s.unmarshalRecords(cy, records); err != nil {
+			return fmt.Errorf("cannot unmarshal records: %w", err)
+		}
+	} else {
+		single := result.Record()
+		if single == nil {
+			return nil
+		}
+		if err = s.unmarshalRecord(cy, single); err != nil {
+			return fmt.Errorf("cannot unmarshal record: %w", err)
+		}
 	}
 	return nil
 }
@@ -438,8 +487,8 @@ func (s *session) unmarshalRecords(
 			}
 			if err := s.bindValue(value, to); err != nil {
 				return fmt.Errorf(
-					"error binding key %q to type %s: %w",
-					key, binding.Type().Elem().Name(), err,
+					"error binding key %s to type %T: %w",
+					key, binding.Interface(), err,
 				)
 			}
 		}
@@ -458,8 +507,8 @@ func (s *session) unmarshalRecord(
 		}
 		if err := s.bindValue(value, binding); err != nil {
 			return fmt.Errorf(
-				"error binding key %q to type %s: %w",
-				key, binding.Type().Name(), err,
+				"error binding key %q to type %T: %w",
+				key, binding.Interface(), err,
 			)
 		}
 	}
@@ -470,7 +519,7 @@ func (c *runnerImpl) executeTransaction(
 	ctx context.Context,
 	cy *internal.CompiledCypher,
 	exec neo4j.ManagedTransactionWork,
-) (err error) {
+) (out any, err error) {
 	if c.currentTx == nil {
 		sess := c.Session()
 		sessConfig := neo4j.SessionConfig{
@@ -502,17 +551,17 @@ func (c *runnerImpl) executeTransaction(
 			}
 		}
 		if cy.IsWrite || sessConfig.AccessMode == neo4j.AccessModeWrite {
-			_, err = sess.ExecuteWrite(ctx, exec, config)
+			out, err = sess.ExecuteWrite(ctx, exec, config)
 		} else {
-			_, err = sess.ExecuteRead(ctx, exec, config)
+			out, err = sess.ExecuteRead(ctx, exec, config)
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 	} else {
-		_, err = exec(c.currentTx)
+		out, err = exec(c.currentTx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	return

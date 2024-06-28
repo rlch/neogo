@@ -54,7 +54,7 @@ func (s *cypher) catch(op func()) {
 				panic(err)
 			}
 			if s.err == nil {
-				s.err = err
+				s.AddError(err)
 			}
 		}
 	}()
@@ -63,9 +63,7 @@ func (s *cypher) catch(op func()) {
 
 const indent = "  "
 
-func (cy *cypher) newline() {
-	cy.WriteByte('\n')
-}
+func (cy *cypher) newline() { cy.WriteByte('\n') }
 
 // nodePattern ::= "(" [ nodeVariable ] [ labelExpression ]
 //
@@ -306,12 +304,12 @@ func (cy *cypher) writePattern(pattern *nodePattern) {
 		for {
 			nodeM := cy.registerNode(pattern)
 			cy.writeNode(nodeM)
-			edge := pattern.relationship
-			if edge == nil {
+			rs := pattern.relationship
+			if rs == nil {
 				break
 			}
-			edgeM := cy.registerEdge(edge)
-			cy.writeRelationship(edgeM, edge)
+			rsM := cy.registerRelationship(rs)
+			cy.writeRelationship(rsM, rs)
 
 			if next := pattern.next(); next != pattern {
 				pattern = next
@@ -364,7 +362,7 @@ func (cy *cypher) writeUnionClause(unions []func(*CypherClient) *CypherRunner, a
 			panic(err)
 		}
 		queries[i] = comp.Cypher
-		cy.mergeChildScope(runner.Scope)
+		cy.MergeChildScope(runner.Scope)
 	}
 	cy.WriteString(strings.Join(queries, "\n"+clause+"\n"))
 }
@@ -459,7 +457,7 @@ func (cy *cypher) writeSubqueryClause(subquery func(c *CypherClient) *CypherRunn
 				panic(err)
 			}
 			cy.WriteString(compiled.Cypher)
-			cy.mergeChildScope(runSubquery.Scope)
+			cy.MergeChildScope(runSubquery.Scope)
 			cy.isWrite = cy.isWrite || compiled.IsWrite
 		})
 		cy.WriteString("\n}\n")
@@ -663,8 +661,8 @@ func (cy *cypher) writeForEachClause(identifier, elementsExpr any, do func(c *Cy
 			To:     func(c *cypher) any { return nil },
 		}
 		do(updater)
-		if updater.err != nil {
-			panic(updater.err)
+		if updater.Error() != nil {
+			panic(updater.Error())
 		}
 		cy.WriteString(strings.TrimRight(b.String(), "\n") + ")")
 		cy.newline()

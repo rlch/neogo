@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -14,9 +13,7 @@ func TestCypher(t *testing.T) {
 	var n any
 	cy, err := c.
 		Match(db.Node(db.Qual(&n, "n"))).
-		Cypher(func(scope *internal.Scope) string {
-			return fmt.Sprintf("WHERE %s.name = 'Bob'", scope.Name(&n))
-		}).
+		Cypher(`WHERE n.name = 'Bob'`).
 		Return(&n).
 		Compile()
 
