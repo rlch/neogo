@@ -8,6 +8,7 @@ import (
 	"github.com/rlch/neogo/query"
 )
 
+// The `New` function creates a new instance of the `expression` struct, which implements the `neogo.Expression` interface. It takes a function `expr` as an argument, which defines the behavior of the expression.
 func New(expr func(scope query.Scope, b *strings.Builder)) neogo.Expression {
 	return &expression{expr}
 }
