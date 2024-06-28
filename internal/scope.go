@@ -122,31 +122,6 @@ func (s *Scope) clone() *Scope {
 	}
 }
 
-func (s *Scope) extend(other *Scope) {
-	for k, v := range other.bindings {
-		s.bindings[k] = v
-	}
-	for k, v := range other.names {
-		s.names[k] = v
-	}
-	for k, v := range other.generatedNames {
-		s.generatedNames[k] = v
-	}
-	for k, v := range other.fields {
-		s.fields[k] = v
-	}
-	for k, v := range other.parameters {
-		s.parameters[k] = v
-	}
-	for k, v := range other.paramAddrs {
-		s.paramAddrs[k] = v
-	}
-	s.paramCounter = other.paramCounter
-	if other.isWrite {
-		s.isWrite = true
-	}
-}
-
 func (child *Scope) mergeParentScope(parent *Scope) {
 	// We merge the param counter for avoiding parameter name collisions; and
 	// bindings to ensure variables cannot be overridden in the child scope.
