@@ -1,0 +1,11 @@
+version = 1
+
+[[analyzers]]
+name = "go"
+
+  [analyzers.meta]
+  import_root = "github.com/rlch/neogo"
+  dependencies_vendored = true
+
+[[transformers]]
+name = "gofumpt"
