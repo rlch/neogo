@@ -3,8 +3,8 @@ package db
 import (
 	"fmt"
 
-	"github.com/rlch/neogo/query"
 	"github.com/rlch/neogo/internal"
+	"github.com/rlch/neogo/query"
 )
 
 // Var creates a [variable] from an identifier.
