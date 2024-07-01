@@ -33,7 +33,7 @@ func newClient(cy *internal.CypherClient) *Client {
 	}
 }
 
-func newRunner(cy *internal.CypherRunner) *runner {
+func newRunner(cy *internal.CypherRunner) Runner {
 	return &runner{cy}
 }
 
@@ -45,14 +45,14 @@ func newQuerier(cy *internal.CypherQuerier) *Querier {
 			cy.CypherUpdater,
 			newQuerier,
 		),
-		runner: newRunner(cy.CypherRunner),
+		Runner: newRunner(cy.CypherRunner),
 	}
 }
 
 func newReader(cy *internal.CypherReader) *Reader {
 	return &Reader{
 		buffer: cy,
-		runner: newRunner(cy.CypherRunner),
+		Runner: newRunner(cy.CypherRunner),
 	}
 }
 
@@ -60,7 +60,7 @@ func newYielder(cy *internal.CypherYielder) *Yielder {
 	return &Yielder{
 		buffer:  cy,
 		Querier: newQuerier(cy.CypherQuerier),
-		runner:  newRunner(cy.CypherRunner),
+		Runner:  newRunner(cy.CypherRunner),
 	}
 }
 
@@ -90,16 +90,16 @@ type (
 		buffer *internal.CypherQuerier
 		*Reader
 		*Updater[*Querier, *internal.CypherQuerier]
-		*runner
+		Runner
 	}
 	Reader struct {
 		buffer *internal.CypherReader
-		*runner
+		Runner
 	}
 	Yielder struct {
 		buffer *internal.CypherYielder
 		*Querier
-		*runner
+		Runner
 	}
 	Updater[To any, ToCypher any] struct {
 		buffer *internal.CypherUpdater[ToCypher]
@@ -189,13 +189,13 @@ func (e *Reader) Match(pattern internal.Patterns) *Querier {
 	return newQuerier(q)
 }
 
-func Return(identifiers ...query.Identifier) *runner {
+func Return(identifiers ...query.Identifier) Runner {
 	e := empty()
 	q := e.buffer.Return(identifiers...)
 	return newRunner(q)
 }
 
-func (e *Reader) Return(identifiers ...query.Identifier) *runner {
+func (e *Reader) Return(identifiers ...query.Identifier) Runner {
 	q := e.buffer.Return(identifiers...)
 	return newRunner(q)
 }
