@@ -1,8 +1,8 @@
 package db
 
 import (
-	"github.com/rlch/neogo/query"
 	"github.com/rlch/neogo/internal"
+	"github.com/rlch/neogo/query"
 )
 
 // With adds configuration to a projection item for use in a [WITH] clause.
