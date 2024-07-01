@@ -2,6 +2,7 @@ package neogo
 
 import (
 	"context"
+	"errors"
 	"reflect"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -69,7 +70,7 @@ type (
 		// Close rolls back the actual transaction if it's not already committed/rolled back
 		// and closes all resources associated with this transaction
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
-		Close(ctx context.Context) error
+		Close(ctx context.Context, joinedErrors ...error) error
 	}
 
 	Config func(*driver)
@@ -79,7 +80,7 @@ type (
 		Session() neo4j.SessionWithContext
 		// Close closes any open resources and marks this session as unusable.
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
-		Close(ctx context.Context) error
+		Close(ctx context.Context, joinedErrors ...error) error
 		// ReadTransaction executes the given unit of work in a AccessModeRead transaction with retry logic in place.
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
 		ReadTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error
@@ -191,8 +192,16 @@ func (s *session) Session() neo4j.SessionWithContext {
 	return s.session
 }
 
-func (s *session) Close(ctx context.Context) error {
-	return s.session.Close(ctx)
+func (s *session) Close(ctx context.Context, errs ...error) error {
+	sessErr := s.session.Close(ctx)
+	if sessErr != nil {
+		errs = append(errs, sessErr)
+		return errors.Join(errs...)
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errors.Join(errs...)
 }
 
 func (s *session) ReadTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error {
@@ -241,6 +250,14 @@ func (t *transactionImpl) Rollback(ctx context.Context) error {
 	return t.tx.Rollback(ctx)
 }
 
-func (t *transactionImpl) Close(ctx context.Context) error {
-	return t.tx.Close(ctx)
+func (t *transactionImpl) Close(ctx context.Context, errs ...error) error {
+	sessErr := t.tx.Close(ctx)
+	if sessErr != nil {
+		errs = append(errs, sessErr)
+		return errors.Join(errs...)
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errors.Join(errs...)
 }
