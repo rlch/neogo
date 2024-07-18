@@ -93,8 +93,6 @@ func extractNeo4JName(instance any, fields ...string) ([]string, error) {
 				f := v.Field(i)
 				if f.Anonymous && f.Type.Kind() == reflect.Struct {
 					queue = append(queue, f.Type)
-				}
-				if f.Type.Kind() == reflect.Struct {
 					extractTagFromMatch(&f)
 				}
 			}

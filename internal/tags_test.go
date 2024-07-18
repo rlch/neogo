@@ -36,6 +36,11 @@ type personWithNonStructLabels struct {
 	Name string `neo4j:"Name"`
 }
 
+type personWithAnonymousStructLabels struct {
+	swedishPerson
+	S swedishPerson `neo4j:"Concrete"`
+}
+
 func TestExtractNodeLabel(t *testing.T) {
 	t.Run("nil when node nil", func(t *testing.T) {
 		assert.Nil(t, ExtractNodeLabels(nil))
@@ -59,6 +64,10 @@ func TestExtractNodeLabel(t *testing.T) {
 
 	t.Run("only extract the labels from structs", func(t *testing.T) {
 		assert.Equal(t, []string{"Person", "Swedish"}, ExtractNodeLabels(personWithNonStructLabels{}))
+	})
+
+	t.Run("only extract the labels from anonymous structs", func(t *testing.T) {
+		assert.Equal(t, []string{"Person", "Swedish"}, ExtractNodeLabels(personWithAnonymousStructLabels{}))
 	})
 
 	t.Run("extracts from abstract types", func(t *testing.T) {
