@@ -330,6 +330,77 @@ func TestUnmarshalResult(t *testing.T) {
 				Name: "Jesse Pinkman",
 			}, n[1])
 		})
+
+		t.Run("binds to [][]Abstract", func(t *testing.T) {
+			s := &session{
+				registry: registry{
+					abstractNodes: []IAbstract{
+						&tests.BaseOrganism{},
+						&tests.BasePet{},
+					},
+				},
+			}
+			var n [][]tests.Organism
+			cy := &internal.CompiledCypher{
+				Bindings: map[string]reflect.Value{
+					"n": reflect.ValueOf(&n),
+				},
+			}
+			records := []*neo4j.Record{
+				{
+					Keys: []string{"n"},
+					Values: []any{
+						[]any{
+							neo4j.Node{
+								Labels: []string{
+									"Organism",
+									"Pet",
+								},
+								Props: map[string]any{
+									"id":   "pet",
+									"cute": true,
+								},
+							},
+						},
+					},
+				},
+				{
+					Keys: []string{"n"},
+					Values: []any{
+						[]any{
+							neo4j.Node{
+								Labels: []string{
+									"Organism",
+									"Human",
+								},
+								Props: map[string]any{
+									"id":    "human",
+									"alive": true,
+								},
+							},
+						},
+					},
+				},
+			}
+			err := s.unmarshalRecords(cy, records)
+			assert.NoError(t, err)
+			assert.Equal(t, &tests.BasePet{
+				BaseOrganism: tests.BaseOrganism{
+					Node: internal.Node{
+						ID: "pet",
+					},
+				},
+				Cute: true,
+			}, n[0][0])
+			assert.Equal(t, &tests.Human{
+				BaseOrganism: tests.BaseOrganism{
+					Node: internal.Node{
+						ID: "human",
+					},
+					Alive: true,
+				},
+			}, n[1][0])
+		})
 	})
 }
 

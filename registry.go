@@ -112,6 +112,7 @@ func (r *registry) bindValue(from any, to reflect.Value) error {
 		return nil
 	}
 
+	// Node / relationship
 	switch fromVal := from.(type) {
 	case neo4j.Node:
 		ok, err := bindValuer(fromVal, to)
@@ -132,7 +133,6 @@ func (r *registry) bindValue(from any, to reflect.Value) error {
 			innerT.Kind() == reflect.Interface {
 			return r.bindAbstractNode(fromVal, to)
 		}
-		// TODO: Support abstract nodes
 		return r.bindValue(fromVal.Props, to)
 	case neo4j.Relationship:
 		ok, err := bindValuer(fromVal, to)
@@ -145,7 +145,28 @@ func (r *registry) bindValue(from any, to reflect.Value) error {
 		return r.bindValue(fromVal.Props, to)
 	}
 
-	// First, check for primitive coercion.
+	switch reflect.TypeOf(from).Kind() {
+	case reflect.Slice:
+		if to.Kind() == reflect.Ptr {
+			to = to.Elem()
+		}
+		if to.Kind() != reflect.Slice {
+			return errors.New("cannot bind slice to non-slice type")
+		}
+		fromV := reflect.ValueOf(from)
+		n := fromV.Len()
+		to.Set(reflect.MakeSlice(to.Type(), n, n))
+		for i := 0; i < n; i++ {
+			fromI := fromV.Index(i).Interface()
+			err := r.bindValue(fromI, to.Index(i))
+			if err != nil {
+				return fmt.Errorf("error binding slice element %d: %w", i, err)
+			}
+		}
+		return nil
+	}
+
+	// Primitive coercion.
 	value := unwindValue(to)
 	ok, err := func() (bool, error) {
 		if !to.CanSet() {
@@ -196,7 +217,7 @@ func (r *registry) bindValue(from any, to reflect.Value) error {
 		return nil
 	}
 
-	// Next, we check if to implements Valuer.
+	// Check if to implements Valuer.
 	ok, err = func() (bool, error) {
 		switch fromVal := from.(type) {
 		case bool:
