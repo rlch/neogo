@@ -112,6 +112,10 @@ func (r *registry) bindValue(from any, to reflect.Value) (err error) {
 		return nil
 	}
 
+	if from == nil {
+		return nil
+	}
+
 	// Valuer through Node / relationship
 	switch fromVal := from.(type) {
 	case neo4j.Node:

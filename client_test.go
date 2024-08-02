@@ -65,6 +65,22 @@ func TestUnmarshalResult(t *testing.T) {
 			}, n)
 		})
 
+		t.Run("binds to null", func(t *testing.T) {
+			var n *tests.Person
+			cy := &internal.CompiledCypher{
+				Bindings: map[string]reflect.Value{
+					"n": reflect.ValueOf(n),
+				},
+			}
+			record := &neo4j.Record{
+				Keys:   []string{"n"},
+				Values: []any{nil},
+			}
+			err := s.unmarshalRecord(cy, record)
+			assert.NoError(t, err)
+			assert.Equal(t, nil, n)
+		})
+
 		t.Run("binds to abstract node", func(t *testing.T) {
 			var n tests.Organism = &tests.BaseOrganism{}
 			cy := &internal.CompiledCypher{
@@ -411,7 +427,7 @@ func TestUnmarshalResult(t *testing.T) {
 					},
 				},
 			}
-			var n [][]*tests.BasePet
+			var n [][]tests.BasePet
 			cy := &internal.CompiledCypher{
 				Bindings: map[string]reflect.Value{
 					"n": reflect.ValueOf(&n),
@@ -438,7 +454,7 @@ func TestUnmarshalResult(t *testing.T) {
 			}
 			err := s.unmarshalRecords(cy, records)
 			assert.NoError(t, err)
-			assert.Equal(t, &tests.BasePet{
+			assert.Equal(t, tests.BasePet{
 				BaseOrganism: tests.BaseOrganism{
 					Node: internal.Node{
 						ID: "pet",
