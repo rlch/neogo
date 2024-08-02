@@ -102,7 +102,7 @@ func bindCasted[C any](
 
 var emptyInterface = reflect.TypeOf((*any)(nil)).Elem()
 
-func (r *registry) bindValue(from any, to reflect.Value) error {
+func (r *registry) bindValue(from any, to reflect.Value) (err error) {
 	toT := to.Type()
 	if to.Kind() == reflect.Ptr && toT.Elem() == emptyInterface {
 		to.Elem().Set(reflect.ValueOf(from))
@@ -112,7 +112,7 @@ func (r *registry) bindValue(from any, to reflect.Value) error {
 		return nil
 	}
 
-	// Node / relationship
+	// Valuer through Node / relationship
 	switch fromVal := from.(type) {
 	case neo4j.Node:
 		ok, err := bindValuer(fromVal, to)
@@ -145,6 +145,51 @@ func (r *registry) bindValue(from any, to reflect.Value) error {
 		return r.bindValue(fromVal.Props, to)
 	}
 
+	// Valuer throuh any other RecordValue
+	var ok bool
+	ok, err = func() (bool, error) {
+		switch fromVal := from.(type) {
+		case bool:
+			return bindValuer(fromVal, to)
+		case int64:
+			return bindValuer(fromVal, to)
+		case float64:
+			return bindValuer(fromVal, to)
+		case string:
+			return bindValuer(fromVal, to)
+		case neo4j.Point2D:
+			return bindValuer(fromVal, to)
+		case neo4j.Point3D:
+			return bindValuer(fromVal, to)
+		case neo4j.Date:
+			return bindValuer(fromVal, to)
+		case neo4j.LocalTime:
+			return bindValuer(fromVal, to)
+		case neo4j.LocalDateTime:
+			return bindValuer(fromVal, to)
+		case neo4j.Time:
+			return bindValuer(fromVal, to)
+		case neo4j.Duration:
+			return bindValuer(fromVal, to)
+		case time.Time:
+			return bindValuer(fromVal, to)
+		case []byte:
+			return bindValuer(fromVal, to)
+		case []any:
+			return bindValuer(fromVal, to)
+		case map[string]any:
+			return bindValuer(fromVal, to)
+		}
+		return false, nil
+	}()
+	if err != nil {
+		return err
+	}
+	if ok {
+		return nil
+	}
+
+	// Recurse into slices
 	switch reflect.TypeOf(from).Kind() {
 	case reflect.Slice:
 		if to.Kind() == reflect.Ptr {
@@ -168,7 +213,7 @@ func (r *registry) bindValue(from any, to reflect.Value) error {
 
 	// Primitive coercion.
 	value := unwindValue(to)
-	ok, err := func() (bool, error) {
+	ok, err = func() (bool, error) {
 		if !to.CanSet() {
 			return false, nil
 		}
@@ -214,49 +259,6 @@ func (r *registry) bindValue(from any, to reflect.Value) error {
 		return false, nil
 	}()
 	if ok && err == nil {
-		return nil
-	}
-
-	// Check if to implements Valuer.
-	ok, err = func() (bool, error) {
-		switch fromVal := from.(type) {
-		case bool:
-			return bindValuer(fromVal, to)
-		case int64:
-			return bindValuer(fromVal, to)
-		case float64:
-			return bindValuer(fromVal, to)
-		case string:
-			return bindValuer(fromVal, to)
-		case neo4j.Point2D:
-			return bindValuer(fromVal, to)
-		case neo4j.Point3D:
-			return bindValuer(fromVal, to)
-		case neo4j.Date:
-			return bindValuer(fromVal, to)
-		case neo4j.LocalTime:
-			return bindValuer(fromVal, to)
-		case neo4j.LocalDateTime:
-			return bindValuer(fromVal, to)
-		case neo4j.Time:
-			return bindValuer(fromVal, to)
-		case neo4j.Duration:
-			return bindValuer(fromVal, to)
-		case time.Time:
-			return bindValuer(fromVal, to)
-		case []byte:
-			return bindValuer(fromVal, to)
-		case []any:
-			return bindValuer(fromVal, to)
-		case map[string]any:
-			return bindValuer(fromVal, to)
-		}
-		return false, nil
-	}()
-	if err != nil {
-		return err
-	}
-	if ok {
 		return nil
 	}
 
