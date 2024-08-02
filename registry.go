@@ -203,7 +203,11 @@ func (r *registry) bindValue(from any, to reflect.Value) (err error) {
 		to.Set(reflect.MakeSlice(to.Type(), n, n))
 		for i := 0; i < n; i++ {
 			fromI := fromV.Index(i).Interface()
-			err := r.bindValue(fromI, to.Index(i))
+			toI := to.Index(i)
+			if toI.CanAddr() {
+				toI = toI.Addr()
+			}
+			err := r.bindValue(fromI, toI)
 			if err != nil {
 				return fmt.Errorf("error binding slice element %d: %w", i, err)
 			}
@@ -214,7 +218,7 @@ func (r *registry) bindValue(from any, to reflect.Value) (err error) {
 	// Primitive coercion.
 	value := unwindValue(to)
 	ok, err = func() (bool, error) {
-		if !to.CanSet() {
+		if !to.CanSet() || !value.IsValid() || !value.CanInterface() {
 			return false, nil
 		}
 		i := value.Interface()
