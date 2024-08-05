@@ -34,10 +34,15 @@ func TestCypherClient(t *testing.T) {
 			assert.Equal(t, true, cy.isWrite)
 		})
 
-		t.Run("true when using Cypher", func(t *testing.T) {
+		t.Run("true when using Cypher if a write clause is used", func(t *testing.T) {
 			cy := newCypher()
 			newCypherClient(cy).
 				Cypher("").
+				Return("y")
+			assert.Equal(t, false, cy.isWrite)
+
+			newCypherClient(cy).
+				Cypher("Merge (n)").
 				Return("y")
 			assert.Equal(t, true, cy.isWrite)
 		})
@@ -54,11 +59,18 @@ func TestCypherClient(t *testing.T) {
 			assert.Equal(t, true, cy.isWrite)
 		})
 
-		t.Run("true when using Cypher in subquery", func(t *testing.T) {
+		t.Run("true when using Cypher in subquery if a write clause is used", func(t *testing.T) {
 			cy := newCypher()
 			newCypherClient(cy).
 				Subquery(func(c *CypherClient) *CypherRunner {
 					return c.Cypher("").CypherRunner
+				}).
+				Return("n")
+			assert.Equal(t, false, cy.isWrite)
+
+			newCypherClient(cy).
+				Subquery(func(c *CypherClient) *CypherRunner {
+					return c.Cypher("Create (n)").CypherRunner
 				}).
 				Return("n")
 			assert.Equal(t, true, cy.isWrite)

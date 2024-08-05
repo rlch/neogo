@@ -243,16 +243,16 @@ func TestBindValue(t *testing.T) {
 
 		t.Run("[]int", func(t *testing.T) {
 			bindTo := []int{}
-			err := r.bindValue([]string{"1", "2", "3"}, reflect.ValueOf(&bindTo).Elem())
+			err := r.bindValue([]any{1, 2, 3}, reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, []int{1, 2, 3}, bindTo)
 		})
 
 		t.Run("[]string", func(t *testing.T) {
 			bindTo := []string{}
-			err := r.bindValue([]int{10, 20, 30}, reflect.ValueOf(&bindTo).Elem())
+			err := r.bindValue([]any{"a", "b", "c"}, reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
-			require.Equal(t, []string{"10", "20", "30"}, bindTo)
+			require.Equal(t, []string{"a", "b", "c"}, bindTo)
 		})
 
 		t.Run("time.Time", func(t *testing.T) {

@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 )
 
@@ -55,6 +56,10 @@ type (
 		*cypher
 		isReturn bool
 	}
+)
+
+var isWriteRe = regexp.MustCompile(
+	`\b(CREATE|MERGE|DELETE|SET|REMOVE|CALL)\b`,
 )
 
 func newCypherQuerier(cy *cypher) *CypherQuerier {
@@ -157,14 +162,16 @@ func (c *CypherReader) Return(identifiers ...any) *CypherRunner {
 }
 
 func (c *CypherReader) Cypher(query string) *CypherQuerier {
-	c.isWrite = true
+	b := strings.ToUpper(query)
+	c.isWrite = c.isWrite || isWriteRe.Find([]byte(b)) != nil
 	c.WriteString(query + "\n")
 	return newCypherQuerier(c.cypher)
 }
 
 func (c *CypherReader) Eval(expression func(*Scope, *strings.Builder)) *CypherQuerier {
-	c.isWrite = true
+	b := strings.ToUpper(c.String())
 	expression(c.Scope, c.Builder)
+	c.isWrite = c.isWrite || isWriteRe.Find([]byte(b)) != nil
 	c.newline()
 	return newCypherQuerier(c.cypher)
 }

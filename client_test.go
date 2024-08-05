@@ -78,7 +78,7 @@ func TestUnmarshalResult(t *testing.T) {
 			}
 			err := s.unmarshalRecord(cy, record)
 			assert.NoError(t, err)
-			assert.Equal(t, nil, n)
+			assert.Equal(t, (*tests.Person)(nil), n)
 		})
 
 		t.Run("binds to abstract node", func(t *testing.T) {
