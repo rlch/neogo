@@ -112,162 +112,160 @@ func (r *registry) bindValue(from any, to reflect.Value) (err error) {
 		return nil
 	}
 
-	if from == nil {
-		return nil
-	}
-
-	// Valuer through Node / relationship
-	switch fromVal := from.(type) {
-	case neo4j.Node:
-		ok, err := bindValuer(fromVal, to)
-		if err != nil {
-			return err
-		}
-		if ok {
-			return nil
-		}
-		innerT := toT
-		for innerT.Kind() == reflect.Ptr {
-			innerT = innerT.Elem()
-		}
-		if (toT.Implements(rAbstract) ||
-			toT.Elem().Implements(rAbstract)) &&
-			// We enforce that abstract nodes must be interfaces. Some hacking could
-			// relax this.
-			innerT.Kind() == reflect.Interface {
-			return r.bindAbstractNode(fromVal, to)
-		}
-		return r.bindValue(fromVal.Props, to)
-	case neo4j.Relationship:
-		ok, err := bindValuer(fromVal, to)
-		if err != nil {
-			return err
-		}
-		if ok {
-			return nil
-		}
-		return r.bindValue(fromVal.Props, to)
-	}
-
-	// Valuer throuh any other RecordValue
 	var ok bool
-	ok, err = func() (bool, error) {
+	if from != nil {
+		// Valuer through Node / relationship
 		switch fromVal := from.(type) {
-		case bool:
-			return bindValuer(fromVal, to)
-		case int64:
-			return bindValuer(fromVal, to)
-		case float64:
-			return bindValuer(fromVal, to)
-		case string:
-			return bindValuer(fromVal, to)
-		case neo4j.Point2D:
-			return bindValuer(fromVal, to)
-		case neo4j.Point3D:
-			return bindValuer(fromVal, to)
-		case neo4j.Date:
-			return bindValuer(fromVal, to)
-		case neo4j.LocalTime:
-			return bindValuer(fromVal, to)
-		case neo4j.LocalDateTime:
-			return bindValuer(fromVal, to)
-		case neo4j.Time:
-			return bindValuer(fromVal, to)
-		case neo4j.Duration:
-			return bindValuer(fromVal, to)
-		case time.Time:
-			return bindValuer(fromVal, to)
-		case []byte:
-			return bindValuer(fromVal, to)
-		case []any:
-			return bindValuer(fromVal, to)
-		case map[string]any:
-			return bindValuer(fromVal, to)
-		}
-		return false, nil
-	}()
-	if err != nil {
-		return err
-	}
-	if ok {
-		return nil
-	}
-
-	// Recurse into slices
-	switch reflect.TypeOf(from).Kind() {
-	case reflect.Slice:
-		if to.Kind() == reflect.Ptr {
-			to = to.Elem()
-		}
-		if to.Kind() != reflect.Slice {
-			return errors.New("cannot bind slice to non-slice type")
-		}
-		fromV := reflect.ValueOf(from)
-		n := fromV.Len()
-		to.Set(reflect.MakeSlice(to.Type(), n, n))
-		for i := 0; i < n; i++ {
-			fromI := fromV.Index(i).Interface()
-			toI := to.Index(i)
-			if toI.CanAddr() {
-				toI = toI.Addr()
-			}
-			err := r.bindValue(fromI, toI)
+		case neo4j.Node:
+			ok, err := bindValuer(fromVal, to)
 			if err != nil {
-				return fmt.Errorf("error binding slice element %d: %w", i, err)
+				return err
 			}
+			if ok {
+				return nil
+			}
+			innerT := toT
+			for innerT.Kind() == reflect.Ptr {
+				innerT = innerT.Elem()
+			}
+			if (toT.Implements(rAbstract) ||
+				toT.Elem().Implements(rAbstract)) &&
+				// We enforce that abstract nodes must be interfaces. Some hacking could
+				// relax this.
+				innerT.Kind() == reflect.Interface {
+				return r.bindAbstractNode(fromVal, to)
+			}
+			return r.bindValue(fromVal.Props, to)
+		case neo4j.Relationship:
+			ok, err := bindValuer(fromVal, to)
+			if err != nil {
+				return err
+			}
+			if ok {
+				return nil
+			}
+			return r.bindValue(fromVal.Props, to)
 		}
-		return nil
-	}
 
-	// Primitive coercion.
-	value := unwindValue(to)
-	ok, err = func() (bool, error) {
-		if !to.CanSet() || !value.IsValid() || !value.CanInterface() {
+		// Valuer throuh any other RecordValue
+		ok, err = func() (bool, error) {
+			switch fromVal := from.(type) {
+			case bool:
+				return bindValuer(fromVal, to)
+			case int64:
+				return bindValuer(fromVal, to)
+			case float64:
+				return bindValuer(fromVal, to)
+			case string:
+				return bindValuer(fromVal, to)
+			case neo4j.Point2D:
+				return bindValuer(fromVal, to)
+			case neo4j.Point3D:
+				return bindValuer(fromVal, to)
+			case neo4j.Date:
+				return bindValuer(fromVal, to)
+			case neo4j.LocalTime:
+				return bindValuer(fromVal, to)
+			case neo4j.LocalDateTime:
+				return bindValuer(fromVal, to)
+			case neo4j.Time:
+				return bindValuer(fromVal, to)
+			case neo4j.Duration:
+				return bindValuer(fromVal, to)
+			case time.Time:
+				return bindValuer(fromVal, to)
+			case []byte:
+				return bindValuer(fromVal, to)
+			case []any:
+				return bindValuer(fromVal, to)
+			case map[string]any:
+				return bindValuer(fromVal, to)
+			}
 			return false, nil
+		}()
+		if err != nil {
+			return err
 		}
-		i := value.Interface()
-		switch i.(type) {
-		case bool:
-			return true, bindCasted(cast.ToBoolE, from, value)
-		case string:
-			return true, bindCasted(cast.ToStringE, from, value)
-		case int:
-			return true, bindCasted(cast.ToIntE, from, value)
-		case int8:
-			return true, bindCasted(cast.ToInt8E, from, value)
-		case int16:
-			return true, bindCasted(cast.ToInt16E, from, value)
-		case int32:
-			return true, bindCasted(cast.ToInt32E, from, value)
-		case int64:
-			return true, bindCasted(cast.ToInt64E, from, value)
-		case uint:
-			return true, bindCasted(cast.ToUintE, from, value)
-		case uint8:
-			return true, bindCasted(cast.ToUint8E, from, value)
-		case uint16:
-			return true, bindCasted(cast.ToUint16E, from, value)
-		case uint32:
-			return true, bindCasted(cast.ToUint32E, from, value)
-		case uint64:
-			return true, bindCasted(cast.ToUint64E, from, value)
-		case float32:
-			return true, bindCasted(cast.ToFloat32E, from, value)
-		case float64:
-			return true, bindCasted(cast.ToFloat64E, from, value)
-		case []int:
-			return true, bindCasted(cast.ToIntSliceE, from, value)
-		case []string:
-			return true, bindCasted(cast.ToStringSliceE, from, value)
-		case time.Time:
-			return true, bindCasted(cast.ToTimeE, from, value)
-		case time.Duration:
-			return true, bindCasted(cast.ToDurationE, from, value)
+		if ok {
+			return nil
 		}
-		return false, nil
-	}()
-	if ok && err == nil {
-		return nil
+
+		// Recurse into slices
+		switch reflect.TypeOf(from).Kind() {
+		case reflect.Slice:
+			if to.Kind() == reflect.Ptr {
+				to = to.Elem()
+			}
+			if to.Kind() != reflect.Slice {
+				return errors.New("cannot bind slice to non-slice type")
+			}
+			fromV := reflect.ValueOf(from)
+			n := fromV.Len()
+			to.Set(reflect.MakeSlice(to.Type(), n, n))
+			for i := 0; i < n; i++ {
+				fromI := fromV.Index(i).Interface()
+				toI := to.Index(i)
+				if toI.CanAddr() {
+					toI = toI.Addr()
+				}
+				err := r.bindValue(fromI, toI)
+				if err != nil {
+					return fmt.Errorf("error binding slice element %d: %w", i, err)
+				}
+			}
+			return nil
+		}
+
+		// Primitive coercion.
+		value := unwindValue(to)
+		ok, err = func() (bool, error) {
+			if !to.CanSet() || !value.IsValid() || !value.CanInterface() {
+				return false, nil
+			}
+			i := value.Interface()
+			switch i.(type) {
+			case bool:
+				return true, bindCasted(cast.ToBoolE, from, value)
+			case string:
+				return true, bindCasted(cast.ToStringE, from, value)
+			case int:
+				return true, bindCasted(cast.ToIntE, from, value)
+			case int8:
+				return true, bindCasted(cast.ToInt8E, from, value)
+			case int16:
+				return true, bindCasted(cast.ToInt16E, from, value)
+			case int32:
+				return true, bindCasted(cast.ToInt32E, from, value)
+			case int64:
+				return true, bindCasted(cast.ToInt64E, from, value)
+			case uint:
+				return true, bindCasted(cast.ToUintE, from, value)
+			case uint8:
+				return true, bindCasted(cast.ToUint8E, from, value)
+			case uint16:
+				return true, bindCasted(cast.ToUint16E, from, value)
+			case uint32:
+				return true, bindCasted(cast.ToUint32E, from, value)
+			case uint64:
+				return true, bindCasted(cast.ToUint64E, from, value)
+			case float32:
+				return true, bindCasted(cast.ToFloat32E, from, value)
+			case float64:
+				return true, bindCasted(cast.ToFloat64E, from, value)
+			case []int:
+				return true, bindCasted(cast.ToIntSliceE, from, value)
+			case []string:
+				return true, bindCasted(cast.ToStringSliceE, from, value)
+			case time.Time:
+				return true, bindCasted(cast.ToTimeE, from, value)
+			case time.Duration:
+				return true, bindCasted(cast.ToDurationE, from, value)
+			}
+			return false, nil
+		}()
+		if ok && err == nil {
+			return nil
+		}
 	}
 
 	// PERF: Obviously huge performance hit here. Consider alternative ways of

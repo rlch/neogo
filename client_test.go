@@ -69,7 +69,7 @@ func TestUnmarshalResult(t *testing.T) {
 			var n *tests.Person
 			cy := &internal.CompiledCypher{
 				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(n),
+					"n": reflect.ValueOf(&n),
 				},
 			}
 			record := &neo4j.Record{
@@ -225,6 +225,41 @@ func TestUnmarshalResult(t *testing.T) {
 			assert.Equal(t, tests.Person{
 				Name: "Walter", Surname: "White",
 			}, *n[1])
+		})
+
+		t.Run("considers nil nodes in slices", func(t *testing.T) {
+			var n []*tests.Person
+			cy := &internal.CompiledCypher{
+				Bindings: map[string]reflect.Value{
+					"n": reflect.ValueOf(&n),
+				},
+			}
+			records := []*neo4j.Record{
+				{
+					Keys: []string{"n"},
+					Values: []any{
+						neo4j.Node{
+							Props: map[string]any{
+								"name":    "Jessie",
+								"surname": "Pinkman",
+							},
+						},
+					},
+				},
+				{
+					Keys: []string{"n"},
+					Values: []any{
+						nil,
+					},
+				},
+			}
+			err := s.unmarshalRecords(cy, records)
+			assert.NoError(t, err)
+			assert.Len(t, n, 2)
+			assert.Equal(t, tests.Person{
+				Name: "Jessie", Surname: "Pinkman",
+			}, *n[0])
+			assert.Equal(t, (*tests.Person)(nil), n[1])
 		})
 
 		t.Run("binds to []any", func(t *testing.T) {
