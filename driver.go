@@ -101,9 +101,11 @@ type (
 type (
 	driver struct {
 		registry
-		db neo4j.DriverWithContext
+		db                   neo4j.DriverWithContext
+		causalConsistencyKey func(ctx context.Context) string
 	}
 	session struct {
+		*driver
 		registry
 		db         neo4j.DriverWithContext
 		execConfig execConfig
@@ -115,6 +117,14 @@ type (
 		tx      neo4j.ExplicitTransaction
 	}
 )
+
+var causalConsistencyCache map[string]neo4j.Bookmarks
+
+func WithCausalConsistency(when func(ctx context.Context) string) Config {
+	return func(d *driver) {
+		d.causalConsistencyKey = when
+	}
+}
 
 // WithTxConfig configures the transaction used by Exec().
 func WithTxConfig(configurers ...func(*neo4j.TransactionConfig)) func(ec *execConfig) {
@@ -160,12 +170,28 @@ func (d *driver) Exec(configurers ...func(*execConfig)) Query {
 	return session.newClient(internal.NewCypherClient())
 }
 
+func (d *driver) ensureCausalConsistency(ctx context.Context, sc *neo4j.SessionConfig) {
+	if d.causalConsistencyKey == nil {
+		return
+	}
+	var key string
+	if key = d.causalConsistencyKey(ctx); key == "" {
+		return
+	}
+	bookmarks := causalConsistencyCache[key]
+	if bookmarks == nil {
+		return
+	}
+	sc.Bookmarks = bookmarks
+}
+
 func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) readSession {
 	config := neo4j.SessionConfig{}
 	for _, c := range configurers {
 		c(&config)
 	}
 	config.AccessMode = neo4j.AccessModeRead
+	d.ensureCausalConsistency(ctx, &config)
 	sess := d.db.NewSession(ctx, config)
 	return &session{
 		registry: d.registry,
@@ -180,6 +206,7 @@ func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.Se
 		c(&config)
 	}
 	config.AccessMode = neo4j.AccessModeWrite
+	d.ensureCausalConsistency(ctx, &config)
 	sess := d.db.NewSession(ctx, config)
 	return &session{
 		registry: d.registry,

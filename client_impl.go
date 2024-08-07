@@ -528,18 +528,30 @@ func (c *runnerImpl) executeTransaction(
 			//  - the query is a write query
 			AccessMode: neo4j.AccessModeRead,
 		}
+		c.ensureCausalConsistency(ctx, &sessConfig)
 		if sess == nil {
 			if conf := c.execConfig.SessionConfig; conf != nil {
 				sessConfig = *conf
 			}
 			if cy.IsWrite || sessConfig.AccessMode == neo4j.AccessModeWrite {
 				sessConfig.AccessMode = neo4j.AccessModeWrite
-				sess = c.db.NewSession(ctx, sessConfig)
 			} else {
 				sessConfig.AccessMode = neo4j.AccessModeRead
-				sess = c.db.NewSession(ctx, sessConfig)
 			}
+			sess = c.db.NewSession(ctx, sessConfig)
 			defer func() {
+				if sessConfig.AccessMode == neo4j.AccessModeWrite {
+					bookmarks := sess.LastBookmarks()
+					key := c.causalConsistencyKey(ctx)
+					if cur, ok := causalConsistencyCache[key]; ok {
+						causalConsistencyCache[key] = neo4j.CombineBookmarks(cur, bookmarks)
+					} else {
+						causalConsistencyCache[key] = bookmarks
+						go func(key string) {
+							causalConsistencyCache[key] = nil
+						}(key)
+					}
+				}
 				if closeErr := sess.Close(ctx); closeErr != nil {
 					err = errors.Join(err, closeErr)
 				}
