@@ -548,6 +548,7 @@ func (c *runnerImpl) executeTransaction(
 					} else {
 						causalConsistencyCache[key] = bookmarks
 						go func(key string) {
+							<-ctx.Done()
 							causalConsistencyCache[key] = nil
 						}(key)
 					}
