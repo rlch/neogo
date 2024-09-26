@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/rlch/neogo/compare/v1.0.0...v1.0.1) (2024-09-26)
+
+
+### Bug Fixes
+
+* Ensure driver is propagated to session ([ef1f2ee](https://github.com/rlch/neogo/commit/ef1f2ee9bbe42c720100fcc0cac2a87c2c0187b0))
+
 ## 1.0.0 (2024-08-08)
 
 
