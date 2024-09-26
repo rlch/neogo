@@ -163,6 +163,7 @@ func (d *driver) Exec(configurers ...func(*execConfig)) Query {
 		config.TransactionConfig = nil
 	}
 	session := &session{
+		driver:     d,
 		registry:   d.registry,
 		db:         d.db,
 		execConfig: config,
@@ -194,6 +195,7 @@ func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.Ses
 	d.ensureCausalConsistency(ctx, &config)
 	sess := d.db.NewSession(ctx, config)
 	return &session{
+		driver:   d,
 		registry: d.registry,
 		db:       d.db,
 		session:  sess,
@@ -209,6 +211,7 @@ func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.Se
 	d.ensureCausalConsistency(ctx, &config)
 	sess := d.db.NewSession(ctx, config)
 	return &session{
+		driver:   d,
 		registry: d.registry,
 		db:       d.db,
 		session:  sess,
