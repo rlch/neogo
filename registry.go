@@ -313,7 +313,7 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 	if abs == nil {
 	Bases:
 		for _, base := range r.abstractNodes {
-			labels := internal.ExtractNodeLabels(base)
+			labels := internal.ExtractConcreteNodeLabels(base)
 			if len(labels) == 0 {
 				continue
 			}
@@ -350,7 +350,7 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 		}
 	Impls:
 		for _, nextImpl := range abs.Implementers() {
-			for _, label := range internal.ExtractNodeLabels(nextImpl) {
+			for _, label := range internal.ExtractConcreteNodeLabels(nextImpl) {
 				if _, ok := isNodeLabel[label]; !ok {
 					continue Impls
 				}

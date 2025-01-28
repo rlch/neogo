@@ -9,6 +9,32 @@ import (
 const neo4jTag = "neo4j"
 
 func ExtractNodeLabels(i any) []string {
+	labels := extractNodeLabels(i)
+	if labels == nil {
+		return nil
+	}
+	out := make([]string, len(labels))
+	for i, l := range labels {
+		out[i] = l.name
+	}
+	return out
+}
+
+func ExtractConcreteNodeLabels(i any) []string {
+	labels := extractNodeLabels(i)
+	if labels == nil {
+		return nil
+	}
+	out := []string{}
+	for _, l := range labels {
+		if l.concrete {
+			out = append(out, l.name)
+		}
+	}
+	return out
+}
+
+func extractNodeLabels(i any) []neo4jName {
 	if i == nil {
 		return nil
 	}
@@ -17,11 +43,11 @@ func ExtractNodeLabels(i any) []string {
 		for v.Kind() == reflect.Ptr {
 			v = v.Elem()
 			if n, ok := v.Interface().(INode); ok {
-				return ExtractNodeLabels(n)
+				return extractNodeLabels(n)
 			}
 		}
 		if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
-			return ExtractNodeLabels(reflect.Zero(v.Type().Elem()).Interface())
+			return extractNodeLabels(reflect.Zero(v.Type().Elem()).Interface())
 		}
 		return nil
 	}
@@ -55,10 +81,15 @@ func ExtractRelationshipType(relationship any) string {
 	} else if len(tags) == 0 {
 		return ""
 	}
-	return tags[0]
+	return tags[0].name
 }
 
-func extractNeo4JName(instance any, fields ...string) ([]string, error) {
+type neo4jName struct {
+	name     string
+	concrete bool
+}
+
+func extractNeo4JName(instance any, fields ...string) ([]neo4jName, error) {
 	val := reflect.TypeOf(instance)
 	for val.Kind() == reflect.Ptr {
 		val = val.Elem()
@@ -66,7 +97,7 @@ func extractNeo4JName(instance any, fields ...string) ([]string, error) {
 	if val.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("the type of %T is not a struct", instance)
 	}
-	tags := []string{}
+	tags := []neo4jName{}
 	extractTagFromMatch := func(match *reflect.StructField) {
 		if match == nil {
 			return
@@ -75,7 +106,12 @@ func extractNeo4JName(instance any, fields ...string) ([]string, error) {
 		if !ok {
 			return
 		}
-		tags = append(tags, strings.Split(label, ",")[0])
+		name := strings.Split(label, ",")[0]
+		concrete := match.Type.Name() != "Label"
+		tags = append(tags, neo4jName{
+			name:     name,
+			concrete: concrete,
+		})
 	}
 	if len(fields) > 0 {
 		for _, field := range fields {
