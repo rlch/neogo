@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2](https://github.com/rlch/neogo/compare/v1.0.1...v1.0.2) (2025-01-28)
+
+
+### Bug Fixes
+
+* Add Label stub type ([51e856b](https://github.com/rlch/neogo/commit/51e856bbcde418d5f439c3e7f3195e8dd1409fe1))
+* Only require concrete node labels for abstract deserialization ([5cf6104](https://github.com/rlch/neogo/commit/5cf61043e37db9017ff51e44fad7ce092c1e9fd5))
+
 ## [1.0.1](https://github.com/rlch/neogo/compare/v1.0.0...v1.0.1) (2024-09-26)
 
 
