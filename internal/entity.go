@@ -66,3 +66,5 @@ type IRelationship interface {
 type Relationship struct{}
 
 func (Relationship) IsRelationship() {}
+
+type Label struct{}

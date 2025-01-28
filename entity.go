@@ -108,9 +108,17 @@ type (
 	// The neo4j tag is used to specify the type for the relationship.
 	//
 	//  type ActedIn struct {
-	//  	internal.Relationship `neo4j:"ACTED_IN"`
+	//  	neogo.Relationship `neo4j:"ACTED_IN"`
 	//
 	//  	Role string `json:"role"`
 	//  }
 	Relationship = internal.Relationship
+
+	// Label is a used to specify a label for a node.
+	// This allows for multiple labels to be specified idiomatically.
+	//
+	//  type Robot struct {
+	//  	neogo.Label `neo4j:"Robot"`
+	//  }
+	Label = internal.Label
 )

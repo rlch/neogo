@@ -41,6 +41,10 @@ type personWithAnonymousStructLabels struct {
 	S swedishPerson `neo4j:"Concrete"`
 }
 
+type robot struct {
+	Label `neo4j:"Robot"`
+}
+
 func TestExtractNodeLabel(t *testing.T) {
 	t.Run("nil when node nil", func(t *testing.T) {
 		assert.Nil(t, ExtractNodeLabels(nil))
@@ -80,6 +84,17 @@ func TestExtractNodeLabel(t *testing.T) {
 		o1 := &o
 		o2 := &o1
 		assert.Equal(t, []string{"Organism"}, ExtractNodeLabels(o2))
+	})
+
+	t.Run("extracts from structs embedding Label, ordered by DFS", func(t *testing.T) {
+		var swedishRobot struct {
+			swedishPerson
+			robot
+		} = struct {
+			swedishPerson
+			robot
+		}{}
+		assert.Equal(t, []string{"Person", "Robot", "Swedish"}, ExtractNodeLabels(swedishRobot))
 	})
 }
 
