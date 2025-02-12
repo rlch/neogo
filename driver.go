@@ -102,6 +102,7 @@ type (
 	driver struct {
 		registry
 		db                   neo4j.DriverWithContext
+		databaseName         string
 		causalConsistencyKey func(ctx context.Context) string
 	}
 	session struct {
@@ -119,6 +120,14 @@ type (
 )
 
 var causalConsistencyCache map[string]neo4j.Bookmarks = map[string]neo4j.Bookmarks{}
+
+// set used database
+// - example  neogo.New(db.Driver, neogo.WithDbName(database))
+func WithDbName(databaseName string) Config {
+	return func(d *driver) {
+		d.databaseName = databaseName
+	}
+}
 
 func WithCausalConsistency(when func(ctx context.Context) string) Config {
 	return func(d *driver) {
@@ -187,7 +196,9 @@ func (d *driver) ensureCausalConsistency(ctx context.Context, sc *neo4j.SessionC
 }
 
 func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) readSession {
-	config := neo4j.SessionConfig{}
+	config := neo4j.SessionConfig{
+		DatabaseName: d.databaseName,
+	}
 	for _, c := range configurers {
 		c(&config)
 	}
@@ -203,7 +214,9 @@ func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.Ses
 }
 
 func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) writeSession {
-	config := neo4j.SessionConfig{}
+	config := neo4j.SessionConfig{
+		DatabaseName: d.databaseName,
+	}
 	for _, c := range configurers {
 		c(&config)
 	}

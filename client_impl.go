@@ -526,7 +526,8 @@ func (c *runnerImpl) executeTransaction(
 			// We default to read mode and overwrite if:
 			//  - the user explicitly requested write mode
 			//  - the query is a write query
-			AccessMode: neo4j.AccessModeRead,
+			AccessMode:   neo4j.AccessModeRead,
+			DatabaseName: c.databaseName,
 		}
 		c.ensureCausalConsistency(ctx, &sessConfig)
 		if sess == nil {
