@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/rlch/neogo/compare/v1.0.2...v1.0.3) (2025-02-12)
+
+
+### Bug Fixes
+
+* Handle nil bookmarks ([52456f7](https://github.com/rlch/neogo/commit/52456f769cea5c4f59be4ecfd90e3083a65dc583))
+
 ## [1.0.2](https://github.com/rlch/neogo/compare/v1.0.1...v1.0.2) (2025-01-28)
 
 
