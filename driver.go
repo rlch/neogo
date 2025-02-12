@@ -118,7 +118,7 @@ type (
 	}
 )
 
-var causalConsistencyCache map[string]neo4j.Bookmarks
+var causalConsistencyCache map[string]neo4j.Bookmarks = map[string]neo4j.Bookmarks{}
 
 func WithCausalConsistency(when func(ctx context.Context) string) Config {
 	return func(d *driver) {

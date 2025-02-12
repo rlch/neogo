@@ -542,6 +542,9 @@ func (c *runnerImpl) executeTransaction(
 			defer func() {
 				if sessConfig.AccessMode == neo4j.AccessModeWrite {
 					bookmarks := sess.LastBookmarks()
+					if bookmarks == nil || c.causalConsistencyKey == nil {
+						return
+					}
 					key := c.causalConsistencyKey(ctx)
 					if cur, ok := causalConsistencyCache[key]; ok {
 						causalConsistencyCache[key] = neo4j.CombineBookmarks(cur, bookmarks)

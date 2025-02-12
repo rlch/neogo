@@ -135,7 +135,7 @@ func (d *mockNeo4jDriver) GetServerInfo(ctx context.Context) (neo4j.ServerInfo, 
 }
 
 func (s *mockNeo4jSession) LastBookmarks() neo4j.Bookmarks {
-	panic(errors.New("not implemented"))
+	return nil
 }
 
 func (s *mockNeo4jSession) BeginTransaction(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (neo4j.ExplicitTransaction, error) {

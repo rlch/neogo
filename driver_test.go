@@ -61,6 +61,42 @@ type Person struct {
 	Age     int    `json:"age"`
 }
 
+func TestDriver(t *testing.T) {
+	ctx := context.Background()
+	neo4j, cancel := startNeo4J(ctx)
+	t.Cleanup(func() {
+		cancel(ctx)
+	})
+	d := New(neo4j)
+
+	// First create a test entity
+	err := d.Exec().
+		Cypher(`
+		CREATE (n:TestNode {id: "test-123"})
+		CREATE (c:TestChild {id: "child-123"})
+		CREATE (n)-[:HAS_CHILD]->(c)
+		`).
+		Run(ctx)
+	if err != nil {
+		t.Errorf("failed to create test nodes: %s", err)
+	}
+	var count int
+
+	// Now try to delete it
+	err = d.Exec().
+		Cypher(`
+		MATCH (n:TestNode {id: "test-123"})-[:HAS_CHILD]->(c:TestChild)
+    WITH count(n) AS count, n, c
+		DETACH DELETE n, c
+		`).
+		Return(db.Qual(&count, "count")).
+		Run(ctx)
+	if err != nil {
+		t.Errorf("failed to delete test nodes: %s", err)
+	}
+	fmt.Println("count", count)
+}
+
 func ExampleDriver() {
 	ctx := context.Background()
 	var d Driver
