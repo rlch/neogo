@@ -122,7 +122,7 @@ type (
 var causalConsistencyCache map[string]neo4j.Bookmarks = map[string]neo4j.Bookmarks{}
 
 // set used database
-// - example  neogo.New(db.Driver, neogo.WithDbName(database))
+//   - example  neogo.New(db.Driver, neogo.WithDbName(database))
 func WithDbName(databaseName string) Config {
 	return func(d *driver) {
 		d.databaseName = databaseName
