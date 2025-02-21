@@ -102,7 +102,7 @@ type (
 	driver struct {
 		registry
 		db                   neo4j.DriverWithContext
-		databaseName         string
+		defaultDatabaseName         string
 		causalConsistencyKey func(ctx context.Context) string
 	}
 	session struct {
