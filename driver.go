@@ -123,7 +123,7 @@ var causalConsistencyCache map[string]neo4j.Bookmarks = map[string]neo4j.Bookmar
 
 // set used database
 //   - example  neogo.New(db.Driver, neogo.WithDbName(database))
-func WithDbName(databaseName string) Config {
+func WithDefaultDatabaseName(databaseName string) Config {
 	return func(d *driver) {
 		d.databaseName = databaseName
 	}
