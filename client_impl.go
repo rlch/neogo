@@ -527,7 +527,7 @@ func (c *runnerImpl) executeTransaction(
 			//  - the user explicitly requested write mode
 			//  - the query is a write query
 			AccessMode:   neo4j.AccessModeRead,
-			DatabaseName: c.databaseName,
+			DatabaseName: c.defaultDatabaseName,
 		}
 		c.ensureCausalConsistency(ctx, &sessConfig)
 		if sess == nil {
