@@ -125,7 +125,7 @@ var causalConsistencyCache map[string]neo4j.Bookmarks = map[string]neo4j.Bookmar
 //   - example  neogo.New(db.Driver, neogo.WithDbName(database))
 func WithDefaultDatabaseName(databaseName string) Config {
 	return func(d *driver) {
-		d.databaseName = databaseName
+		d.defaultDatabaseName = databaseName
 	}
 }
 
@@ -197,7 +197,7 @@ func (d *driver) ensureCausalConsistency(ctx context.Context, sc *neo4j.SessionC
 
 func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) readSession {
 	config := neo4j.SessionConfig{
-		DatabaseName: d.databaseName,
+		DatabaseName: d.defaultDatabaseName,
 	}
 	for _, c := range configurers {
 		c(&config)
@@ -215,7 +215,7 @@ func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.Ses
 
 func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) writeSession {
 	config := neo4j.SessionConfig{
-		DatabaseName: d.databaseName,
+		DatabaseName: d.defaultDatabaseName,
 	}
 	for _, c := range configurers {
 		c(&config)
