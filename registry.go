@@ -42,28 +42,33 @@ type Valuer[V neo4j.RecordValue] interface {
 }
 
 type registry struct {
-	abstractNodes []IAbstract
-	nodes         []INode
-	relationships []IRelationship
+	abstractNodes []any
+	nodes         []any
+	relationships []any
 }
 
-// WithTypes is an option for [New] that allows you to register instances of
-// [IAbstract], [INode] and [IRelationship] to be used with [neogo].
-func WithTypes(types ...any) func(*driver) {
-	return func(d *driver) {
-		for _, t := range types {
-			if v, ok := t.(IAbstract); ok {
-				d.abstractNodes = append(d.abstractNodes, v)
-				continue
-			}
-			if v, ok := t.(INode); ok {
-				d.nodes = append(d.nodes, v)
-				continue
-			}
-			if v, ok := t.(IRelationship); ok {
-				d.relationships = append(d.relationships, v)
-				continue
-			}
+func (r *registry) registerTypes(types ...any) {
+	if r.abstractNodes == nil {
+		r.abstractNodes = []any{}
+	}
+	if r.nodes == nil {
+		r.nodes = []any{}
+	}
+	if r.relationships == nil {
+		r.relationships = []any{}
+	}
+	for _, t := range types {
+		if _, ok := t.(IAbstract); ok {
+			r.abstractNodes = append(r.abstractNodes, t)
+			continue
+		}
+		if v, ok := t.(INode); ok {
+			r.nodes = append(r.nodes, v)
+			continue
+		}
+		if v, ok := t.(IRelationship); ok {
+			r.relationships = append(r.relationships, v)
+			continue
 		}
 	}
 }
@@ -289,7 +294,7 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 	}
 
 	var (
-		abs                IAbstract
+		abs                any
 		inheritanceCounter int
 	)
 	ptrTo := false
@@ -301,7 +306,7 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 	} else if to.Type().Elem().Implements(rAbstract) {
 		ptrTo = true
 		if !to.Elem().IsNil() {
-			abs = to.Elem().Interface().(IAbstract)
+			abs = to.Elem().Interface()
 		}
 	} else {
 		return errors.New("cannot bind abstract node to non-abstract type")
@@ -313,6 +318,7 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 	if abs == nil {
 	Bases:
 		for _, base := range r.abstractNodes {
+			fmt.Println(base)
 			labels := internal.ExtractConcreteNodeLabels(base)
 			if len(labels) == 0 {
 				continue
@@ -338,7 +344,7 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 	}
 
 	// We found our impl
-	var impl IAbstract
+	var impl any
 	if inheritanceCounter == len(nodeLabels) {
 		impl = abs
 	} else {
@@ -349,7 +355,7 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 			)
 		}
 	Impls:
-		for _, nextImpl := range abs.Implementers() {
+		for _, nextImpl := range abs.(IAbstract).Implementers() {
 			for _, label := range internal.ExtractConcreteNodeLabels(nextImpl) {
 				if _, ok := isNodeLabel[label]; !ok {
 					continue Impls

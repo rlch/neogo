@@ -311,7 +311,7 @@ func TestUnmarshalResult(t *testing.T) {
 		t.Run("binds to abstract nodes", func(t *testing.T) {
 			s := &session{
 				registry: registry{
-					abstractNodes: []IAbstract{
+					abstractNodes: []any{
 						&tests.BaseOrganism{},
 						&tests.BasePet{},
 					},
@@ -385,7 +385,7 @@ func TestUnmarshalResult(t *testing.T) {
 		t.Run("binds to [][]Abstract", func(t *testing.T) {
 			s := &session{
 				registry: registry{
-					abstractNodes: []IAbstract{
+					abstractNodes: []any{
 						&tests.BaseOrganism{},
 						&tests.BasePet{},
 					},
@@ -456,7 +456,7 @@ func TestUnmarshalResult(t *testing.T) {
 		t.Run("binds to [][]Concrete where Concrete is an implementation of Abstract", func(t *testing.T) {
 			s := &session{
 				registry: registry{
-					abstractNodes: []IAbstract{
+					abstractNodes: []any{
 						&tests.BaseOrganism{},
 						&tests.BasePet{},
 					},

@@ -411,11 +411,11 @@ func TestBindValue(t *testing.T) {
 	})
 
 	t.Run("Abstract using registered types", func(t *testing.T) {
-		rWithAbstract := &registry{
-			abstractNodes: []IAbstract{
-				&tests.BaseOrganism{},
-			},
-		}
+		rWithAbstract := &registry{}
+		rWithAbstract.registerTypes(
+			&tests.BaseOrganism{},
+		)
+
 		var to tests.Organism
 		err := rWithAbstract.bindValue(neo4j.Node{
 			Labels: []string{"Human", "Organism"},
@@ -434,12 +434,11 @@ func TestBindValue(t *testing.T) {
 	})
 
 	t.Run("Abstract using registered concrete types", func(t *testing.T) {
-		rWithAbstract := &registry{
-			abstractNodes: []IAbstract{
-				&tests.Human{},
-				&tests.Dog{},
-			},
-		}
+		rWithAbstract := &registry{}
+		rWithAbstract.registerTypes(
+			&tests.Human{},
+			&tests.Dog{},
+		)
 		var to tests.Organism
 		err := rWithAbstract.bindValue(neo4j.Node{
 			Labels: []string{"Human", "Organism"},
