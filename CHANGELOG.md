@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.6](https://github.com/rlch/neogo/compare/v1.0.5...v1.0.6) (2025-03-28)
+
+
+### Bug Fixes
+
+* Allow unmarshalling to slices of size 1 ([358aedf](https://github.com/rlch/neogo/commit/358aedf607e57560411c8dcfe2cb865c2412e85f))
+
 ## [1.0.5](https://github.com/rlch/neogo/compare/v1.0.4...v1.0.5) (2025-03-28)
 
 
