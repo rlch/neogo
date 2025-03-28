@@ -373,17 +373,34 @@ func (s *session) unmarshalResult(
 		return nil
 	}
 	first := result.Record()
-	if result.Peek(ctx) {
-		var records []*neo4j.Record
-		records, err = result.Collect(ctx)
-		if err != nil {
-			return fmt.Errorf("cannot collect records: %w", err)
+
+	// Check if any of the bindings are slice types
+	hasSliceBinding := false
+	for _, v := range cy.Bindings {
+		if v.Kind() == reflect.Ptr && v.Elem().Kind() == reflect.Slice {
+			hasSliceBinding = true
+			break
 		}
-		records = append([]*neo4j.Record{first}, records...)
+	}
+
+	// If we have slice bindings or there are more records, use the records path
+	if hasSliceBinding || result.Peek(ctx) {
+		var records []*neo4j.Record
+		if result.Peek(ctx) {
+			records, err = result.Collect(ctx)
+			if err != nil {
+				return fmt.Errorf("cannot collect records: %w", err)
+			}
+			records = append([]*neo4j.Record{first}, records...)
+		} else {
+			// Single record but slice binding - wrap in a single-element slice
+			records = []*neo4j.Record{first}
+		}
 		if err = s.unmarshalRecords(cy, records); err != nil {
 			return fmt.Errorf("cannot unmarshal records: %w", err)
 		}
 	} else {
+		// Only use single record path when we don't have slice bindings
 		single := result.Record()
 		if single == nil {
 			return nil
