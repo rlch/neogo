@@ -415,7 +415,6 @@ func (s *session) unmarshalRecords(
 		slices[name] = binding
 	}
 	for i, record := range records {
-		fmt.Printf("i: %d, record: %v\n", i, record.AsMap())
 		for key, binding := range slices {
 			value, ok := record.Get(key)
 			if !ok {
