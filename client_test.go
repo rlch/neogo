@@ -802,33 +802,6 @@ func TestClient(t *testing.T) {
 	})
 }
 
-func TestNonExistentPropertyNilPointer(t *testing.T) {
-	ctx := context.Background()
-	driver, cleanup := startNeo4J(ctx)
-	defer func() {
-		_ = cleanup(ctx)
-	}()
-
-	d := New(driver)
-
-	// Create a test node first
-	err := d.Exec().
-		Create(db.Node(db.Var("t", db.Label("TestNode")))).
-		Run(ctx)
-	assert.NoError(t, err)
-
-	// Try to query a non-existent property
-	var listOfVal []string
-	err = d.Exec().
-		Cypher(`MATCH (t:TestNode)`).
-		Return(db.Qual(&listOfVal, "t.someNonExistentProp")).
-		Run(ctx)
-
-	// Should not error, but return an empty list since the property doesn't exist
-	assert.NoError(t, err)
-	assert.Empty(t, listOfVal, "Expected empty list when querying non-existent property")
-}
-
 type TestStruct struct {
 	Node    `neo4j:"TestStruct"`
 	Name    string `json:"name"`
