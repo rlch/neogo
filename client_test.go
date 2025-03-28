@@ -801,3 +801,58 @@ func TestClient(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestNonExistentPropertyNilPointer(t *testing.T) {
+	ctx := context.Background()
+	driver, cleanup := startNeo4J(ctx)
+	defer func() {
+		_ = cleanup(ctx)
+	}()
+
+	d := New(driver)
+
+	// Create a test node first
+	err := d.Exec().
+		Create(db.Node(db.Var("t", db.Label("TestNode")))).
+		Run(ctx)
+	assert.NoError(t, err)
+
+	// Try to query a non-existent property
+	var listOfVal []string
+	err = d.Exec().
+		Cypher(`MATCH (t:TestNode)`).
+		Return(db.Qual(&listOfVal, "t.someNonExistentProp")).
+		Run(ctx)
+
+	// Should not error, but return an empty list since the property doesn't exist
+	assert.NoError(t, err)
+	assert.Empty(t, listOfVal, "Expected empty list when querying non-existent property")
+}
+
+type TestStruct struct {
+	Node    `neo4j:"TestStruct"`
+	Name    string `json:"name"`
+	Age     int    `json:"age"`
+	IsValid bool   `json:"isValid"`
+}
+
+func TestUnmarshalNonExistentNodes(t *testing.T) {
+	ctx := context.Background()
+	driver, cleanup := startNeo4J(ctx)
+	defer func() {
+		_ = cleanup(ctx)
+	}()
+
+	d := New(driver)
+
+	// Try to match non-existent nodes and unmarshal into slice
+	var results []TestStruct
+	err := d.Exec().
+		Cypher(`MATCH (t:TestStruct) WHERE t.name = 'DoesNotExist'`).
+		Return(db.Qual(&results, "t")).
+		Run(ctx)
+
+	// Should not error and return empty slice
+	assert.NoError(t, err)
+	assert.Empty(t, results, "Expected empty slice when no nodes match")
+}
