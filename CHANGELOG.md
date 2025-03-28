@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.4](https://github.com/rlch/neogo/compare/v1.0.3...v1.0.4) (2025-03-28)
+
+
+### Bug Fixes
+
+* Avoid downcasting abstract types upon registration ([c241f47](https://github.com/rlch/neogo/commit/c241f471036b1b9ab06528b2973db18c5a3aac05))
+* Handle unmarshalling to empty slice and slice of length 1 ([894de73](https://github.com/rlch/neogo/commit/894de73fbfe290d69b917968d5c7602089054d99))
+
 ## [1.0.3](https://github.com/rlch/neogo/compare/v1.0.2...v1.0.3) (2025-02-12)
 
 
