@@ -888,3 +888,45 @@ func TestClient(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+type TestStruct struct {
+	Node    `neo4j:"TestStruct"`
+	Name    string `json:"name"`
+	Age     int    `json:"age"`
+	IsValid bool   `json:"isValid"`
+}
+
+func TestUnmarshalNonExistentNodes(t *testing.T) {
+	ctx := context.Background()
+	driver, cleanup := startNeo4J(ctx)
+	defer func() {
+		_ = cleanup(ctx)
+	}()
+
+	d := New(driver)
+
+	// Create a test node first
+	testNode := TestStruct{
+		Name:    "TestNode",
+		Age:     25,
+		IsValid: true,
+	}
+	err := d.Exec().
+		Create(db.Node(&testNode)).
+		Run(ctx)
+	assert.NoError(t, err)
+
+	// Try to match the node and unmarshal into slice
+	var results []TestStruct
+	err = d.Exec().
+		Cypher(`MATCH (t:TestStruct) WHERE t.name = 'TestNode'`).
+		Return(db.Qual(&results, "t")).
+		Run(ctx)
+
+	// Should not error and return slice with one node
+	assert.NoError(t, err)
+	assert.Len(t, results, 1, "Expected slice with one node")
+	assert.Equal(t, testNode.Name, results[0].Name)
+	assert.Equal(t, testNode.Age, results[0].Age)
+	assert.Equal(t, testNode.IsValid, results[0].IsValid)
+}
