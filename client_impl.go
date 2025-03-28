@@ -377,14 +377,18 @@ func (s *session) unmarshalResult(
 	// Check if any of the bindings are slice types
 	hasSliceBinding := false
 	for _, v := range cy.Bindings {
-		if v.Kind() == reflect.Ptr && v.Elem().Kind() == reflect.Slice {
+		typ := v.Type()
+		for typ.Kind() == reflect.Ptr {
+			typ = typ.Elem()
+		}
+		if typ.Kind() == reflect.Slice {
 			hasSliceBinding = true
 			break
 		}
 	}
 
 	// If we have slice bindings or there are more records, use the records path
-	if hasSliceBinding || result.Peek(ctx) {
+	if hasSliceBinding {
 		var records []*neo4j.Record
 		if result.Peek(ctx) {
 			records, err = result.Collect(ctx)
