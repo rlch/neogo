@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.5](https://github.com/rlch/neogo/compare/v1.0.4...v1.0.5) (2025-03-28)
+
+
+### Bug Fixes
+
+* Remove another print ([8f6b3e5](https://github.com/rlch/neogo/commit/8f6b3e54c298d2f8b606dc6b95cdc275ce0bee86))
+* Remove print ([328c2c7](https://github.com/rlch/neogo/commit/328c2c75f8c2622732c4d0c8d132430a4d06d933))
+
 ## [1.0.4](https://github.com/rlch/neogo/compare/v1.0.3...v1.0.4) (2025-03-28)
 
 
