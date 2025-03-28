@@ -368,68 +368,12 @@ func (s *session) unmarshalResult(
 	ctx context.Context,
 	cy *internal.CompiledCypher,
 	result neo4j.ResultWithContext,
-) error {
+) (err error) {
 	if !result.Next(ctx) {
 		return nil
 	}
 	first := result.Record()
-
-	// If we have more than one record, we know we should be unmarshalling
-	// into slices. If we have a single record, we don't necessarily know if
-	// we want to marshal into slices or not.
-	//
-	// Compare the depth of nesting for the bindings and their corresponding
-	// record values:
-	// - If any of the bindings have a non-zero depth, i.e. non-slice, we
-	//   assume single.
-	// - If any of the bindings have a different depth than the correpodning
-	//   record-values, assume we have multiple records.
-	isRecords, err := (func() (bool, error) {
-		if result.Peek(ctx) {
-			return true, nil
-		}
-		allSlices := true
-		bindingTypes := map[string]reflect.Type{}
-		for k, binding := range cy.Bindings {
-			typ := binding.Type()
-			for typ.Kind() == reflect.Ptr {
-				typ = typ.Elem()
-			}
-			bindingTypes[k] = typ
-			if typ.Kind() == reflect.Slice ||
-				typ.Kind() == reflect.Array {
-				continue
-			}
-			allSlices = false
-		}
-		if !allSlices {
-			return false, nil
-		}
-		for k, bindingType := range bindingTypes {
-			recordV, ok := first.Get(k)
-			if !ok {
-				return false, fmt.Errorf("no value associated with key %q", k)
-			}
-			recordType := reflect.TypeOf(recordV)
-			for {
-				bindingNext := bindingType.Kind() == reflect.Array || bindingType.Kind() == reflect.Slice
-				recordNext := recordType.Kind() == reflect.Array || recordType.Kind() == reflect.Slice
-				if bindingNext && recordNext {
-					bindingType = bindingType.Elem()
-					recordType = recordType.Elem()
-					continue
-				} else if !bindingNext && !recordNext {
-					break
-				}
-				return true, nil
-			}
-		}
-		return false, nil
-	})()
-	if err != nil {
-		return err
-	}
-	if isRecords {
+	if result.Peek(ctx) {
 		var records []*neo4j.Record
 		records, err = result.Collect(ctx)
 		if err != nil {
@@ -471,6 +415,7 @@ func (s *session) unmarshalRecords(
 		slices[name] = binding
 	}
 	for i, record := range records {
+		fmt.Printf("i: %d, record: %v\n", i, record.AsMap())
 		for key, binding := range slices {
 			value, ok := record.Get(key)
 			if !ok {

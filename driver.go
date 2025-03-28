@@ -180,7 +180,7 @@ func (d *driver) Exec(configurers ...func(*execConfig)) Query {
 }
 
 func (d *driver) ensureCausalConsistency(ctx context.Context, sc *neo4j.SessionConfig) {
-	if d.causalConsistencyKey == nil {
+	if d == nil || d.causalConsistencyKey == nil {
 		return
 	}
 	var key string

@@ -273,6 +273,19 @@ func (r *registry) bindValue(from any, to reflect.Value) (err error) {
 		}
 	}
 
+	// This handles a slice of length 1, treated as a single record value.
+	// NOTE: a nil record is considered an empty list!
+	if from != nil && reflect.TypeOf(from).Kind() != reflect.Slice {
+		sliceV := to
+		for sliceV.Kind() == reflect.Ptr {
+			sliceV = sliceV.Elem()
+		}
+		if sliceV.Kind() == reflect.Slice {
+			sliceV.Set(reflect.MakeSlice(sliceV.Type(), 1, 1))
+			return r.bindValue(from, sliceV.Index(0))
+		}
+	}
+
 	// PERF: Obviously huge performance hit here. Consider alternative ways of
 	// coercing between types. Might just need to be imperative and verbose
 	bytes, err := json.Marshal(from)

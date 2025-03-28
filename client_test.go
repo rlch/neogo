@@ -549,20 +549,13 @@ func TestStream(t *testing.T) {
 
 func TestRun(t *testing.T) {
 	ctx := context.Background()
-	var d Driver
-	if testing.Short() {
-		m := NewMock()
-		m.BindRecords([]map[string]any{{"i": 1}})
-		d = m
-	} else {
-		neo4jDriver, cancel := startNeo4J(ctx)
-		d = New(neo4jDriver)
-		t.Cleanup(func() {
-			if err := cancel(ctx); err != nil {
-				t.Fatal(err)
-			}
-		})
-	}
+	neo4jDriver, cancel := startNeo4J(ctx)
+	d := New(neo4jDriver)
+	t.Cleanup(func() {
+		if err := cancel(ctx); err != nil {
+			t.Fatal(err)
+		}
+	})
 
 	t.Run("unmarshals slice of length 1", func(t *testing.T) {
 		var is []int
@@ -571,6 +564,32 @@ func TestRun(t *testing.T) {
 			Return(db.Qual(&is, "i")).Run(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, []int{1}, is)
+	})
+
+	t.Run("non-existent nil property nil pointer", func(t *testing.T) {
+		// Create a test node first
+		err := d.Exec().
+			Create(
+				db.Node(
+					db.Var(
+						"t",
+						db.Label("TestNode"),
+					),
+				),
+			).
+			Run(ctx)
+		assert.NoError(t, err)
+
+		// Try to query a non-existent property
+		var listOfVal []string
+		err = d.Exec().
+			Cypher(`MATCH (t:TestNode)`).
+			Return(db.Qual(&listOfVal, "t.someNonExistentProp")).
+			Run(ctx)
+
+		// Should not error, but return an empty list since the property doesn't exist
+		assert.NoError(t, err)
+		assert.Empty(t, listOfVal, "Expected empty list when querying non-existent property")
 	})
 }
 
