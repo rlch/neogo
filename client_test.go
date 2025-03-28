@@ -845,14 +845,28 @@ func TestUnmarshalNonExistentNodes(t *testing.T) {
 
 	d := New(driver)
 
-	// Try to match non-existent nodes and unmarshal into slice
-	var results []TestStruct
+	// Create a test node first
+	testNode := TestStruct{
+		Name:    "TestNode",
+		Age:     25,
+		IsValid: true,
+	}
 	err := d.Exec().
-		Cypher(`MATCH (t:TestStruct) WHERE t.name = 'DoesNotExist'`).
+		Create(db.Node(&testNode)).
+		Run(ctx)
+	assert.NoError(t, err)
+
+	// Try to match the node and unmarshal into slice
+	var results []TestStruct
+	err = d.Exec().
+		Cypher(`MATCH (t:TestStruct) WHERE t.name = 'TestNode'`).
 		Return(db.Qual(&results, "t")).
 		Run(ctx)
 
-	// Should not error and return empty slice
+	// Should not error and return slice with one node
 	assert.NoError(t, err)
-	assert.Empty(t, results, "Expected empty slice when no nodes match")
+	assert.Len(t, results, 1, "Expected slice with one node")
+	assert.Equal(t, testNode.Name, results[0].Name)
+	assert.Equal(t, testNode.Age, results[0].Age)
+	assert.Equal(t, testNode.IsValid, results[0].IsValid)
 }
