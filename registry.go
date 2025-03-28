@@ -195,7 +195,7 @@ func (r *registry) bindValue(from any, to reflect.Value) (err error) {
 			return nil
 		}
 
-		// Recurse into slices
+		// Recursively deserialize slices
 		switch reflect.TypeOf(from).Kind() {
 		case reflect.Slice:
 			if to.Kind() == reflect.Ptr {
@@ -282,7 +282,7 @@ func (r *registry) bindValue(from any, to reflect.Value) (err error) {
 		}
 		if sliceV.Kind() == reflect.Slice {
 			sliceV.Set(reflect.MakeSlice(sliceV.Type(), 1, 1))
-			return r.bindValue(from, sliceV.Index(0))
+			return r.bindValue(from, sliceV.Index(0).Addr())
 		}
 	}
 

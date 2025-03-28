@@ -15,39 +15,191 @@ import (
 	"github.com/rlch/neogo/query"
 )
 
-func TestUnmarshalResult(t *testing.T) {
+func TestUnmarshalRecord(t *testing.T) {
 	s := &session{}
-	t.Run("single", func(t *testing.T) {
-		t.Run("err on non-existent key", func(t *testing.T) {
-			n := tests.Person{}
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"m": reflect.ValueOf(&n),
+	t.Run("err on non-existent key", func(t *testing.T) {
+		n := tests.Person{}
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"m": reflect.ValueOf(&n),
+			},
+		}
+		record := &neo4j.Record{
+			Keys: []string{"n"},
+			Values: []any{
+				neo4j.Node{
+					Props: map[string]any{
+						"name":    "Jessie",
+						"surname": "Doinkman",
+					},
 				},
-			}
-			record := &neo4j.Record{
+			},
+		}
+		err := s.unmarshalRecord(cy, record)
+		assert.Error(t, err)
+	})
+
+	t.Run("binds to node", func(t *testing.T) {
+		n := tests.Person{}
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		record := &neo4j.Record{
+			Keys: []string{"n"},
+			Values: []any{
+				neo4j.Node{
+					Props: map[string]any{
+						"name":    "Jessie",
+						"surname": "Pinkman",
+					},
+				},
+			},
+		}
+		err := s.unmarshalRecord(cy, record)
+		assert.NoError(t, err)
+		assert.Equal(t, tests.Person{
+			Name: "Jessie", Surname: "Pinkman",
+		}, n)
+	})
+
+	t.Run("binds to null", func(t *testing.T) {
+		var n *tests.Person
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		record := &neo4j.Record{
+			Keys:   []string{"n"},
+			Values: []any{nil},
+		}
+		err := s.unmarshalRecord(cy, record)
+		assert.NoError(t, err)
+		assert.Equal(t, (*tests.Person)(nil), n)
+	})
+
+	t.Run("binds to abstract node", func(t *testing.T) {
+		var n tests.Organism = &tests.BaseOrganism{}
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		record := &neo4j.Record{
+			Keys: []string{"n"},
+			Values: []any{
+				neo4j.Node{
+					Labels: []string{
+						"Organism",
+						"Human",
+					},
+					Props: map[string]any{
+						"id":   "human",
+						"name": "waltuh",
+					},
+				},
+			},
+		}
+		err := s.unmarshalRecord(cy, record)
+		assert.NoError(t, err)
+		assert.Equal(t, &tests.Human{
+			BaseOrganism: tests.BaseOrganism{
+				Node: internal.Node{
+					ID: "human",
+				},
+				Alive: false,
+			},
+			Name: "waltuh",
+		}, n)
+	})
+
+	t.Run("binds to multi-polymorphic abstract node", func(t *testing.T) {
+		var n tests.Pet = &tests.BasePet{}
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		record := &neo4j.Record{
+			Keys: []string{"n"},
+			Values: []any{
+				neo4j.Node{
+					Labels: []string{
+						"Organism",
+						"Pet",
+						"Dog",
+					},
+					Props: map[string]any{
+						"id":    "dog",
+						"borfs": true,
+						"alive": true,
+					},
+				},
+			},
+		}
+		err := s.unmarshalRecord(cy, record)
+		assert.NoError(t, err)
+		assert.Equal(t, &tests.Dog{
+			BasePet: tests.BasePet{
+				BaseOrganism: tests.BaseOrganism{
+					Node: internal.Node{
+						ID: "dog",
+					},
+					Alive: true,
+				},
+			},
+			Borfs: true,
+		}, n)
+	})
+
+	t.Run("binds to nodes", func(t *testing.T) {
+		var n []tests.Person
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		err := s.unmarshalRecord(cy,
+			&neo4j.Record{
 				Keys: []string{"n"},
 				Values: []any{
-					neo4j.Node{
-						Props: map[string]any{
-							"name":    "Jessie",
-							"surname": "Doinkman",
+					[]any{
+						neo4j.Node{
+							Props: map[string]any{
+								"name":    "Jessie",
+								"surname": "Pinkman",
+							},
+						},
+						neo4j.Node{
+							Props: map[string]any{
+								"name":    "Walter",
+								"surname": "White",
+							},
 						},
 					},
 				},
-			}
-			err := s.unmarshalRecord(cy, record)
-			assert.Error(t, err)
-		})
+			},
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, tests.Person{
+			Name: "Jessie", Surname: "Pinkman",
+		}, n[0])
+		assert.Equal(t, tests.Person{
+			Name: "Walter", Surname: "White",
+		}, n[1])
+	})
 
-		t.Run("binds to node", func(t *testing.T) {
-			n := tests.Person{}
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
-				},
-			}
-			record := &neo4j.Record{
+	t.Run("binds to nodes with length 1", func(t *testing.T) {
+		var n []tests.Person
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		err := s.unmarshalRecord(cy,
+			&neo4j.Record{
 				Keys: []string{"n"},
 				Values: []any{
 					neo4j.Node{
@@ -57,73 +209,209 @@ func TestUnmarshalResult(t *testing.T) {
 						},
 					},
 				},
-			}
-			err := s.unmarshalRecord(cy, record)
-			assert.NoError(t, err)
-			assert.Equal(t, tests.Person{
-				Name: "Jessie", Surname: "Pinkman",
-			}, n)
-		})
+			},
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, tests.Person{
+			Name: "Jessie", Surname: "Pinkman",
+		}, n[0])
+	})
+}
 
-		t.Run("binds to null", func(t *testing.T) {
-			var n *tests.Person
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
-				},
-			}
-			record := &neo4j.Record{
-				Keys:   []string{"n"},
-				Values: []any{nil},
-			}
-			err := s.unmarshalRecord(cy, record)
-			assert.NoError(t, err)
-			assert.Equal(t, (*tests.Person)(nil), n)
-		})
+func TestUnmarshalRecords(t *testing.T) {
+	s := &session{}
 
-		t.Run("binds to abstract node", func(t *testing.T) {
-			var n tests.Organism = &tests.BaseOrganism{}
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
-				},
-			}
-			record := &neo4j.Record{
+	t.Run("err on non-existent key", func(t *testing.T) {
+		n1 := tests.Person{}
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n1),
+			},
+		}
+		records := []*neo4j.Record{
+			{
 				Keys: []string{"n"},
 				Values: []any{
 					neo4j.Node{
-						Labels: []string{
-							"Organism",
-							"Human",
-						},
 						Props: map[string]any{
-							"id":   "human",
-							"name": "waltuh",
+							"name":    "Jessie",
+							"surname": "Pinkman",
 						},
 					},
 				},
-			}
-			err := s.unmarshalRecord(cy, record)
-			assert.NoError(t, err)
-			assert.Equal(t, &tests.Human{
-				BaseOrganism: tests.BaseOrganism{
-					Node: internal.Node{
-						ID: "human",
-					},
-					Alive: false,
-				},
-				Name: "waltuh",
-			}, n)
-		})
+			},
+			{
+				// This record does not have the "n" key.
+				Keys:   []string{"non_existent_key"},
+				Values: []any{"some_value"},
+			},
+		}
+		err := s.unmarshalRecords(cy, records)
+		assert.Error(t, err)
+	})
 
-		t.Run("binds to multi-polymorphic abstract node", func(t *testing.T) {
-			var n tests.Pet = &tests.BasePet{}
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
+	t.Run("binds to nodes", func(t *testing.T) {
+		var n []tests.Person
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		records := []*neo4j.Record{
+			{
+				Keys: []string{"n"},
+				Values: []any{
+					neo4j.Node{
+						Props: map[string]any{
+							"name":    "Jessie",
+							"surname": "Pinkman",
+						},
+					},
 				},
-			}
-			record := &neo4j.Record{
+			},
+			{
+				Keys: []string{"n"},
+				Values: []any{
+					neo4j.Node{
+						Props: map[string]any{
+							"name":    "Walter",
+							"surname": "White",
+						},
+					},
+				},
+			},
+		}
+		err := s.unmarshalRecords(cy, records)
+		assert.NoError(t, err)
+		assert.Equal(t, tests.Person{
+			Name: "Jessie", Surname: "Pinkman",
+		}, n[0])
+		assert.Equal(t, tests.Person{
+			Name: "Walter", Surname: "White",
+		}, n[1])
+	})
+
+	t.Run("binds to slice of nils", func(t *testing.T) {
+		var n []*tests.Person
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		records := []*neo4j.Record{
+			{
+				Keys:   []string{"n"},
+				Values: []any{nil},
+			},
+			{
+				Keys:   []string{"n"},
+				Values: []any{nil},
+			},
+		}
+		err := s.unmarshalRecords(cy, records)
+		assert.NoError(t, err)
+		assert.Equal(t, (*tests.Person)(nil), n[0])
+		assert.Equal(t, (*tests.Person)(nil), n[1])
+	})
+
+	t.Run("considers nil nodes in slices", func(t *testing.T) {
+		var n []*tests.Person
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		records := []*neo4j.Record{
+			{
+				Keys: []string{"n"},
+				Values: []any{
+					neo4j.Node{
+						Props: map[string]any{
+							"name":    "Jessie",
+							"surname": "Pinkman",
+						},
+					},
+				},
+			},
+			{
+				Keys: []string{"n"},
+				Values: []any{
+					nil,
+				},
+			},
+		}
+		err := s.unmarshalRecords(cy, records)
+		assert.NoError(t, err)
+		assert.Len(t, n, 2)
+		assert.Equal(t, tests.Person{
+			Name: "Jessie", Surname: "Pinkman",
+		}, *n[0])
+		assert.Equal(t, (*tests.Person)(nil), n[1])
+	})
+
+	t.Run("binds to []any", func(t *testing.T) {
+		var n []any
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		records := []*neo4j.Record{
+			{
+				Keys:   []string{"n"},
+				Values: []any{1},
+			},
+			{
+				Keys:   []string{"n"},
+				Values: []any{2},
+			},
+		}
+		err := s.unmarshalRecords(cy, records)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, n[0])
+		assert.Equal(t, 2, n[1])
+	})
+
+	t.Run("binds to [][]any", func(t *testing.T) {
+		var n [][]any
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		records := []*neo4j.Record{
+			{
+				Keys:   []string{"n"},
+				Values: []any{[]any{"a", "b"}},
+			},
+			{
+				Keys:   []string{"n"},
+				Values: []any{[]any{"c", "d"}},
+			},
+		}
+		err := s.unmarshalRecords(cy, records)
+		assert.NoError(t, err)
+		assert.Equal(t, []any{"a", "b"}, n[0])
+		assert.Equal(t, []any{"c", "d"}, n[1])
+	})
+
+	t.Run("binds to abstract nodes", func(t *testing.T) {
+		s := &session{
+			registry: registry{
+				abstractNodes: []any{
+					&tests.BaseOrganism{},
+					&tests.BasePet{},
+				},
+			},
+		}
+		var n []tests.Organism
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		records := []*neo4j.Record{
+			{
 				Keys: []string{"n"},
 				Values: []any{
 					neo4j.Node{
@@ -139,211 +427,85 @@ func TestUnmarshalResult(t *testing.T) {
 						},
 					},
 				},
-			}
-			err := s.unmarshalRecord(cy, record)
-			assert.NoError(t, err)
-			assert.Equal(t, &tests.Dog{
-				BasePet: tests.BasePet{
-					BaseOrganism: tests.BaseOrganism{
-						Node: internal.Node{
-							ID: "dog",
+			},
+			{
+				Keys: []string{"n"},
+				Values: []any{
+					neo4j.Node{
+						Labels: []string{
+							"Organism",
+							"Human",
 						},
-						Alive: true,
+						Props: map[string]any{
+							"id":    "human",
+							"alive": true,
+							"name":  "Jesse Pinkman",
+						},
 					},
 				},
-				Borfs: true,
-			}, n)
-		})
+			},
+		}
+		err := s.unmarshalRecords(cy, records)
+		assert.NoError(t, err)
+		assert.Equal(t, &tests.Dog{
+			BasePet: tests.BasePet{
+				BaseOrganism: tests.BaseOrganism{
+					Node: internal.Node{
+						ID: "dog",
+					},
+					Alive: true,
+				},
+			},
+			Borfs: true,
+		}, n[0])
+		assert.Equal(t, &tests.Human{
+			BaseOrganism: tests.BaseOrganism{
+				Node: internal.Node{
+					ID: "human",
+				},
+				Alive: true,
+			},
+			Name: "Jesse Pinkman",
+		}, n[1])
 	})
 
-	t.Run("collection", func(t *testing.T) {
-		t.Run("err on non-existent key", func(t *testing.T) {
-			n1 := tests.Person{}
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n1),
+	t.Run("binds to [][]Abstract", func(t *testing.T) {
+		s := &session{
+			registry: registry{
+				abstractNodes: []any{
+					&tests.BaseOrganism{},
+					&tests.BasePet{},
 				},
-			}
-			records := []*neo4j.Record{
-				{
-					Keys: []string{"n"},
-					Values: []any{
-						neo4j.Node{
-							Props: map[string]any{
-								"name":    "Jessie",
-								"surname": "Pinkman",
-							},
-						},
-					},
-				},
-				{
-					// This record does not have the "n" key.
-					Keys:   []string{"non_existent_key"},
-					Values: []any{"some_value"},
-				},
-			}
-			err := s.unmarshalRecords(cy, records)
-			assert.Error(t, err)
-		})
-
-		t.Run("binds to nodes", func(t *testing.T) {
-			var n []*tests.Person
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
-				},
-			}
-			records := []*neo4j.Record{
-				{
-					Keys: []string{"n"},
-					Values: []any{
-						neo4j.Node{
-							Props: map[string]any{
-								"name":    "Jessie",
-								"surname": "Pinkman",
-							},
-						},
-					},
-				},
-				{
-					Keys: []string{"n"},
-					Values: []any{
-						neo4j.Node{
-							Props: map[string]any{
-								"name":    "Walter",
-								"surname": "White",
-							},
-						},
-					},
-				},
-			}
-			err := s.unmarshalRecords(cy, records)
-			assert.NoError(t, err)
-			assert.Equal(t, tests.Person{
-				Name: "Jessie", Surname: "Pinkman",
-			}, *n[0])
-			assert.Equal(t, tests.Person{
-				Name: "Walter", Surname: "White",
-			}, *n[1])
-		})
-
-		t.Run("considers nil nodes in slices", func(t *testing.T) {
-			var n []*tests.Person
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
-				},
-			}
-			records := []*neo4j.Record{
-				{
-					Keys: []string{"n"},
-					Values: []any{
-						neo4j.Node{
-							Props: map[string]any{
-								"name":    "Jessie",
-								"surname": "Pinkman",
-							},
-						},
-					},
-				},
-				{
-					Keys: []string{"n"},
-					Values: []any{
-						nil,
-					},
-				},
-			}
-			err := s.unmarshalRecords(cy, records)
-			assert.NoError(t, err)
-			assert.Len(t, n, 2)
-			assert.Equal(t, tests.Person{
-				Name: "Jessie", Surname: "Pinkman",
-			}, *n[0])
-			assert.Equal(t, (*tests.Person)(nil), n[1])
-		})
-
-		t.Run("binds to []any", func(t *testing.T) {
-			var n []any
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
-				},
-			}
-			records := []*neo4j.Record{
-				{
-					Keys:   []string{"n"},
-					Values: []any{1},
-				},
-				{
-					Keys:   []string{"n"},
-					Values: []any{2},
-				},
-			}
-			err := s.unmarshalRecords(cy, records)
-			assert.NoError(t, err)
-			assert.Equal(t, 1, n[0])
-			assert.Equal(t, 2, n[1])
-		})
-
-		t.Run("binds to [][]any", func(t *testing.T) {
-			var n [][]any
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
-				},
-			}
-			records := []*neo4j.Record{
-				{
-					Keys:   []string{"n"},
-					Values: []any{[]any{"a", "b"}},
-				},
-				{
-					Keys:   []string{"n"},
-					Values: []any{[]any{"c", "d"}},
-				},
-			}
-			err := s.unmarshalRecords(cy, records)
-			assert.NoError(t, err)
-			assert.Equal(t, []any{"a", "b"}, n[0])
-			assert.Equal(t, []any{"c", "d"}, n[1])
-		})
-
-		t.Run("binds to abstract nodes", func(t *testing.T) {
-			s := &session{
-				registry: registry{
-					abstractNodes: []any{
-						&tests.BaseOrganism{},
-						&tests.BasePet{},
-					},
-				},
-			}
-			var n []tests.Organism
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
-				},
-			}
-			records := []*neo4j.Record{
-				{
-					Keys: []string{"n"},
-					Values: []any{
+			},
+		}
+		var n [][]tests.Organism
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		records := []*neo4j.Record{
+			{
+				Keys: []string{"n"},
+				Values: []any{
+					[]any{
 						neo4j.Node{
 							Labels: []string{
 								"Organism",
 								"Pet",
-								"Dog",
 							},
 							Props: map[string]any{
-								"id":    "dog",
-								"borfs": true,
-								"alive": true,
+								"id":   "pet",
+								"cute": true,
 							},
 						},
 					},
 				},
-				{
-					Keys: []string{"n"},
-					Values: []any{
+			},
+			{
+				Keys: []string{"n"},
+				Values: []any{
+					[]any{
 						neo4j.Node{
 							Labels: []string{
 								"Organism",
@@ -352,152 +514,76 @@ func TestUnmarshalResult(t *testing.T) {
 							Props: map[string]any{
 								"id":    "human",
 								"alive": true,
-								"name":  "Jesse Pinkman",
 							},
 						},
 					},
 				},
-			}
-			err := s.unmarshalRecords(cy, records)
-			assert.NoError(t, err)
-			assert.Equal(t, &tests.Dog{
-				BasePet: tests.BasePet{
-					BaseOrganism: tests.BaseOrganism{
-						Node: internal.Node{
-							ID: "dog",
-						},
-						Alive: true,
-					},
+			},
+		}
+		err := s.unmarshalRecords(cy, records)
+		assert.NoError(t, err)
+		assert.Equal(t, &tests.BasePet{
+			BaseOrganism: tests.BaseOrganism{
+				Node: internal.Node{
+					ID: "pet",
 				},
-				Borfs: true,
-			}, n[0])
-			assert.Equal(t, &tests.Human{
-				BaseOrganism: tests.BaseOrganism{
-					Node: internal.Node{
-						ID: "human",
-					},
-					Alive: true,
+			},
+			Cute: true,
+		}, n[0][0])
+		assert.Equal(t, &tests.Human{
+			BaseOrganism: tests.BaseOrganism{
+				Node: internal.Node{
+					ID: "human",
 				},
-				Name: "Jesse Pinkman",
-			}, n[1])
-		})
+				Alive: true,
+			},
+		}, n[1][0])
+	})
 
-		t.Run("binds to [][]Abstract", func(t *testing.T) {
-			s := &session{
-				registry: registry{
-					abstractNodes: []any{
-						&tests.BaseOrganism{},
-						&tests.BasePet{},
-					},
+	t.Run("binds to [][]Concrete where Concrete is an implementation of Abstract", func(t *testing.T) {
+		s := &session{
+			registry: registry{
+				abstractNodes: []any{
+					&tests.BaseOrganism{},
+					&tests.BasePet{},
 				},
-			}
-			var n [][]tests.Organism
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
-				},
-			}
-			records := []*neo4j.Record{
-				{
-					Keys: []string{"n"},
-					Values: []any{
-						[]any{
-							neo4j.Node{
-								Labels: []string{
-									"Organism",
-									"Pet",
-								},
-								Props: map[string]any{
-									"id":   "pet",
-									"cute": true,
-								},
+			},
+		}
+		var n [][]tests.BasePet
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		records := []*neo4j.Record{
+			{
+				Keys: []string{"n"},
+				Values: []any{
+					[]any{
+						neo4j.Node{
+							Labels: []string{
+								"Organism",
+								"Pet",
+							},
+							Props: map[string]any{
+								"id":   "pet",
+								"cute": true,
 							},
 						},
 					},
 				},
-				{
-					Keys: []string{"n"},
-					Values: []any{
-						[]any{
-							neo4j.Node{
-								Labels: []string{
-									"Organism",
-									"Human",
-								},
-								Props: map[string]any{
-									"id":    "human",
-									"alive": true,
-								},
-							},
-						},
-					},
+			},
+		}
+		err := s.unmarshalRecords(cy, records)
+		assert.NoError(t, err)
+		assert.Equal(t, tests.BasePet{
+			BaseOrganism: tests.BaseOrganism{
+				Node: internal.Node{
+					ID: "pet",
 				},
-			}
-			err := s.unmarshalRecords(cy, records)
-			assert.NoError(t, err)
-			assert.Equal(t, &tests.BasePet{
-				BaseOrganism: tests.BaseOrganism{
-					Node: internal.Node{
-						ID: "pet",
-					},
-				},
-				Cute: true,
-			}, n[0][0])
-			assert.Equal(t, &tests.Human{
-				BaseOrganism: tests.BaseOrganism{
-					Node: internal.Node{
-						ID: "human",
-					},
-					Alive: true,
-				},
-			}, n[1][0])
-		})
-
-		t.Run("binds to [][]Concrete where Concrete is an implementation of Abstract", func(t *testing.T) {
-			s := &session{
-				registry: registry{
-					abstractNodes: []any{
-						&tests.BaseOrganism{},
-						&tests.BasePet{},
-					},
-				},
-			}
-			var n [][]tests.BasePet
-			cy := &internal.CompiledCypher{
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
-				},
-			}
-			records := []*neo4j.Record{
-				{
-					Keys: []string{"n"},
-					Values: []any{
-						[]any{
-							neo4j.Node{
-								Labels: []string{
-									"Organism",
-									"Pet",
-								},
-								Props: map[string]any{
-									"id":   "pet",
-									"cute": true,
-								},
-							},
-						},
-					},
-				},
-			}
-			err := s.unmarshalRecords(cy, records)
-			assert.NoError(t, err)
-			assert.Equal(t, tests.BasePet{
-				BaseOrganism: tests.BaseOrganism{
-					Node: internal.Node{
-						ID: "pet",
-					},
-				},
-				Cute: true,
-			}, n[0][0])
-		})
+			},
+			Cute: true,
+		}, n[0][0])
 	})
 }
 
@@ -561,7 +647,8 @@ func TestRun(t *testing.T) {
 		var is []int
 		err := d.Exec().
 			Unwind("range(1, 1)", "i").
-			Return(db.Qual(&is, "i")).Run(ctx)
+			Return(db.Qual(&is, "i")).
+			Run(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, []int{1}, is)
 	})
