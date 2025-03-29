@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.0.6](https://github.com/rlch/neogo/compare/v1.0.5...v1.0.6) (2025-03-28)
+
+
+### Bug Fixes
+
+* Allow unmarshalling to slices of size 1 ([358aedf](https://github.com/rlch/neogo/commit/358aedf607e57560411c8dcfe2cb865c2412e85f))
+
+## [1.0.5](https://github.com/rlch/neogo/compare/v1.0.4...v1.0.5) (2025-03-28)
+
+
+### Bug Fixes
+
+* Remove another print ([8f6b3e5](https://github.com/rlch/neogo/commit/8f6b3e54c298d2f8b606dc6b95cdc275ce0bee86))
+* Remove print ([328c2c7](https://github.com/rlch/neogo/commit/328c2c75f8c2622732c4d0c8d132430a4d06d933))
+
+## [1.0.4](https://github.com/rlch/neogo/compare/v1.0.3...v1.0.4) (2025-03-28)
+
+
+### Bug Fixes
+
+* Avoid downcasting abstract types upon registration ([c241f47](https://github.com/rlch/neogo/commit/c241f471036b1b9ab06528b2973db18c5a3aac05))
+* Handle unmarshalling to empty slice and slice of length 1 ([894de73](https://github.com/rlch/neogo/commit/894de73fbfe290d69b917968d5c7602089054d99))
+
 ## [1.0.3](https://github.com/rlch/neogo/compare/v1.0.2...v1.0.3) (2025-02-12)
 
 

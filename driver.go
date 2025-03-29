@@ -153,6 +153,14 @@ func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execC
 	}
 }
 
+// WithTypes is an option for [New] that allows you to register instances of
+// [IAbstract], [INode] and [IRelationship] to be used with [neogo].
+func WithTypes(types ...any) func(*driver) {
+	return func(d *driver) {
+		d.registry.registerTypes(types...)
+	}
+}
+
 func (d *driver) DB() neo4j.DriverWithContext { return d.db }
 
 func (d *driver) Exec(configurers ...func(*execConfig)) Query {
@@ -181,7 +189,7 @@ func (d *driver) Exec(configurers ...func(*execConfig)) Query {
 }
 
 func (d *driver) ensureCausalConsistency(ctx context.Context, sc *neo4j.SessionConfig) {
-	if d.causalConsistencyKey == nil {
+	if d == nil || d.causalConsistencyKey == nil {
 		return
 	}
 	var key string
