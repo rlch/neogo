@@ -560,6 +560,8 @@ var (
 	reValueExpr    = regexp2.MustCompile(`(?<![\w'"])\?(?![\w'"])`, regexp2.None)
 )
 
+type exprStringArg string
+
 func (s *Scope) compileExpression(identifier any) func(expr Expr) string {
 	identifier, _, _ = s.unravelIdentifier(identifier)
 	identifierName := s.lookupName(identifier)
@@ -579,7 +581,12 @@ func (s *Scope) compileExpression(identifier any) func(expr Expr) string {
 		// Replace ? with evaluated value identifier
 		var valueCounter int
 		compiled, err = reValueExpr.ReplaceFunc(compiled, func(m regexp2.Match) string {
-			out := s.valueIdentifier(expr.Args[valueCounter])
+			arg := expr.Args[valueCounter]
+			if str, ok := arg.(string); ok {
+				// If the arg is a string, we need to escape it. We use this type to delineate.
+				arg = exprStringArg(str)
+			}
+			out := s.valueIdentifier(arg)
 			valueCounter++
 			return out
 		}, -1, -1)
@@ -635,6 +642,9 @@ func (s *Scope) valueIdentifier(v any) string {
 			return "false"
 		}
 	case reflect.String:
+		if v, ok := v.(exprStringArg); ok {
+			return s.addParameter(reflect.ValueOf(string(v)), "")
+		}
 		return v.(string)
 	case reflect.Int, reflect.Int8, reflect.Int16,
 		reflect.Int32, reflect.Int64, reflect.Uint,

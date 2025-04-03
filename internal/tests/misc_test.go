@@ -28,3 +28,19 @@ func TestCypher(t *testing.T) {
 		},
 	})
 }
+
+func TestExprInPropertyIdentifier(t *testing.T) {
+	c := internal.NewCypherClient()
+	cy, err := c.Unwind(db.Expr("[?, ?, ?, ?]", "a", 2, []int{1}, nil), "x").Compile()
+
+	Check(t, cy, err, internal.CompiledCypher{
+		Cypher: `
+					UNWIND [$v1, $v2, $v3, null] AS x
+					`,
+		Parameters: map[string]any{
+			"v1": "a",
+			"v2": 2,
+			"v3": []int{1},
+		},
+	})
+}
