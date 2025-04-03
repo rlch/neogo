@@ -1,8 +1,9 @@
 module github.com/rlch/neogo
 
-go 1.21
+go 1.23
 
 require (
+	github.com/dlclark/regexp2 v1.11.5
 	github.com/goccy/go-json v0.10.2
 	github.com/iancoleman/strcase v0.3.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.10.0

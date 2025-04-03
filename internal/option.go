@@ -65,12 +65,12 @@ type (
 		Bind       any
 		Name       string
 		// If both name and expr are provided, name is used as an alias
-		Expr      Expr
-		Where     *Where
-		Props     Props
-		PropsExpr Expr
-		Pattern   Expr
-		VarLength Expr
+		Expression      string
+		Where           *Where
+		Props           Props
+		PropsExpression string
+		Pattern         string
+		VarLength       string
 	}
 )
 
@@ -87,8 +87,8 @@ type (
 	selectionSubClause struct {
 		// Field name -> true if ascending
 		OrderBy map[any]bool
-		Skip    Expr
-		Limit   Expr
+		Skip    string
+		Limit   string
 		Where   *Where
 	}
 )
@@ -107,7 +107,7 @@ type (
 	}
 	Where struct {
 		Identifier any
-		Expr       string
+		Expr       *Expr
 		Conds      []*Condition
 	}
 	Condition struct {
@@ -120,11 +120,14 @@ type (
 		Value any
 		Not   bool
 	}
-	Expr string
+	Expr struct {
+		Value string
+		Args  []any
+	}
 )
 
 var (
-	_ ICondition = (Expr)("")
+	_ ICondition = Expr{}
 	_ interface {
 		WhereOption
 		ICondition
@@ -132,7 +135,7 @@ var (
 )
 
 func (e Expr) configureWhere(w *Where) {
-	w.Expr = string(e)
+	w.Expr = &e
 }
 
 func (e Expr) Condition() *Condition {

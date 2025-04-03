@@ -7,9 +7,9 @@ import (
 
 func c() *internal.CypherClient { return internal.NewCypherClient() }
 
-func ExampleExpr() {
+func Example() {
 	c().
-		Return(Expr("1 + 2")).
+		Return("1 + 2").
 		Print()
 	// Output:
 	// RETURN 1 + 2

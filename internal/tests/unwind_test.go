@@ -16,14 +16,17 @@ func TestUnwind(t *testing.T) {
 		)
 		c := internal.NewCypherClient()
 		cy, err := c.
-			Unwind(db.Expr("[1, 2, 3, null]"), "x").
+			Unwind(db.Expr("[1, ?, 3, ?]", 2, nil), "x").
 			Return(db.Bind("x", &x), db.Qual(&y, "'val'", db.Name("y"))).Compile()
 
 		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
-					UNWIND [1, 2, 3, null] AS x
+					UNWIND [1, $v1, 3, null] AS x
 					RETURN x, 'val' AS y
 					`,
+			Parameters: map[string]any{
+				"v1": 2,
+			},
 			Bindings: map[string]reflect.Value{
 				"x": reflect.ValueOf(&x),
 				"y": reflect.ValueOf(&y),

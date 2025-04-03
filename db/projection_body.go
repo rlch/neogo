@@ -49,7 +49,7 @@ func OrderBy(identifier query.PropertyIdentifier, asc bool) internal.ProjectionB
 func Skip(expr string) internal.ProjectionBodyOption {
 	return &internal.Configurer{
 		ProjectionBody: func(m *internal.ProjectionBody) {
-			m.Skip = Expr(expr)
+			m.Skip = expr
 		},
 	}
 }
@@ -62,7 +62,7 @@ func Skip(expr string) internal.ProjectionBodyOption {
 func Limit(expr string) internal.ProjectionBodyOption {
 	return &internal.Configurer{
 		ProjectionBody: func(m *internal.ProjectionBody) {
-			m.Limit = Expr(expr)
+			m.Limit = expr
 		},
 	}
 }

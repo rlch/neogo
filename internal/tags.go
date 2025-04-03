@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const neo4jTag = "neo4j"
+const Tag = "neo4j"
 
 func ExtractNodeLabels(i any) []string {
 	labels := extractNodeLabels(i)
@@ -102,7 +102,7 @@ func extractNeo4JName(instance any, fields ...string) ([]neo4jName, error) {
 		if match == nil {
 			return
 		}
-		label, ok := match.Tag.Lookup(neo4jTag)
+		label, ok := match.Tag.Lookup(Tag)
 		if !ok {
 			return
 		}

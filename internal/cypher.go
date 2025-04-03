@@ -39,6 +39,7 @@ func (c *cypher) Bindings() map[string]reflect.Value {
 var (
 	errMergingReturnSubclause = errors.New("cannot merge multiple RETURN sub-clauses (ORDER BY, LIMIT, SKIP, ...)")
 	errWhereReturnSubclause   = errors.New("WHERE clause in RETURN sub-clause is not allowed")
+	errExpressionAndCondition = errors.New("WHERE clause cannot have both expression and conditions")
 	errInvalidPropExpr        = errors.New("invalid property expression. Property expressions must be strings or an identifier")
 	errSubqueryImportAlias    = errors.New("aliasing or expressions are not supported in importing WITH clauses")
 	errUnresolvedProps        = errors.New("resolving from multiple properties is not allowed")
@@ -53,9 +54,7 @@ func (s *cypher) catch(op func()) {
 			if !ok {
 				panic(err)
 			}
-			if s.err == nil {
-				s.AddError(err)
-			}
+			s.AddError(err)
 		}
 	}()
 	op()
@@ -71,7 +70,10 @@ func (cy *cypher) newline() { cy.WriteByte('\n') }
 func (cy *cypher) writeNode(m *member) {
 	if m != nil {
 		if !m.isNew {
-			fmt.Fprintf(cy, "(%s)", m.expr)
+			_, err := fmt.Fprintf(cy, "(%s)", m.expr)
+			if err != nil {
+				cy.AddError(err)
+			}
 		} else {
 			nodeLabels := ExtractNodeLabels(m.identifier)
 			cy.WriteString("(")
@@ -82,10 +84,16 @@ func (cy *cypher) writeNode(m *member) {
 			}
 			if m.variable != nil && m.variable.Pattern != "" {
 				padProps = true
-				fmt.Fprintf(cy, ":%s", m.variable.Pattern)
+				_, err := fmt.Fprintf(cy, ":%s", m.variable.Pattern)
+				if err != nil {
+					cy.AddError(err)
+				}
 			} else if nodeLabels != nil {
 				padProps = true
-				fmt.Fprintf(cy, ":%s", strings.Join(nodeLabels, ":"))
+				_, err := fmt.Fprintf(cy, ":%s", strings.Join(nodeLabels, ":"))
+				if err != nil {
+					cy.AddError(err)
+				}
 			}
 			var resolvedProps int
 			if m.variable != nil {
@@ -96,12 +104,12 @@ func (cy *cypher) writeNode(m *member) {
 					}
 					cy.writeProps(m.variable.Props)
 				}
-				if m.variable.PropsExpr != "" {
+				if m.variable.PropsExpression != "" {
 					resolvedProps++
 					if padProps {
 						cy.WriteRune(' ')
 					}
-					cy.WriteString(string(m.variable.PropsExpr))
+					cy.WriteString(string(m.variable.PropsExpression))
 				}
 			}
 			if m.propsParam != "" {
@@ -165,9 +173,9 @@ func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
 						cy.writeProps(m.variable.Props)
 					})
 				}
-				if m.variable.PropsExpr != "" {
+				if m.variable.PropsExpression != "" {
 					resolvedProps++
-					inner = inner + " " + string(m.variable.PropsExpr)
+					inner = inner + " " + string(m.variable.PropsExpression)
 				}
 			}
 			if m.propsParam != "" {
@@ -188,12 +196,16 @@ func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
 			}
 		}
 
+		var err error
 		if rs.to != nil {
-			fmt.Fprintf(cy, "-[%s]->", inner)
+			_, err = fmt.Fprintf(cy, "-[%s]->", inner)
 		} else if rs.from != nil {
-			fmt.Fprintf(cy, "<-[%s]-", inner)
+			_, err = fmt.Fprintf(cy, "<-[%s]-", inner)
 		} else {
-			fmt.Fprintf(cy, "-[%s]-", inner)
+			_, err = fmt.Fprintf(cy, "-[%s]-", inner)
+		}
+		if err != nil {
+			cy.AddError(err)
 		}
 	} else {
 		if rs.to != nil {
@@ -238,7 +250,10 @@ func (cy *cypher) writeProps(props Props) {
 			cy.WriteString(", ")
 		}
 		v := cy.valueIdentifier(props[k.Prop])
-		fmt.Fprintf(cy, "%s: %s", k.Key, v)
+		_, err := fmt.Fprintf(cy, "%s: %s", k.Key, v)
+		if err != nil {
+			cy.AddError(err)
+		}
 	}
 	cy.WriteString("}")
 }
@@ -299,7 +314,10 @@ func (cy *cypher) writeCondition(c *Condition, parseKey, parseValue func(any) st
 func (cy *cypher) writePattern(pattern *nodePattern) {
 	cy.catch(func() {
 		if pattern.pathName != "" {
-			fmt.Fprintf(cy, "%s = ", pattern.pathName)
+			_, err := fmt.Fprintf(cy, "%s = ", pattern.pathName)
+			if err != nil {
+				cy.AddError(err)
+			}
 		}
 		for {
 			nodeM := cy.registerNode(pattern)
@@ -416,8 +434,13 @@ func (cy *cypher) writeDeleteClause(detach bool, propIdentifiers ...any) {
 func (cy *cypher) writeWhereClause(where *Where, inline bool) {
 	cy.catch(func() {
 		cy.WriteString("WHERE ")
-		if where.Expr != "" {
-			cy.WriteString(string(where.Expr))
+		if where.Expr != nil && len(where.Conds) > 0 {
+			cy.AddError(errExpressionAndCondition)
+			return
+		}
+		if where.Expr != nil {
+			expression := cy.compileExpression(where.Identifier)(*where.Expr)
+			cy.WriteString(expression)
 		} else {
 			var cond *Condition
 			if len(where.Conds) == 1 {
@@ -436,7 +459,10 @@ func (cy *cypher) writeWhereClause(where *Where, inline bool) {
 func (cy *cypher) writeUnwindClause(expr any, as string) {
 	cy.WriteString("UNWIND ")
 	m := cy.register(expr, false, nil)
-	fmt.Fprintf(cy, "%s AS %s", m.expr, as)
+	_, err := fmt.Fprintf(cy, "%s AS %s", m.expr, as)
+	if err != nil {
+		cy.AddError(err)
+	}
 	// Replace name with alias
 	m.alias = as
 	cy.replaceBinding(m)
@@ -450,7 +476,10 @@ func (cy *cypher) writeSubqueryClause(subquery func(c *CypherClient) *CypherRunn
 		child.mergeParentScope(child.Parent)
 		runSubquery := subquery(child)
 
-		fmt.Fprintf(cy, "CALL {\n")
+		_, err := fmt.Fprintf(cy, "CALL {\n")
+		if err != nil {
+			cy.AddError(err)
+		}
 		cy.writeIndented("  ", func(cy *cypher) {
 			compiled, err := runSubquery.Compile()
 			if err != nil {
@@ -528,11 +557,11 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 					}
 					if m.projectionBody.Where != nil {
 						if subclause.Where != nil {
-							if subclause.Where.Expr != "" {
+							if subclause.Where.Expr != nil {
 								panic(errMergingReturnSubclause)
 							}
 							subclause.Where.Conds = append(subclause.Where.Conds, m.projectionBody.Where.Conds...)
-							if m.projectionBody.Where.Expr != "" {
+							if m.projectionBody.Where.Expr != nil {
 								if len(subclause.Where.Conds) > 0 {
 									panic(errMergingReturnSubclause)
 								}
@@ -558,7 +587,10 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 			}
 			cy.WriteString(m.expr)
 			if m.alias != "" {
-				fmt.Fprintf(cy, " AS %s", m.alias)
+				_, err := fmt.Fprintf(cy, " AS %s", m.alias)
+				if err != nil {
+					cy.AddError(err)
+				}
 			}
 		}
 		cy.newline()
@@ -590,10 +622,16 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 				}
 			}
 			if subclause.Skip != "" {
-				fmt.Fprintf(cy, "SKIP %s\n", subclause.Skip)
+				_, err := fmt.Fprintf(cy, "SKIP %s\n", subclause.Skip)
+				if err != nil {
+					cy.AddError(err)
+				}
 			}
 			if subclause.Limit != "" {
-				fmt.Fprintf(cy, "LIMIT %s\n", subclause.Limit)
+				_, err := fmt.Fprintf(cy, "LIMIT %s\n", subclause.Limit)
+				if err != nil {
+					cy.AddError(err)
+				}
 			}
 			if subclause.Where != nil {
 				if !isWith {
@@ -652,7 +690,10 @@ func (cy *cypher) writeForEachClause(identifier, elementsExpr any, do func(c *Cy
 
 		foreach := newCypher()
 		m := foreach.register(identifier, false, nil)
-		fmt.Fprintf(cy, "%s IN %s | ", m.expr, value)
+		_, err := fmt.Fprintf(cy, "%s IN %s | ", m.expr, value)
+		if err != nil {
+			cy.AddError(err)
+		}
 
 		b := &strings.Builder{}
 		foreach.Builder = b
@@ -685,7 +726,10 @@ func (cy *cypher) writeYieldClause(identifiers ...any) {
 		m := cy.register(v, false, nil)
 		cy.WriteString(m.expr)
 		if m.alias != "" {
-			fmt.Fprintf(cy, " AS %s", m.alias)
+			_, err := fmt.Fprintf(cy, " AS %s", m.alias)
+			if err != nil {
+				cy.AddError(err)
+			}
 		}
 	})
 }

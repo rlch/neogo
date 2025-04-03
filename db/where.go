@@ -1,6 +1,8 @@
 package db
 
 import (
+	"fmt"
+
 	"github.com/rlch/neogo/internal"
 	"github.com/rlch/neogo/query"
 )
@@ -11,11 +13,29 @@ import (
 // [WHERE]: https://neo4j.com/docs/cypher-manual/current/clauses/where/
 // [nodes + relationship patterns]: https://neo4j.com/docs/cypher-manual/current/patterns/reference
 // [WITH]: https://neo4j.com/docs/cypher-manual/current/clauses/where/#usage-with-with-clause
-func Where(opts ...internal.WhereOption) interface {
+func Where(args ...any) interface {
 	internal.VariableOption
 	internal.ProjectionBodyOption
 	internal.WhereOption
 } {
+	var opts []internal.WhereOption
+	if len(args) != 0 {
+		if _, isOpts := args[0].(internal.WhereOption); isOpts {
+			for i, arg := range args {
+				opt, ok := arg.(internal.WhereOption)
+				if !ok {
+					panic(fmt.Sprintf("expected option %d to be of type WhereOption, got %T. See Where() documentation.", i, arg))
+				}
+				opts = append(opts, opt)
+			}
+		} else if expr, ok := args[0].(string); ok {
+			opts = []internal.WhereOption{
+				Expr(expr, args[1:]...),
+			}
+		} else {
+			panic(fmt.Sprintf("expected first argument to be a string expression or WhereOption, got %T. See Where() documentation.", args[0]))
+		}
+	}
 	return &internal.Configurer{
 		Where: func(w *internal.Where) {
 			for _, opt := range opts {

@@ -1,13 +1,11 @@
+version: "2"
 linters:
-  enable:
-    # Defaults
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - typecheck
-    - unused
-    # Extras
-    - containedctx
-    - wastedassign
+  default: standard
+run:
+  timeout: "1m"
+  issues-exit-code: 1
+  tests: true
+  allow-parallel-runners: true
+  allow-serial-runners: false
+  go: "1.23"
+  relative-path-mode: wd

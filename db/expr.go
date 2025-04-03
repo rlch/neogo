@@ -9,8 +9,11 @@ import (
 // Expr returns a Cypher literal [expression].
 //
 // [expression]: https://neo4j.com/docs/cypher-manual/current/syntax/expressions/
-func Expr(expr string) internal.Expr {
-	return internal.Expr(expr)
+func Expr(expr string, args ...any) internal.Expr {
+	return internal.Expr{
+		Value: expr,
+		Args:  args,
+	}
 }
 
 // String returns a Cypher [string literal expression], wrapped in double-quotes.
@@ -19,6 +22,6 @@ func Expr(expr string) internal.Expr {
 //	Expr(strconv.Quote(s))
 //
 // [string literal expression]: https://neo4j.com/docs/cypher-manual/current/syntax/expressions/#cypher-expressions-string-literals
-func String(s string) internal.Expr {
-	return internal.Expr(strconv.Quote(s))
+func String(s string) string {
+	return strconv.Quote(s)
 }

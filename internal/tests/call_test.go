@@ -117,7 +117,7 @@ func TestCallSubquery(t *testing.T) {
 			Set(db.SetLabels(&person, "ListHead")).
 			With("*").
 			Match(db.Node(db.Qual(&next, "next"))).
-			Where(db.Not(db.Expr("next:ListHead"))).
+			Where(db.Expr("NOT next:ListHead")).
 			With(db.With(&next, db.OrderBy(&next.Age, true))).
 			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
 				return c.

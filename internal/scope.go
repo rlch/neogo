@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dlclark/regexp2"
 	"github.com/iancoleman/strcase"
 )
 
@@ -173,7 +174,7 @@ func (s *Scope) MergeChildScope(child *Scope) {
 	s.AddError(child.err)
 }
 
-func (s *Scope) unfoldIdentifier(value any) (
+func (s *Scope) unravelIdentifier(value any) (
 	identifier any,
 	variable *Variable,
 	projBody *ProjectionBody,
@@ -192,8 +193,8 @@ func (s *Scope) unfoldIdentifier(value any) (
 		if variable.Name == "" {
 			variable.Name = v.Name
 		}
-		if variable.Expr == "" {
-			variable.Expr = v.Expr
+		if variable.Expression == "" {
+			variable.Expression = v.Expression
 		}
 		if variable.Where == nil {
 			variable.Where = v.Where
@@ -207,8 +208,8 @@ func (s *Scope) unfoldIdentifier(value any) (
 		if variable.VarLength == "" {
 			variable.VarLength = v.VarLength
 		}
-		if variable.PropsExpr == "" {
-			variable.PropsExpr = v.PropsExpr
+		if variable.PropsExpression == "" {
+			variable.PropsExpression = v.PropsExpression
 		}
 	}
 RecurseToEntity:
@@ -226,6 +227,11 @@ RecurseToEntity:
 		case *Variable:
 			mergeV(v)
 			identifier = v.Identifier
+		case Expr:
+			// We allow expressions to be used as identifiers, only if they don't use _
+			// as there would be no identifier to bind to. Hence the nil.
+			identifier = s.compileExpression(nil)(v)
+			break RecurseToEntity
 		default:
 			break RecurseToEntity
 		}
@@ -310,15 +316,15 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 	}
 
 	m := &member{isNew: true}
-	identifier, variable, projBody := s.unfoldIdentifier(value)
+	identifier, variable, projBody := s.unravelIdentifier(value)
 
 	// Propagate information from Variable to member
 	m.identifier = identifier
 	if variable != nil {
 		variable.Identifier = identifier
 		m.variable = variable
-		if variable.Expr != "" {
-			m.expr = string(variable.Expr)
+		if variable.Expression != "" {
+			m.expr = string(variable.Expression)
 			if variable.Name != "" {
 				m.alias = variable.Name
 			}
@@ -413,13 +419,7 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		}
 	}
 
-	if expr, ok := m.identifier.(Expr); ok {
-		// Allow strings to be used as names
-		if m.expr != "" {
-			m.alias = m.expr
-		}
-		m.expr = string(expr)
-	} else if name, ok := m.identifier.(string); ok {
+	if name, ok := m.identifier.(string); ok {
 		// Allow strings to be used as names
 		if m.expr != "" {
 			m.alias = m.expr
@@ -550,25 +550,61 @@ func (s *Scope) AddError(err error) {
 func (s *Scope) Error() error { return s.err }
 
 func (s *Scope) lookupName(identifier any) string {
-	identifier, _, _ = s.unfoldIdentifier(identifier)
+	identifier, _, _ = s.unravelIdentifier(identifier)
 	return s.names[reflect.ValueOf(identifier)]
 }
 
+var (
+	reVariableExpr = regexp2.MustCompile(`(?<![\w'"])_(?![\w'"])`, regexp2.None)
+	reValueExpr    = regexp2.MustCompile(`(?<![\w'"])\?(?![\w'"])`, regexp2.None)
+)
+
+func (s *Scope) compileExpression(identifier any) func(expr Expr) string {
+	identifier, _, _ = s.unravelIdentifier(identifier)
+	identifierName := s.lookupName(identifier)
+	return func(expr Expr) string {
+		var (
+			err      error
+			compiled = expr.Value
+		)
+		// Replace _ with identifier name
+		if identifier != nil {
+			compiled, err = reVariableExpr.Replace(expr.Value, identifierName, -1, -1)
+			if err != nil {
+				s.AddError(err)
+				return ""
+			}
+		}
+		// Replace ? with evaluated value identifier
+		var valueCounter int
+		compiled, err = reValueExpr.ReplaceFunc(compiled, func(m regexp2.Match) string {
+			out := s.valueIdentifier(expr.Args[valueCounter])
+			valueCounter++
+			return out
+		}, -1, -1)
+		if err != nil {
+			s.AddError(err)
+			return ""
+		}
+		return compiled
+	}
+}
+
 func (s *Scope) propertyIdentifier(identifier any) func(v any) string {
-	identifier, _, _ = s.unfoldIdentifier(identifier)
+	identifier, _, _ = s.unravelIdentifier(identifier)
 	identifierName := s.lookupName(identifier)
 	return func(v any) string {
 		if v == identifier && identifierName != "" {
 			return identifierName
 		}
-		if expr, ok := v.(Expr); ok {
-			return string(expr)
-		} else if str, strOk := v.(string); strOk && identifierName != "" {
+		if str, strOk := v.(string); strOk && identifierName != "" {
 			// Consider strings as properties if identifier is known
 			return fmt.Sprintf("%s.%s", identifierName, str)
 		} else if strOk {
 			// Otherwise, consider strings as literals
 			return str
+		} else if expr, ok := v.(Expr); ok {
+			panic(fmt.Errorf("expression %s is not supported in propertyIdentifier", expr.Value))
 		}
 		vv := reflect.ValueOf(v)
 		if vv.Kind() != reflect.Ptr {
@@ -586,6 +622,9 @@ func (s *Scope) propertyIdentifier(identifier any) func(v any) string {
 }
 
 func (s *Scope) valueIdentifier(v any) string {
+	if v == nil {
+		return "null"
+	}
 	vv := reflect.ValueOf(v)
 	switch vv.Kind() {
 	case reflect.Bool:
@@ -595,9 +634,6 @@ func (s *Scope) valueIdentifier(v any) string {
 			return "false"
 		}
 	case reflect.String:
-		if expr, ok := v.(Expr); ok {
-			return string(expr)
-		}
 		return v.(string)
 	case reflect.Int, reflect.Int8, reflect.Int16,
 		reflect.Int32, reflect.Int64, reflect.Uint,

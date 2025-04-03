@@ -116,6 +116,33 @@ func TestWhere(t *testing.T) {
 			})
 		})
 
+		t.Run("Filter on node label", func(t *testing.T) {
+			var (
+				name string
+				age  int
+			)
+			c := internal.NewCypherClient()
+			cy, err := c.
+				Match(db.Node("n")).
+				Where(db.Expr("n:Swedish")).
+				Return(
+					db.Qual(&name, "n.name"),
+					db.Qual(&age, "n.age"),
+				).Compile()
+
+			Check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+					MATCH (n)
+					WHERE n:Swedish
+					RETURN n.name, n.age
+					`,
+				Bindings: map[string]reflect.Value{
+					"n.name": reflect.ValueOf(&name),
+					"n.age":  reflect.ValueOf(&age),
+				},
+			})
+		})
+
 		t.Run("Filter on node property", func(t *testing.T) {
 			var n Person
 			c := internal.NewCypherClient()
