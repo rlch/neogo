@@ -17,7 +17,7 @@ func TestWith(t *testing.T) {
 				db.Node(db.Var("george", db.Props{"name": "'George'"})).
 					From(nil, "otherPerson"),
 			).
-			With("otherPerson", db.Qual(db.Expr("toUpper(otherPerson.name)"), "upperCaseName")).
+			With("otherPerson", db.Qual("toUpper(otherPerson.name)", "upperCaseName")).
 			Where(db.Cond("upperCaseName", "STARTS WITH", "'C'")).
 			Return(db.Qual(&otherPersonName, "otherPerson.name")).Compile()
 
@@ -156,7 +156,7 @@ func TestWith(t *testing.T) {
 		c := internal.NewCypherClient()
 		cy, err := c.
 			Unwind("[1, 2, 3, 4, 5, 6]", "x").
-			With(db.With("x", db.Limit("5"), db.Where(db.Cond(db.Expr("x"), ">", "2")))).
+			With(db.With("x", db.Limit("5"), db.Where("x > 2"))).
 			Return(db.Bind("x", &x)).Compile()
 
 		Check(t, cy, err, internal.CompiledCypher{

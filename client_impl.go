@@ -253,6 +253,11 @@ func (c *runnerImpl) Print() query.Runner {
 	return c
 }
 
+func (c *runnerImpl) DebugPrint() query.Runner {
+	c.cy.DebugPrint()
+	return c
+}
+
 func (c *runnerImpl) run(
 	ctx context.Context,
 	params map[string]any,

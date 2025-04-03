@@ -201,6 +201,7 @@ type Updater[To any] interface {
 // Runner allows the query to be executed.
 type Runner interface {
 	Print() Runner
+	DebugPrint() Runner
 
 	// Run executes the query, populating all the values bound within the query if
 	// their identifiers exist in the returning scope.

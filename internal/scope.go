@@ -395,16 +395,16 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 			if _, ok := s.bindings[prefix]; !ok {
 				m.expr = prefix
 			} else {
-				var potentialName string
+				var generatedName string
 				i := 1
 				for {
-					potentialName = fmt.Sprintf("%s%d", prefix, i)
-					if _, ok := s.bindings[potentialName]; !ok {
+					generatedName = fmt.Sprintf("%s%d", prefix, i)
+					if _, ok := s.bindings[generatedName]; !ok {
 						break
 					}
 					i++
 				}
-				m.expr = potentialName
+				m.expr = generatedName
 			}
 			s.generatedNames[m.expr] = struct{}{}
 		}
@@ -440,9 +440,10 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		inner = inner.Elem()
 	}
 	if inner.IsValid() && m.isNew && !inner.IsZero() {
-		if m.alias != "" {
-			panic(fmt.Errorf("%w: alias %s already bound to expression %s", ErrAliasAlreadyBound, m.alias, m.expr))
-		}
+		// We have data to inject, so we need to check if
+		// if m.alias != "" {
+		// 	panic(fmt.Errorf("%w: alias %s already bound to expression %s", ErrAliasAlreadyBound, m.alias, m.expr))
+		// }
 
 		injectParams := func() {
 			effProp := v

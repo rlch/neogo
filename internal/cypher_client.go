@@ -2,9 +2,11 @@ package internal
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
+	"text/template"
 )
 
 func NewCypherClient() *CypherClient {
@@ -250,8 +252,47 @@ func (c *CypherRunner) Compile() (*CompiledCypher, error) {
 	return cy, nil
 }
 
-func (c *CypherRunner) Print() {
+func (c *CypherRunner) Print() *CypherRunner {
 	out := c.String()
 	out = strings.TrimRight(out, "\n")
 	fmt.Println(out)
+	return c
+}
+
+func (c *CypherRunner) DebugPrint() *CypherRunner {
+	t, err := template.New("").Parse(`
+Cypher (write: {{ .IsWrite }}):
+{{ .Cypher }}
+
+Parameters:
+{
+{{- range $key, $value := .Parameters }}
+  {{ $key }}: {{ $value | printf "%v" }},
+{{- end }}
+}
+
+Bindings:
+{
+{{- range $key, $value := .Bindings }}
+  {{ $key }}: {{ $value | printf "%v" }},
+{{- end }}
+}` + "\n")
+	if err != nil {
+		panic(err)
+	}
+	err = t.Execute(os.Stdout, struct {
+		Cypher     string
+		Parameters map[string]any
+		Bindings   map[string]reflect.Value
+		IsWrite    bool
+	}{
+		Cypher:     c.String(),
+		Parameters: c.parameters,
+		Bindings:   c.bindings,
+		IsWrite:    c.isWrite,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return c
 }

@@ -754,4 +754,27 @@ func TestWhere(t *testing.T) {
 			})
 		})
 	})
+
+	t.Run("Shorthand syntax", func(t *testing.T) {
+		t.Run("Substitutes _ for the current identifier", func(t *testing.T) {
+			c := internal.NewCypherClient()
+			statuses := []string{"active", "processing"}
+			cy, err := c.
+				Match(
+					db.Node(
+						"n",
+						db.Where("_.archived = ? AND _.status IN ?", false, db.NamedParam(statuses, "statuses")),
+					),
+				).
+				Compile()
+			Check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+        MATCH (n WHERE n.archived = false AND n.status IN $statuses)
+        `,
+				Parameters: map[string]any{
+					"statuses": statuses,
+				},
+			})
+		})
+	})
 }

@@ -15,12 +15,7 @@ func Var(identifier query.Identifier, opts ...internal.VariableOption) *internal
 	for _, opt := range opts {
 		internal.ConfigureVariable(v, opt)
 	}
-	switch e := identifier.(type) {
-	case string:
-		v.Expression = e
-	default:
-		v.Identifier = e
-	}
+	v.Identifier = identifier
 	return v
 }
 

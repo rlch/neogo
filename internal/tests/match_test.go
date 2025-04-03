@@ -47,13 +47,13 @@ func TestMatch(t *testing.T) {
 			c := internal.NewCypherClient()
 			cy, err := c.
 				Match(
-					db.Node(db.Var(
+					db.Node(
 						"director",
 						db.Props{
 							"name": "'Oliver Stone'",
 						},
-					)).
-						Related(nil, db.Var("movie"))).
+					).
+						Related(nil, "movie")).
 				Return(db.Var(
 					&m.Title,
 					db.Name("movie.title"),

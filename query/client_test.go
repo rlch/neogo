@@ -96,12 +96,12 @@ func ExampleQuery_Match() {
 	var m tests.Movie
 	c().
 		Match(
-			db.Node(db.Var(
+			db.Node(
 				tests.Person{},
 				db.Props{
 					"name": "'Oliver Stone'",
 				},
-			)).To(nil, db.Var("movie")),
+			).To(nil, db.Var("movie")),
 		).
 		Return(db.Qual(
 			&m.Title,
@@ -147,7 +147,7 @@ func ExampleQuery_With() {
 	var names []string
 	c().
 		Match(
-			db.Node(db.Var("n", db.Props{"name": "'Anders'"})).
+			db.Node("n", db.Props{"name": "'Anders'"}).
 				Related(nil, "m"),
 		).
 		With(

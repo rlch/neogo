@@ -22,8 +22,13 @@ type (
 
 // Node creates a [node pattern].
 //
+// Any opts passed to this function will be passed a created [Var].
+//
 // [node pattern]: https://neo4j.com/docs/cypher-manual/current/patterns/concepts/#node-patterns
-func Node(identifier query.Identifier) Pattern {
+func Node(identifier query.Identifier, opts ...internal.VariableOption) Pattern {
+	if len(opts) > 0 {
+		identifier = Var(identifier, opts...)
+	}
 	return internal.NewNode(identifier)
 }
 
