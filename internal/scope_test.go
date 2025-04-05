@@ -7,11 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type Person struct {
-	Node `neo4j:"Person"`
-	Name string `json:"name"`
-}
-
 func TestBindFields(t *testing.T) {
 	t.Run("binds composite fields", func(t *testing.T) {
 		s := newScope()

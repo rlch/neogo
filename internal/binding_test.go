@@ -1,4 +1,4 @@
-package neogo
+package internal
 
 import (
 	"errors"
@@ -9,9 +9,44 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/spf13/cast"
 	"github.com/stretchr/testify/require"
-
-	"github.com/rlch/neogo/internal/tests"
 )
+
+type Organism interface {
+	IAbstract
+}
+
+type BaseOrganism struct {
+	Node
+	Abstract `neo4j:"Organism"`
+	Alive    bool `json:"alive"`
+}
+
+func (b BaseOrganism) Implementers() []IAbstract {
+	return []IAbstract{
+		&Human{},
+		&Dog{},
+	}
+}
+
+type Person struct {
+	Node `neo4j:"Person"`
+	Name string `json:"name"`
+}
+
+type ActedIn struct {
+	Relationship `neo4j:"ACTED_IN"`
+	Role         string `json:"role"`
+}
+
+type Human struct {
+	BaseOrganism `neo4j:"Human"`
+	Name         string `json:"name"`
+}
+
+type Dog struct {
+	BaseOrganism `neo4j:"Dog"`
+	Borfs        bool `json:"borfs"`
+}
 
 type (
 	simpleValuer[T neo4j.RecordValue] struct {
@@ -140,124 +175,125 @@ func TestBindCasted(t *testing.T) {
 }
 
 func TestBindValue(t *testing.T) {
-	r := &registry{}
+	r := &Registry{}
+	r.RegisterTypes(&BaseOrganism{})
 
 	t.Run("Primitive coercion", func(t *testing.T) {
 		t.Run("bool", func(t *testing.T) {
 			bindTo := false
-			err := r.bindValue(true, reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue(true, reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.True(t, bindTo)
 		})
 
 		t.Run("string", func(t *testing.T) {
 			bindTo := "no"
-			err := r.bindValue(2.3, reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue(2.3, reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, "2.3", bindTo)
 		})
 
 		t.Run("int", func(t *testing.T) {
 			bindTo := 0
-			err := r.bindValue("10", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("10", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, 10, bindTo)
 		})
 
 		t.Run("int8", func(t *testing.T) {
 			bindTo := int8(0)
-			err := r.bindValue("100", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("100", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, int8(100), bindTo)
 		})
 
 		t.Run("int16", func(t *testing.T) {
 			bindTo := int16(0)
-			err := r.bindValue("20000", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("20000", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, int16(20000), bindTo)
 		})
 
 		t.Run("int32", func(t *testing.T) {
 			bindTo := int32(0)
-			err := r.bindValue("3000000", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("3000000", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, int32(3000000), bindTo)
 		})
 
 		t.Run("int64", func(t *testing.T) {
 			bindTo := int64(0)
-			err := r.bindValue("40000000000", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("40000000000", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, int64(40000000000), bindTo)
 		})
 
 		t.Run("uint", func(t *testing.T) {
 			bindTo := uint(0)
-			err := r.bindValue("500", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("500", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, uint(500), bindTo)
 		})
 
 		t.Run("uint8", func(t *testing.T) {
 			bindTo := uint8(0)
-			err := r.bindValue("200", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("200", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, uint8(200), bindTo)
 		})
 
 		t.Run("uint16", func(t *testing.T) {
 			bindTo := uint16(0)
-			err := r.bindValue("60000", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("60000", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, uint16(60000), bindTo)
 		})
 
 		t.Run("uint32", func(t *testing.T) {
 			bindTo := uint32(0)
-			err := r.bindValue("7000000", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("7000000", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, uint32(7000000), bindTo)
 		})
 
 		t.Run("uint64", func(t *testing.T) {
 			bindTo := uint64(0)
-			err := r.bindValue("80000000000", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("80000000000", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, uint64(80000000000), bindTo)
 		})
 
 		t.Run("float32", func(t *testing.T) {
 			bindTo := float32(0)
-			err := r.bindValue("3.14", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("3.14", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, float32(3.14), bindTo)
 		})
 
 		t.Run("float64", func(t *testing.T) {
 			bindTo := float64(0)
-			err := r.bindValue("2.718", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("2.718", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, float64(2.718), bindTo)
 		})
 
 		t.Run("[]int", func(t *testing.T) {
 			bindTo := []int{}
-			err := r.bindValue([]any{1, 2, 3}, reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue([]any{1, 2, 3}, reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, []int{1, 2, 3}, bindTo)
 		})
 
 		t.Run("[]string", func(t *testing.T) {
 			bindTo := []string{}
-			err := r.bindValue([]any{"a", "b", "c"}, reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue([]any{"a", "b", "c"}, reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			require.Equal(t, []string{"a", "b", "c"}, bindTo)
 		})
 
 		t.Run("time.Time", func(t *testing.T) {
 			bindTo := time.Time{}
-			err := r.bindValue("2023-08-04T12:00:00Z", reflect.ValueOf(&bindTo).Elem())
+			err := r.BindValue("2023-08-04T12:00:00Z", reflect.ValueOf(&bindTo).Elem())
 			require.NoError(t, err)
 			expected, _ := time.Parse(time.RFC3339, "2023-08-04T12:00:00Z")
 			require.Equal(t, expected, bindTo)
@@ -267,28 +303,28 @@ func TestBindValue(t *testing.T) {
 	t.Run("Valuer", func(t *testing.T) {
 		t.Run("bool", func(t *testing.T) {
 			bindTo := &simpleValuer[bool]{}
-			err := r.bindValue(true, reflect.ValueOf(bindTo))
+			err := r.BindValue(true, reflect.ValueOf(bindTo))
 			require.NoError(t, err)
 			require.True(t, bindTo.Value)
 		})
 
 		t.Run("int64", func(t *testing.T) {
 			bindTo := &simpleValuer[int64]{}
-			err := r.bindValue(int64(100), reflect.ValueOf(bindTo))
+			err := r.BindValue(int64(100), reflect.ValueOf(bindTo))
 			require.NoError(t, err)
 			require.Equal(t, int64(100), bindTo.Value)
 		})
 
 		t.Run("string", func(t *testing.T) {
 			bindTo := &simpleValuer[string]{}
-			err := r.bindValue("hello", reflect.ValueOf(bindTo))
+			err := r.BindValue("hello", reflect.ValueOf(bindTo))
 			require.NoError(t, err)
 			require.Equal(t, "hello", bindTo.Value)
 		})
 
 		t.Run("float64", func(t *testing.T) {
 			bindTo := &simpleValuer[float64]{}
-			err := r.bindValue(3.14, reflect.ValueOf(bindTo))
+			err := r.BindValue(3.14, reflect.ValueOf(bindTo))
 			require.NoError(t, err)
 			require.Equal(t, 3.14, bindTo.Value)
 		})
@@ -296,7 +332,7 @@ func TestBindValue(t *testing.T) {
 		t.Run("time.Time", func(t *testing.T) {
 			inputTime := time.Date(2023, time.August, 4, 12, 0, 0, 0, time.UTC)
 			bindTo := &simpleValuer[time.Time]{}
-			err := r.bindValue(inputTime, reflect.ValueOf(bindTo))
+			err := r.BindValue(inputTime, reflect.ValueOf(bindTo))
 			require.NoError(t, err)
 			require.Equal(t, inputTime, bindTo.Value)
 		})
@@ -304,7 +340,7 @@ func TestBindValue(t *testing.T) {
 		t.Run("[]byte", func(t *testing.T) {
 			input := []byte{0x68, 0x65, 0x6c, 0x6c, 0x6f}
 			bindTo := &simpleValuer[[]byte]{}
-			err := r.bindValue(input, reflect.ValueOf(bindTo))
+			err := r.BindValue(input, reflect.ValueOf(bindTo))
 			require.NoError(t, err)
 			require.Equal(t, input, bindTo.Value)
 		})
@@ -312,7 +348,7 @@ func TestBindValue(t *testing.T) {
 		t.Run("[]any", func(t *testing.T) {
 			input := []any{1, "hello", true}
 			bindTo := &simpleValuer[[]any]{}
-			err := r.bindValue(input, reflect.ValueOf(bindTo))
+			err := r.BindValue(input, reflect.ValueOf(bindTo))
 			require.NoError(t, err)
 			require.Equal(t, input, bindTo.Value)
 		})
@@ -321,7 +357,7 @@ func TestBindValue(t *testing.T) {
 			input1 := []any{1.0, "hello", true}
 			input2 := []any{2.0, "bye", false}
 			var bindTo [][]any
-			err := r.bindValue([][]any{input1, input2}, reflect.ValueOf(&bindTo))
+			err := r.BindValue([][]any{input1, input2}, reflect.ValueOf(&bindTo))
 			require.NoError(t, err)
 			require.Equal(t, input1, bindTo[0])
 			require.Equal(t, input2, bindTo[1])
@@ -330,7 +366,7 @@ func TestBindValue(t *testing.T) {
 		t.Run("map[string]any", func(t *testing.T) {
 			input := map[string]any{"name": "John", "age": 30}
 			bindTo := &simpleValuer[map[string]any]{}
-			err := r.bindValue(input, reflect.ValueOf(bindTo))
+			err := r.BindValue(input, reflect.ValueOf(bindTo))
 			require.NoError(t, err)
 			require.Equal(t, input, bindTo.Value)
 		})
@@ -342,7 +378,7 @@ func TestBindValue(t *testing.T) {
 				},
 			}
 			bindTo := &nodeValuer{}
-			err := r.bindValue(input, reflect.ValueOf(bindTo))
+			err := r.BindValue(input, reflect.ValueOf(bindTo))
 			require.NoError(t, err)
 			require.Equal(t, map[string]any{
 				"name": "Richard",
@@ -356,7 +392,7 @@ func TestBindValue(t *testing.T) {
 				},
 			}
 			bindTo := &relationshipValuer{}
-			err := r.bindValue(input, reflect.ValueOf(bindTo))
+			err := r.BindValue(input, reflect.ValueOf(bindTo))
 			require.NoError(t, err)
 			require.Equal(t, map[string]any{
 				"weight": 0.5,
@@ -365,8 +401,8 @@ func TestBindValue(t *testing.T) {
 	})
 
 	t.Run("Node", func(t *testing.T) {
-		to := &tests.Person{}
-		err := r.bindValue(neo4j.Node{
+		to := &Person{}
+		err := r.BindValue(neo4j.Node{
 			Labels: []string{"Person"},
 			Props: map[string]any{
 				"name":    "Richard",
@@ -375,49 +411,47 @@ func TestBindValue(t *testing.T) {
 			},
 		}, reflect.ValueOf(to))
 		require.NoError(t, err)
-		require.Equal(t, tests.Person{
-			Name:    "Richard",
-			Surname: "Mathieson",
-			Age:     24,
+		require.Equal(t, Person{
+			Name: "Richard",
 		}, *to)
 	})
 
 	t.Run("Relationship", func(t *testing.T) {
-		to := &tests.ActedIn{}
-		err := r.bindValue(neo4j.Node{
+		to := &ActedIn{}
+		err := r.BindValue(neo4j.Node{
 			Labels: []string{"ACTED_IN"},
 			Props: map[string]any{
 				"role": "Stuntman",
 			},
 		}, reflect.ValueOf(to))
 		require.NoError(t, err)
-		require.Equal(t, tests.ActedIn{
+		require.Equal(t, ActedIn{
 			Role: "Stuntman",
 		}, *to)
 	})
 
 	t.Run("Abstract using base type", func(t *testing.T) {
-		var to tests.Organism = &tests.BaseOrganism{}
-		err := r.bindValue(neo4j.Node{
+		var to Organism = &BaseOrganism{}
+		err := r.BindValue(neo4j.Node{
 			Labels: []string{"Human", "Organism"},
 			Props: map[string]any{
 				"name": "bruh",
 			},
 		}, reflect.ValueOf(&to))
 		require.NoError(t, err)
-		require.Equal(t, &tests.Human{
+		require.Equal(t, &Human{
 			Name: "bruh",
 		}, to)
 	})
 
 	t.Run("Abstract using registered types", func(t *testing.T) {
-		rWithAbstract := &registry{}
-		rWithAbstract.registerTypes(
-			&tests.BaseOrganism{},
+		rWithAbstract := &Registry{}
+		rWithAbstract.RegisterTypes(
+			&BaseOrganism{},
 		)
 
-		var to tests.Organism
-		err := rWithAbstract.bindValue(neo4j.Node{
+		var to Organism
+		err := rWithAbstract.BindValue(neo4j.Node{
 			Labels: []string{"Human", "Organism"},
 			Props: map[string]any{
 				"alive": true,
@@ -425,8 +459,8 @@ func TestBindValue(t *testing.T) {
 			},
 		}, reflect.ValueOf(&to))
 		require.NoError(t, err)
-		require.Equal(t, &tests.Human{
-			BaseOrganism: tests.BaseOrganism{
+		require.Equal(t, &Human{
+			BaseOrganism: BaseOrganism{
 				Alive: true,
 			},
 			Name: "Raqeeb",
@@ -434,13 +468,13 @@ func TestBindValue(t *testing.T) {
 	})
 
 	t.Run("Abstract using registered concrete types", func(t *testing.T) {
-		rWithAbstract := &registry{}
-		rWithAbstract.registerTypes(
-			&tests.Human{},
-			&tests.Dog{},
+		rWithAbstract := &Registry{}
+		rWithAbstract.RegisterTypes(
+			&Human{},
+			&Dog{},
 		)
-		var to tests.Organism
-		err := rWithAbstract.bindValue(neo4j.Node{
+		var to Organism
+		err := rWithAbstract.BindValue(neo4j.Node{
 			Labels: []string{"Human", "Organism"},
 			Props: map[string]any{
 				"alive": true,
@@ -448,8 +482,8 @@ func TestBindValue(t *testing.T) {
 			},
 		}, reflect.ValueOf(&to))
 		require.NoError(t, err)
-		require.Equal(t, &tests.Human{
-			BaseOrganism: tests.BaseOrganism{
+		require.Equal(t, &Human{
+			BaseOrganism: BaseOrganism{
 				Alive: true,
 			},
 			Name: "Raqeeb",
@@ -458,15 +492,16 @@ func TestBindValue(t *testing.T) {
 
 	t.Run("Any", func(t *testing.T) {
 		to := new(any)
-		err := r.bindValue(neo4j.Node{
-			Labels: []string{"ACTED_IN"},
+		r.RegisterTypes(&ActedIn{})
+		err := r.BindValue(neo4j.Relationship{
+			Type: "ACTED_IN",
 			Props: map[string]any{
 				"role": "Stuntman",
 			},
 		}, reflect.ValueOf(to))
 		require.NoError(t, err)
-		require.Equal(t, neo4j.Node{
-			Labels: []string{"ACTED_IN"},
+		require.Equal(t, neo4j.Relationship{
+			Type: "ACTED_IN",
 			Props: map[string]any{
 				"role": "Stuntman",
 			},

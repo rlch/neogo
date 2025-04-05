@@ -5,9 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/rlch/neogo/internal"
+	"github.com/stretchr/testify/require"
 )
 
 func canon(cypher string) string {

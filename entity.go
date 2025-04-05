@@ -1,8 +1,6 @@
 package neogo
 
 import (
-	"reflect"
-
 	"github.com/rlch/neogo/internal"
 )
 
@@ -28,8 +26,6 @@ func NodeWithID[N any, PN interface {
 	n.SetID(id)
 	return n
 }
-
-var rAbstract = reflect.TypeOf((*IAbstract)(nil)).Elem()
 
 func ExtractNodeLabels(i any) []string {
 	return internal.ExtractNodeLabels(i)

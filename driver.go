@@ -100,13 +100,13 @@ type (
 
 type (
 	driver struct {
-		registry
+		internal.Registry
 		db                   neo4j.DriverWithContext
 		causalConsistencyKey func(ctx context.Context) string
 	}
 	session struct {
 		*driver
-		registry
+		internal.Registry
 		db         neo4j.DriverWithContext
 		execConfig execConfig
 		session    neo4j.SessionWithContext
@@ -148,7 +148,7 @@ func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execC
 // [IAbstract], [INode] and [IRelationship] to be used with [neogo].
 func WithTypes(types ...any) func(*driver) {
 	return func(d *driver) {
-		d.registry.registerTypes(types...)
+		d.Registry.RegisterTypes(types...)
 	}
 }
 
@@ -172,7 +172,7 @@ func (d *driver) Exec(configurers ...func(*execConfig)) Query {
 	}
 	session := &session{
 		driver:     d,
-		registry:   d.registry,
+		Registry:   d.Registry,
 		db:         d.db,
 		execConfig: config,
 	}
@@ -204,7 +204,7 @@ func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.Ses
 	sess := d.db.NewSession(ctx, config)
 	return &session{
 		driver:   d,
-		registry: d.registry,
+		Registry: d.Registry,
 		db:       d.db,
 		session:  sess,
 	}
@@ -220,7 +220,7 @@ func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.Se
 	sess := d.db.NewSession(ctx, config)
 	return &session{
 		driver:   d,
-		registry: d.registry,
+		Registry: d.Registry,
 		db:       d.db,
 		session:  sess,
 	}

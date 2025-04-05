@@ -31,7 +31,10 @@ func TestCypher(t *testing.T) {
 
 func TestExprInPropertyIdentifier(t *testing.T) {
 	c := internal.NewCypherClient()
-	cy, err := c.Unwind(db.Expr("[?, ?, ?, ?]", "a", 2, []int{1}, nil), "x").Compile()
+	cy, err := c.Unwind(
+		db.Expr("[?, ?, ?, ?]", "a", 2, []int{1}, nil),
+		"x",
+	).Compile()
 
 	Check(t, cy, err, internal.CompiledCypher{
 		Cypher: `

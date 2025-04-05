@@ -434,7 +434,7 @@ func (s *session) unmarshalRecords(
 			if to.CanAddr() {
 				to = to.Addr()
 			}
-			if err := s.bindValue(value, to); err != nil {
+			if err := s.BindValue(value, to); err != nil {
 				return fmt.Errorf(
 					"error binding key %s to type %T: %w",
 					key, binding.Interface(), err,
@@ -454,7 +454,7 @@ func (s *session) unmarshalRecord(
 		if !ok {
 			return fmt.Errorf("no value associated with key %q", key)
 		}
-		if err := s.bindValue(value, binding); err != nil {
+		if err := s.BindValue(value, binding); err != nil {
 			return fmt.Errorf(
 				"error binding key %q to type %T: %w",
 				key, binding.Interface(), err,
