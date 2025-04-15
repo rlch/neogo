@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.7](https://github.com/rlch/neogo/compare/v1.0.6...v1.0.7) (2025-04-15)
+
+
+### Bug Fixes
+
+* Handle binding to a slice of a depth 1 higher than result ([0c53b5a](https://github.com/rlch/neogo/commit/0c53b5a1a3d3c0f203da481a7efb6e3b93365f28))
+
 ## [1.0.6](https://github.com/rlch/neogo/compare/v1.0.5...v1.0.6) (2025-03-28)
 
 
