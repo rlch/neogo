@@ -11,7 +11,7 @@ import (
 func TestLimit(t *testing.T) {
 	t.Run("Return a limited subset of the rows", func(t *testing.T) {
 		var name string
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node("n")).
 			Return(
@@ -34,7 +34,7 @@ func TestLimit(t *testing.T) {
 
 	t.Run("Using an expression with LIMIT to return a subset of the rows", func(t *testing.T) {
 		var name string
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node("n")).
 			Return(
@@ -61,7 +61,7 @@ func TestLimit(t *testing.T) {
 
 	t.Run("Using an expression with SKIP to return a subset of the rows", func(t *testing.T) {
 		var name string
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node("n")).
 			Return(

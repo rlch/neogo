@@ -1,8 +1,8 @@
 package db
 
 import (
+	"github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/internal"
-	"github.com/rlch/neogo/query"
 )
 
 type (
@@ -25,7 +25,7 @@ type (
 // Any opts passed to this function will be passed a created [Var].
 //
 // [node pattern]: https://neo4j.com/docs/cypher-manual/current/patterns/concepts/#node-patterns
-func Node(identifier query.Identifier, opts ...internal.VariableOption) Pattern {
+func Node(identifier builder.Identifier, opts ...internal.VariableOption) Pattern {
 	if len(opts) > 0 {
 		identifier = Var(identifier, opts...)
 	}

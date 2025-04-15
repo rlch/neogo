@@ -11,9 +11,9 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
-	"github.com/rlch/neogo/query"
 )
 
 func startNeo4J(ctx context.Context) (neo4j.DriverWithContext, func(context.Context) error) {
@@ -337,7 +337,7 @@ func ExampleDriver_streamWithParams() {
 		return begin().
 			Unwind("range(0, $total)", "i").
 			Return(db.Qual(&num, "i")).
-			StreamWithParams(ctx, params, func(r query.Result) error {
+			StreamWithParams(ctx, params, func(r builder.Result) error {
 				for i := 0; r.Next(ctx); i++ {
 					if err := r.Read(); err != nil {
 						return err

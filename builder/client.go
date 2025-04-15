@@ -1,5 +1,5 @@
-// Package query provides client interfaces for constructing and executing Cypher queries.
-package query
+// Package builder provides client interfaces for constructing and executing Cypher queries.
+package builder
 
 import (
 	"context"
@@ -60,10 +60,10 @@ type (
 	}
 )
 
-// Query is the interface for constructing a Cypher query.
+// Builder is the interface for constructing a Cypher query.
 //
 // It can be instantiated using the [pkg/github.com/rlch/neogo.New] function.
-type Query interface {
+type Builder interface {
 	Reader
 	Updater[Querier]
 
@@ -79,7 +79,7 @@ type Query interface {
 	//  UNION
 	//  <query>
 	//  ...
-	Union(unions ...func(c Query) Runner) Querier
+	Union(unions ...func(c Builder) Runner) Querier
 
 	// Union writes a UNION ALL clause to the query, combining the results of each
 	// subquery.
@@ -88,7 +88,7 @@ type Query interface {
 	//  UNION ALL
 	//  <query>
 	//  ...
-	UnionAll(unions ...func(c Query) Runner) Querier
+	UnionAll(unions ...func(c Builder) Runner) Querier
 }
 
 // Reader is the interface for reading data from the database.
@@ -123,7 +123,7 @@ type Reader interface {
 	//  SHOW <command>
 	Show(command string) Yielder
 
-	Subquery(func(c Query) Runner) Querier
+	Subquery(func(c Builder) Runner) Querier
 
 	// Cypher allows you to inject a raw Cypher query into the query.
 	Cypher(query string) Querier

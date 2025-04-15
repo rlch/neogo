@@ -3,16 +3,19 @@ package internal
 import (
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"github.com/dlclark/regexp2"
 	"github.com/iancoleman/strcase"
 )
 
-func newScope() *Scope {
+func newScope(registry *Registry) *Scope {
 	return &Scope{
+		Registry:       registry,
 		bindings:       make(map[string]reflect.Value),
 		names:          make(map[reflect.Value]string),
 		generatedNames: map[string]struct{}{},
@@ -24,6 +27,7 @@ func newScope() *Scope {
 
 type (
 	Scope struct {
+		*Registry
 		err error
 
 		isWrite        bool
@@ -72,6 +76,36 @@ var (
 	ErrAliasAlreadyBound      error = errors.New("alias already bound to expression")
 )
 
+func (s *Scope) Print() {
+	t, err := template.New("").Parse(`
+Parameters:
+{
+{{- range $key, $value := .Parameters }}
+  {{ $key }}: {{ $value | printf "%v" }},
+{{- end }}
+}
+
+Bindings:
+{
+{{- range $key, $value := .Bindings }}
+  {{ $key }}: {{ $value | printf "%v" }},
+{{- end }}
+}` + "\n")
+	if err != nil {
+		panic(err)
+	}
+	err = t.Execute(os.Stdout, struct {
+		Parameters map[string]any
+		Bindings   map[string]reflect.Value
+	}{
+		Parameters: s.parameters,
+		Bindings:   s.bindings,
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (m *member) Print() {
 	fmt.Printf(
 		`{
@@ -113,6 +147,7 @@ func (s *Scope) clone() *Scope {
 		paramAddrs[k] = v
 	}
 	return &Scope{
+		Registry:       s.Registry,
 		bindings:       bindings,
 		generatedNames: generatedNames,
 		names:          names,
@@ -137,6 +172,7 @@ func (child *Scope) mergeParentScope(parent *Scope) {
 	for k, v := range parent.fields {
 		child.fields[k] = v
 	}
+	child.Registry = parent.Registry
 }
 
 func (s *Scope) clear() {
@@ -280,37 +316,31 @@ func (s *Scope) replaceBinding(m *member) {
 }
 
 func (s *Scope) bindFields(strct reflect.Value, memberName string) {
-	vsT := strct.Type()
-	for i := 0; i < vsT.NumField(); i++ {
-		vf := strct.Field(i)
-		vfT := vsT.Field(i)
-
-		accessor, ok := extractJSONFieldName(vsT.Field(i))
-		if !ok {
-			// Recurse into composite fields
-			if vfT.Anonymous {
-				s.bindFields(vf, memberName)
+	if err := WalkStruct(
+		strct,
+		func(i int, typ reflect.StructField, val reflect.Value) (bool, error) {
+			accessor, ok := extractJSONFieldName(typ)
+			if !ok {
+				return true, nil
 			}
-			continue
-		}
-		ptr := uintptr(vf.Addr().UnsafePointer())
-		f := field{
-			name:       accessor,
-			identifier: memberName,
-		}
-		s.fields[ptr] = f
-
-		fieldName := f.identifier + "." + f.name
-		vfAddr := vf.Addr()
-		s.names[vfAddr] = fieldName
+			ptr := uintptr(val.Addr().UnsafePointer())
+			f := field{name: accessor, identifier: memberName}
+			s.fields[ptr] = f
+			fieldName := f.identifier + "." + f.name
+			addr := val.Addr()
+			s.names[addr] = fieldName
+			return true, nil
+		},
+	); err != nil {
+		s.AddError(err)
 	}
 }
 
 func (s *Scope) lookup(value any) *member {
-	return s.register(value, true, nil)
+	return s.add(value, true, nil)
 }
 
-func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
+func (s *Scope) add(value any, lookup bool, isNode *bool) *member {
 	if value == nil {
 		return nil
 	}
@@ -383,9 +413,9 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 		if needsName {
 			var prefix string
 			if vT.Implements(nodeType) {
-				prefix = strcase.ToLowerCamel(ExtractNodeLabels(identifier)[0])
+				prefix = strcase.ToLowerCamel(s.ExtractNodeLabels(identifier)[0])
 			} else if vT.Implements(relationshipType) {
-				prefix = strcase.ToLowerCamel(ExtractRelationshipType(identifier))
+				prefix = strcase.ToLowerCamel(s.ExtractRelationshipType(identifier))
 			} else {
 				prefix = strcase.ToLowerCamel(vT.Elem().Name())
 				if prefix == "" {
@@ -523,14 +553,14 @@ func (s *Scope) register(value any, lookup bool, isNode *bool) *member {
 	return m
 }
 
-func (s *Scope) registerNode(n *nodePattern) *member {
+func (s *Scope) addNode(n *nodePattern) *member {
 	t := true
-	return s.register(n.data, false, &t)
+	return s.add(n.data, false, &t)
 }
 
-func (s *Scope) registerRelationship(n *relationshipPattern) *member {
+func (s *Scope) addRelationship(n *relationshipPattern) *member {
 	f := false
-	return s.register(n.data, false, &f)
+	return s.add(n.data, false, &f)
 }
 
 func (s *Scope) Name(identifier any) string {
@@ -676,7 +706,7 @@ func (s *Scope) addParameter(v reflect.Value, optName string) (name string) {
 		if v.IsValid() && v.CanInterface() {
 			s.parameters[name] = v.Interface()
 		} else {
-			fmt.Printf("[WARNING] invalid parameter: %s\n", name)
+			fmt.Printf("[WARNING] nil parameter for %s", name)
 			s.parameters[name] = nil
 		}
 		if !strings.HasPrefix(name, "$") {

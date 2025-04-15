@@ -12,7 +12,7 @@ func TestWhere(t *testing.T) {
 	t.Run("Basic usage", func(t *testing.T) {
 		t.Run("Node pattern predicates", func(t *testing.T) {
 			var b Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				With(db.Qual("30", "minAge")).
 				Match(
@@ -32,7 +32,7 @@ func TestWhere(t *testing.T) {
 			})
 
 			var names []string
-			c = internal.NewCypherClient()
+			c = internal.NewCypherClient(r)
 			cy, err = c.
 				Match(
 					db.Node(db.Qual(Person{}, "a", db.Props{"name": "'Andy'"})),
@@ -52,7 +52,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Boolean operations", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(
@@ -94,7 +94,7 @@ func TestWhere(t *testing.T) {
 				name string
 				age  int
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node("n")).
 				Where(db.Expr("n:Swedish")).
@@ -121,7 +121,7 @@ func TestWhere(t *testing.T) {
 				name string
 				age  int
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node("n")).
 				Where(db.Expr("n:Swedish")).
@@ -145,7 +145,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Filter on node property", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Age, "<", "30")).
@@ -173,7 +173,7 @@ func TestWhere(t *testing.T) {
 				age   int
 				email string
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(
 					db.Node(db.Qual(Person{}, "n")).
@@ -202,7 +202,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Filter on dynamically-computed node property", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				With(db.Qual("'AGE'", "propname")).
 				Match(
@@ -230,7 +230,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Property existence checking", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(
 					db.Node(db.Qual(&n, "n")),
@@ -256,7 +256,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Using WITH", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(
 					db.Node(db.Qual(&n, "n")),
@@ -284,7 +284,7 @@ func TestWhere(t *testing.T) {
 	t.Run("String matching", func(t *testing.T) {
 		t.Run("Prefix string search using STARTS WITH", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Name, "STARTS WITH", "'Pet'")).
@@ -305,7 +305,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Suffix string search using ENDS WITH", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Name, "ENDS WITH", "'ter'")).
@@ -326,7 +326,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Substring search using CONTAINS", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Name, "CONTAINS", "'ete'")).
@@ -347,7 +347,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("String matching negation", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Not(db.Cond(&n.Name, "ENDS WITH", "'y'"))).
@@ -370,7 +370,7 @@ func TestWhere(t *testing.T) {
 	t.Run("Regular expressions", func(t *testing.T) {
 		t.Run("Matching using regular expressions", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Name, "=~", "'Tim.*'")).
@@ -391,7 +391,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Escaping in regular expressions", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Email, "=~", "'.*\\\\.com'")).
@@ -413,7 +413,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Case-insensitive regular expressions", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(db.Cond(&n.Name, "=~", "'(?i)AND.*'")).
@@ -439,7 +439,7 @@ func TestWhere(t *testing.T) {
 				timothy Person
 				other   Person
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(
 					db.Patterns(
@@ -473,7 +473,7 @@ func TestWhere(t *testing.T) {
 				peter  Person
 				person Person
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(
 					db.Patterns(
@@ -503,7 +503,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Filter on patterns with properties", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(
@@ -533,7 +533,7 @@ func TestWhere(t *testing.T) {
 				typeR string
 				since int
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(
 					db.Node(db.Qual(&n, "n")).
@@ -567,7 +567,7 @@ func TestWhere(t *testing.T) {
 	t.Run("Lists", func(t *testing.T) {
 		t.Run("IN operator", func(t *testing.T) {
 			var a Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&a, "a"))).
 				Where(
@@ -592,7 +592,7 @@ func TestWhere(t *testing.T) {
 	t.Run("Missing properties and values", func(t *testing.T) {
 		t.Run("Default to false if property is missing", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(
@@ -616,7 +616,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Default to true if property is missing", func(t *testing.T) {
 			var n Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&n, "n"))).
 				Where(
@@ -647,7 +647,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Filter on null", func(t *testing.T) {
 			var person Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&person, "person"))).
 				Where(
@@ -676,7 +676,7 @@ func TestWhere(t *testing.T) {
 	t.Run("Using ranges", func(t *testing.T) {
 		t.Run("Simple range", func(t *testing.T) {
 			var a Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&a, "a"))).
 				Where(
@@ -699,7 +699,7 @@ func TestWhere(t *testing.T) {
 
 		t.Run("Composite range", func(t *testing.T) {
 			var a Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&a, "a"))).
 				Where(
@@ -727,20 +727,20 @@ func TestWhere(t *testing.T) {
 	t.Run("Pattern element predicates", func(t *testing.T) {
 		t.Run("Relationship pattern predicates", func(t *testing.T) {
 			var (
-				a Person
-				r Knows
+				a     Person
+				knows Knows
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				With(db.Qual("2000", "minYear")).
 				Match(
 					db.Node(db.Qual(&a, "a")).
 						To(
-							db.Qual(&r, "r", db.Where(db.Cond("since", "<", "minYear"))),
+							db.Qual(&knows, "r", db.Where(db.Cond("since", "<", "minYear"))),
 							db.Qual(Person{}, "b"),
 						),
 				).
-				Return(&r.Since).Compile()
+				Return(&knows.Since).Compile()
 
 			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -749,7 +749,7 @@ func TestWhere(t *testing.T) {
 				RETURN r.since
 				`,
 				Bindings: map[string]reflect.Value{
-					"r.since": reflect.ValueOf(&r.Since),
+					"r.since": reflect.ValueOf(&knows.Since),
 				},
 			})
 		})
@@ -757,13 +757,17 @@ func TestWhere(t *testing.T) {
 
 	t.Run("Shorthand syntax", func(t *testing.T) {
 		t.Run("Substitutes _ for the current identifier", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			statuses := []string{"active", "processing"}
 			cy, err := c.
 				Match(
 					db.Node(
 						"n",
-						db.Where("_.archived = ? AND _.status IN ?", false, db.NamedParam(statuses, "statuses")),
+						db.Where(
+							"_.archived = ? AND _.status IN ?",
+							false,
+							db.NamedParam(statuses, "statuses"),
+						),
 					),
 				).
 				Compile()

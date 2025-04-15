@@ -5,10 +5,7 @@ import (
 	"errors"
 	"net/url"
 
-	"github.com/goccy/go-json"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-
-	"github.com/rlch/neogo/internal"
 )
 
 // NewMock creates a mock neogo [Driver] for testing.
@@ -161,75 +158,76 @@ func (s *mockNeo4jSession) Close(ctx context.Context) error {
 }
 
 func (t *mockNeo4jTx) Run(ctx context.Context, cypher string, params map[string]any) (neo4j.ResultWithContext, error) {
-	r := &mockNeo4jResult{}
-	toRecord := func(m map[string]any) (*neo4j.Record, error) {
-		n := len(m)
-		rec := &neo4j.Record{
-			Keys:   make([]string, n),
-			Values: make([]any, n),
-		}
-		var i int
-		for k, v := range m {
-			rec.Keys[i] = k
-			if _, ok := v.(INode); ok {
-				labels := internal.ExtractNodeLabels(v)
-				var props map[string]any
-				bytes, err := json.Marshal(v)
-				if err != nil {
-					return nil, err
-				}
-				err = json.Unmarshal(bytes, &props)
-				if err != nil {
-					return nil, err
-				}
-				rec.Values[i] = neo4j.Node{
-					Labels: labels,
-					Props:  props,
-				}
-			} else if _, ok := v.(IRelationship); ok {
-				typ := internal.ExtractRelationshipType(v)
-				var props map[string]any
-				bytes, err := json.Marshal(v)
-				if err != nil {
-					return nil, err
-				}
-				err = json.Unmarshal(bytes, &props)
-				if err != nil {
-					return nil, err
-				}
-				rec.Values[i] = neo4j.Relationship{
-					Type:  typ,
-					Props: props,
-				}
-			} else {
-				rec.Values[i] = v
-			}
-			i++
-		}
-		return rec, nil
-	}
-	if t.Current == nil {
-		panic(errors.New("mock client used without bindings for all transactions"))
-	}
-	bindings := *t.Current
-	t.Current = t.Current.Next
-	if bindings.Single != nil {
-		rec, err := toRecord(bindings.Single)
-		if err != nil {
-			return nil, err
-		}
-		r.records = []*neo4j.Record{rec}
-	} else if bindings.Records != nil {
-		r.records = make([]*neo4j.Record, len(bindings.Records))
-		for i, recMap := range bindings.Records {
-			rec, err := toRecord(recMap)
-			if err != nil {
-				return nil, err
-			}
-			r.records[i] = rec
-		}
-	}
-	return r, nil
+	panic(errors.New("not implemented, fix regsitry"))
+	// r := &mockNeo4jResult{}
+	// toRecord := func(m map[string]any) (*neo4j.Record, error) {
+	// 	n := len(m)
+	// 	rec := &neo4j.Record{
+	// 		Keys:   make([]string, n),
+	// 		Values: make([]any, n),
+	// 	}
+	// 	var i int
+	// 	for k, v := range m {
+	// 		rec.Keys[i] = k
+	// 		if _, ok := v.(INode); ok {
+	// 			labels := internal.ExtractNodeLabels(v)
+	// 			var props map[string]any
+	// 			bytes, err := json.Marshal(v)
+	// 			if err != nil {
+	// 				return nil, err
+	// 			}
+	// 			err = json.Unmarshal(bytes, &props)
+	// 			if err != nil {
+	// 				return nil, err
+	// 			}
+	// 			rec.Values[i] = neo4j.Node{
+	// 				Labels: labels,
+	// 				Props:  props,
+	// 			}
+	// 		} else if _, ok := v.(IRelationship); ok {
+	// 			typ := internal.ExtractRelationshipType(v)
+	// 			var props map[string]any
+	// 			bytes, err := json.Marshal(v)
+	// 			if err != nil {
+	// 				return nil, err
+	// 			}
+	// 			err = json.Unmarshal(bytes, &props)
+	// 			if err != nil {
+	// 				return nil, err
+	// 			}
+	// 			rec.Values[i] = neo4j.Relationship{
+	// 				Type:  typ,
+	// 				Props: props,
+	// 			}
+	// 		} else {
+	// 			rec.Values[i] = v
+	// 		}
+	// 		i++
+	// 	}
+	// 	return rec, nil
+	// }
+	// if t.Current == nil {
+	// 	panic(errors.New("mock client used without bindings for all transactions"))
+	// }
+	// bindings := *t.Current
+	// t.Current = t.Current.Next
+	// if bindings.Single != nil {
+	// 	rec, err := toRecord(bindings.Single)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	r.records = []*neo4j.Record{rec}
+	// } else if bindings.Records != nil {
+	// 	r.records = make([]*neo4j.Record, len(bindings.Records))
+	// 	for i, recMap := range bindings.Records {
+	// 		rec, err := toRecord(recMap)
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+	// 		r.records[i] = rec
+	// 	}
+	// }
+	// return r, nil
 }
 
 func (r *mockNeo4jResult) Keys() ([]string, error) {

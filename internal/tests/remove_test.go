@@ -11,7 +11,7 @@ import (
 func TestRemove(t *testing.T) {
 	t.Run("Set a property", func(t *testing.T) {
 		var a Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&a, "a", db.Props{"name": "'Andy'"}))).
 			Remove(db.RemoveProp(&a.Age)).
@@ -34,7 +34,7 @@ func TestRemove(t *testing.T) {
 	t.Run("Remove all properties", func(t *testing.T) {
 		var n Person
 		var labels []string
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n", db.Props{"name": "'Peter'"}))).
 			Remove(db.RemoveLabels(&n, "German")).
@@ -57,7 +57,7 @@ func TestRemove(t *testing.T) {
 	t.Run("Remove a label from a node", func(t *testing.T) {
 		var n Person
 		var labels []string
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n", db.Props{"name": "'Peter'"}))).
 			Remove(db.RemoveLabels(&n, "German")).
@@ -80,7 +80,7 @@ func TestRemove(t *testing.T) {
 	t.Run("Remove multiple labels from a node", func(t *testing.T) {
 		var n Person
 		var labels []string
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n", db.Props{"name": "'Peter'"}))).
 			Remove(db.RemoveLabels(&n, "German", "Swedish")).

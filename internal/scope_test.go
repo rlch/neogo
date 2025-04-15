@@ -9,7 +9,8 @@ import (
 
 func TestBindFields(t *testing.T) {
 	t.Run("binds composite fields", func(t *testing.T) {
-		s := newScope()
+		r := NewRegistry()
+		s := newScope(r)
 		p := &Person{}
 		s.bindFields(reflect.ValueOf(p).Elem(), "p")
 		require.Equal(t, map[uintptr]field{
@@ -27,4 +28,5 @@ func TestBindFields(t *testing.T) {
 			reflect.ValueOf(&p.Name): "p.name",
 		}, s.names)
 	})
+	// TODO: Need more tests
 }

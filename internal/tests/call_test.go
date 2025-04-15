@@ -10,7 +10,7 @@ import (
 
 func TestCallSubquery(t *testing.T) {
 	t.Run("Semantics", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		var x, innerReturn any
 		cy, err := c.
 			Unwind(db.Qual(&x, "[0, 1, 2]"), "x").
@@ -33,7 +33,7 @@ func TestCallSubquery(t *testing.T) {
 			},
 		})
 
-		c = internal.NewCypherClient()
+		c = internal.NewCypherClient(r)
 		type Counter struct {
 			internal.Node `neo4j:"Counter"`
 
@@ -79,7 +79,7 @@ func TestCallSubquery(t *testing.T) {
 	})
 
 	t.Run("Importing variables into subqueries", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		var x, y any
 		cy, err := c.
 			Unwind(db.Qual(&x, "[0, 1, 2]"), "x").
@@ -105,7 +105,7 @@ func TestCallSubquery(t *testing.T) {
 			},
 		})
 
-		c = internal.NewCypherClient()
+		c = internal.NewCypherClient(r)
 		var (
 			person Person
 			next   Person
@@ -175,7 +175,7 @@ func TestCallSubquery(t *testing.T) {
 	})
 
 	t.Run("Post-union processing", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		var p Person
 		cy, err := c.
 			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
@@ -206,7 +206,7 @@ func TestCallSubquery(t *testing.T) {
 					CALL {
 					  MATCH (p:Person)
 					  RETURN p
-					  ORDER BY p.age
+					t ORDER BY p.age
 					  LIMIT 1
 					UNION
 					  MATCH (p:Person)
@@ -227,7 +227,7 @@ func TestCallSubquery(t *testing.T) {
 			other  any
 			cOther any
 		)
-		c = internal.NewCypherClient()
+		c = internal.NewCypherClient(r)
 		cy, err = c.
 			Match(db.Node(db.Qual(&p, "p"))).
 			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
@@ -285,7 +285,7 @@ func TestCallSubquery(t *testing.T) {
 	})
 
 	t.Run("Aggregations", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		var (
 			p       Person
 			numConn int
@@ -323,7 +323,7 @@ func TestCallSubquery(t *testing.T) {
 	})
 
 	t.Run("Unit subqueries and side-effects", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		var (
 			p     Person
 			count int
@@ -360,7 +360,7 @@ func TestCallSubquery(t *testing.T) {
 	})
 
 	t.Run("Aggregation on imported variables", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		var (
 			p     Person
 			other Person
@@ -403,7 +403,7 @@ func TestCallSubquery(t *testing.T) {
 	})
 
 	t.Run("Variable collisions are avoided", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		v1 := []int{1, 2, 3}
 		v2 := []int{4, 5, 6}
 		v3 := []int{7, 8, 9}
@@ -446,7 +446,7 @@ func TestCallSubquery(t *testing.T) {
 	})
 
 	t.Run("Parameter collisions are avoided", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			With(db.Param(nil)).
 			Subquery(func(c *internal.CypherClient) *internal.CypherRunner {
@@ -483,9 +483,10 @@ func TestCallSubquery(t *testing.T) {
 }
 
 func TestCallProcedure(t *testing.T) {
+	r := internal.NewRegistry()
 	t.Run("Call a procedure using CALL", func(t *testing.T) {
 		var labels []string
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Call("db.labels()").
 			Yield(db.Qual(&labels, "label")).
@@ -509,7 +510,7 @@ func TestCallProcedure(t *testing.T) {
 			name any
 			sig  string
 		)
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Show("PROCEDURES").
 			Yield(
@@ -538,7 +539,7 @@ func TestCallProcedure(t *testing.T) {
 			prop     any
 			numNodes int
 		)
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Call("db.propertyKeys()").
 			Yield(

@@ -7,9 +7,10 @@ import (
 )
 
 func TestCypherClient(t *testing.T) {
+	r := NewRegistry()
 	t.Run("isWrite inference", func(t *testing.T) {
 		t.Run("false when using non-write clauses", func(t *testing.T) {
-			cy := newCypher()
+			cy := newCypher(r)
 			newCypherClient(cy).
 				Match(&CypherPattern{
 					ns: []*nodePattern{{data: "n"}},
@@ -25,7 +26,7 @@ func TestCypherClient(t *testing.T) {
 		})
 
 		t.Run("true when using write clauses", func(t *testing.T) {
-			cy := newCypher()
+			cy := newCypher(r)
 			newCypherClient(cy).
 				Create(&CypherPattern{
 					ns: []*nodePattern{{data: "n"}},
@@ -35,7 +36,7 @@ func TestCypherClient(t *testing.T) {
 		})
 
 		t.Run("true when using Cypher if a write clause is used", func(t *testing.T) {
-			cy := newCypher()
+			cy := newCypher(r)
 			newCypherClient(cy).
 				Cypher("").
 				Return("y")
@@ -48,7 +49,7 @@ func TestCypherClient(t *testing.T) {
 		})
 
 		t.Run("true when using write clauses in subquery", func(t *testing.T) {
-			cy := newCypher()
+			cy := newCypher(r)
 			newCypherClient(cy).
 				Subquery(func(c *CypherClient) *CypherRunner {
 					return c.Create(&CypherPattern{
@@ -60,7 +61,7 @@ func TestCypherClient(t *testing.T) {
 		})
 
 		t.Run("true when using Cypher in subquery if a write clause is used", func(t *testing.T) {
-			cy := newCypher()
+			cy := newCypher(r)
 			newCypherClient(cy).
 				Subquery(func(c *CypherClient) *CypherRunner {
 					return c.Cypher("").CypherRunner

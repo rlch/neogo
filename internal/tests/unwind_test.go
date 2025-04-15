@@ -14,7 +14,7 @@ func TestUnwind(t *testing.T) {
 			x []any
 			y []string
 		)
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Unwind(db.Expr("[1, ?, 3, ?]", 2, nil), "x").
 			Return(db.Bind("x", &x), db.Qual(&y, "'val'", db.Name("y"))).Compile()
@@ -36,7 +36,7 @@ func TestUnwind(t *testing.T) {
 
 	t.Run("Creating a distinct list", func(t *testing.T) {
 		var setOfVals []any
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			With(db.Qual("[1, 1, 2, 2]", "coll")).
 			Unwind("coll", "x").
@@ -58,7 +58,7 @@ func TestUnwind(t *testing.T) {
 
 	t.Run("Using UNWIND with any expression returning a list", func(t *testing.T) {
 		var x []float64
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			With(
 				db.Qual("[1, 2]", "a"),
@@ -81,7 +81,7 @@ func TestUnwind(t *testing.T) {
 
 	t.Run("Using UNWIND with a list of lists", func(t *testing.T) {
 		var y []float64
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			With(db.Qual("[[1, 2], [3, 4], 5]", "nested")).
 			Unwind("nested", "x").
@@ -102,7 +102,7 @@ func TestUnwind(t *testing.T) {
 	})
 
 	t.Run("Using UNWIND with an empty list", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Unwind("[]", "empty").
 			Return("'literal_that_is_not_returned'").Compile()
@@ -117,7 +117,7 @@ func TestUnwind(t *testing.T) {
 	})
 
 	t.Run("Using UNWIND with an expression that is not a list", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Unwind("null", "x").
 			Return("x", "'some_literal'").Compile()
@@ -162,7 +162,7 @@ func TestUnwind(t *testing.T) {
 			y Year
 			e Event
 		)
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Unwind(db.Qual(&events, "events"), "event").
 			Merge(

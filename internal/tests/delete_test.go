@@ -10,7 +10,7 @@ import (
 func TestDelete(t *testing.T) {
 	t.Run("Delete single node", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n", db.Props{"name": "'Tom Hanks'"}))).
 			Delete(&n).
@@ -26,16 +26,16 @@ func TestDelete(t *testing.T) {
 
 	t.Run("Delete relationships only", func(t *testing.T) {
 		var (
-			n Person
-			r ActedIn
+			n       Person
+			actedIn ActedIn
 		)
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Qual(&n, "n", db.Props{"name": "'Laurence Fishburne'"})).
-					To(db.Qual(&r, "r"), nil),
+					To(db.Qual(&actedIn, "r"), nil),
 			).
-			Delete(&r).
+			Delete(&actedIn).
 			Compile()
 
 		Check(t, cy, err, internal.CompiledCypher{
@@ -48,7 +48,7 @@ func TestDelete(t *testing.T) {
 
 	t.Run("Delete a node with all its relationships", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(
@@ -70,7 +70,7 @@ func TestDelete(t *testing.T) {
 
 	t.Run("Delete all nodes and relationships", func(t *testing.T) {
 		var n any
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n"))).
 			DetachDelete(&n).

@@ -10,7 +10,7 @@ import (
 
 func TestUse(t *testing.T) {
 	t.Run("Query a graph", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		var n any
 		cy, err := c.
 			Use("myDatabase").
@@ -31,7 +31,7 @@ func TestUse(t *testing.T) {
 	})
 
 	t.Run("Query a composite db constituent graph", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		var n any
 		cy, err := c.
 			Use("myComposite.myConstituent").
@@ -52,7 +52,7 @@ func TestUse(t *testing.T) {
 	})
 
 	t.Run("Query a composite db constituent graph dynamically", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		var n any
 		cy, err := c.
 			Use("graph.byName($graphName)").

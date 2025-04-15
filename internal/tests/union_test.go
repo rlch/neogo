@@ -10,7 +10,7 @@ import (
 
 func TestUnion(t *testing.T) {
 	t.Run("Combine two queries and retain duplicates", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		var name string
 		cy, err := c.UnionAll(
 			func(c *internal.CypherClient) *internal.CypherRunner {
@@ -40,7 +40,7 @@ func TestUnion(t *testing.T) {
 	})
 
 	t.Run("Combine two queries and remove duplicates", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		var name string
 		cy, err := c.Union(
 			func(c *internal.CypherClient) *internal.CypherRunner {

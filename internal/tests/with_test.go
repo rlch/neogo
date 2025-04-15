@@ -11,7 +11,7 @@ import (
 func TestWith(t *testing.T) {
 	t.Run("Introducing variables for expressions", func(t *testing.T) {
 		var otherPersonName string
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Var("george", db.Props{"name": "'George'"})).
@@ -40,7 +40,7 @@ func TestWith(t *testing.T) {
 			otherPersonName string
 			connectionType  string
 		)
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node("person").To("r", "otherPerson")).
 			With("*", db.Qual("type(r)", "connectionType")).
@@ -67,7 +67,7 @@ func TestWith(t *testing.T) {
 	t.Run("Filter on aggregate function results", func(t *testing.T) {
 		var otherPersonName string
 
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Var("david", db.Props{"name": "'David'"})).
@@ -95,7 +95,7 @@ func TestWith(t *testing.T) {
 	t.Run("Sort results before using collect on them", func(t *testing.T) {
 		var names []string
 
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node("n")).
 			With(
@@ -122,7 +122,7 @@ func TestWith(t *testing.T) {
 	t.Run("Limit branching of a path search", func(t *testing.T) {
 		var names []string
 
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Var("n", db.Props{"name": "'Anders'"})).
@@ -153,7 +153,7 @@ func TestWith(t *testing.T) {
 
 	t.Run("Limit and Filtering", func(t *testing.T) {
 		var x []float64
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Unwind("[1, 2, 3, 4, 5, 6]", "x").
 			With(db.With("x", db.Limit("5"), db.Where("x > 2"))).

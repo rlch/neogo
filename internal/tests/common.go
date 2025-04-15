@@ -29,6 +29,29 @@ func Check(t *testing.T, cy *internal.CompiledCypher, err error, want internal.C
 	require.Equal(t, want.Bindings, cy.Bindings)
 }
 
+var r = internal.NewRegistry()
+
+func init() {
+	r.RegisterTypes(
+		&Movie{},
+		&Person{},
+		&Company{},
+		&Location{},
+		&ActedIn{},
+		&Directed{},
+		&Produced{},
+		&Wrote{},
+		&Reviewed{},
+		&Knows{},
+		&BornIn{},
+		&WorksAt{},
+		&BaseOrganism{},
+		&BasePet{},
+		&Human{},
+		&Dog{},
+	)
+}
+
 type (
 	Movie struct {
 		internal.Node `neo4j:"Movie"`

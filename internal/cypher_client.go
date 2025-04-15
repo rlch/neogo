@@ -9,8 +9,8 @@ import (
 	"text/template"
 )
 
-func NewCypherClient() *CypherClient {
-	cy := newCypher()
+func NewCypherClient(registry *Registry) *CypherClient {
+	cy := newCypher(registry)
 	return newCypherClient(cy)
 }
 

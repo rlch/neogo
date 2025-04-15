@@ -5,7 +5,9 @@ import (
 	"github.com/rlch/neogo/internal/tests"
 )
 
-func c() *internal.CypherClient { return internal.NewCypherClient() }
+func c() *internal.CypherClient {
+	return internal.NewCypherClient(internal.NewRegistry())
+}
 
 func Example() {
 	c().

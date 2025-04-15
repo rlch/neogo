@@ -38,7 +38,7 @@ func TestParameter(t *testing.T) {
 			{"id": "n1", "name": "Bob"},
 		}
 
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			With(db.NamedParam(&propsList, "propsList")).
 			Unwind("range(0, size($propsList)-1)", "i").
@@ -69,7 +69,7 @@ func TestParameter(t *testing.T) {
 		)
 		numParam := []int{1, 2, 3}
 
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			With(db.NamedParam(&numParam, "numbers")).
 			With(db.Qual(&num1, "numbers[0]")).

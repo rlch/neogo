@@ -3,8 +3,8 @@ package db
 import (
 	"fmt"
 
+	"github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/internal"
-	"github.com/rlch/neogo/query"
 )
 
 // Where creates an inline [WHERE] clause.
@@ -63,9 +63,9 @@ func Where(args ...any) interface {
 //
 // [WHERE]: https://neo4j.com/docs/cypher-manual/current/clauses/where/
 func Cond(
-	key query.PropertyIdentifier,
+	key builder.PropertyIdentifier,
 	op string,
-	value query.ValueIdentifier,
+	value builder.ValueIdentifier,
 ) internal.ICondition {
 	return &internal.Condition{
 		Key:   key,

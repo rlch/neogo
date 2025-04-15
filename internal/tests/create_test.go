@@ -11,7 +11,7 @@ import (
 func TestCreate(t *testing.T) {
 	t.Run("Create nodes", func(t *testing.T) {
 		t.Run("Create single node", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Create(db.Node("n")).
 				Compile()
@@ -24,7 +24,7 @@ func TestCreate(t *testing.T) {
 		})
 
 		t.Run("Create multiple nodes", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Create(
 					db.Patterns(
@@ -44,7 +44,7 @@ func TestCreate(t *testing.T) {
 		})
 
 		t.Run("Create a node with a label", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Create(db.Node(db.Qual(Person{}, "n"))).
 				Compile()
@@ -57,7 +57,7 @@ func TestCreate(t *testing.T) {
 		})
 
 		t.Run("Create a node with multiple labels", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			type SwedishPerson struct {
 				Person `neo4j:"Swedish"`
 			}
@@ -73,7 +73,7 @@ func TestCreate(t *testing.T) {
 		})
 
 		t.Run("Return created node", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var name string
 			cy, err := c.
 				Create(db.Node(db.Var("a", db.Props{
@@ -96,7 +96,7 @@ func TestCreate(t *testing.T) {
 
 	t.Run("Create relationships", func(t *testing.T) {
 		t.Run("Create a relationship between two nodes", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var (
 				a     Person
 				b     Person
@@ -138,7 +138,7 @@ func TestCreate(t *testing.T) {
 		})
 
 		t.Run("Create a relationship and set properties", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			type Reltype struct {
 				internal.Relationship `neo4j:"RELTYPE"`
 
@@ -192,7 +192,7 @@ func TestCreate(t *testing.T) {
 		})
 
 		t.Run("Create a full path", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var p any
 			cy, err := c.
 				Create(db.Path(
@@ -218,7 +218,7 @@ func TestCreate(t *testing.T) {
 
 	t.Run("Use parameters with CREATE", func(t *testing.T) {
 		t.Run("Create node with a parameter for the properties", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			n := Person{
 				Name:     "Andy",
 				Position: "Developer",
@@ -244,7 +244,7 @@ func TestCreate(t *testing.T) {
 		})
 
 		t.Run("Create multiple nodes with a parameter for their properties", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			people := []Person{
 				{
 					Name:     "Andy",

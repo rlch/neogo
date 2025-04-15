@@ -11,7 +11,7 @@ import (
 func TestReturn(t *testing.T) {
 	t.Run("Return nodes", func(t *testing.T) {
 		var p Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(
 				&p, "p",
@@ -32,8 +32,8 @@ func TestReturn(t *testing.T) {
 	})
 
 	t.Run("Return relationships", func(t *testing.T) {
-		var r string
-		c := internal.NewCypherClient()
+		var rel string
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Qual(
@@ -44,21 +44,21 @@ func TestReturn(t *testing.T) {
 					},
 				)).To(db.Qual(ActedIn{}, "r"), db.Var("m")),
 			).
-			Return(db.Qual(&r, "type(r)")).Compile()
+			Return(db.Qual(&rel, "type(r)")).Compile()
 		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
 					MATCH (p:Person {name: 'Keanu Reeves'})-[r:ACTED_IN]->(m)
 					RETURN type(r)
 					`,
 			Bindings: map[string]reflect.Value{
-				"type(r)": reflect.ValueOf(&r),
+				"type(r)": reflect.ValueOf(&rel),
 			},
 		})
 	})
 
 	t.Run("Return property", func(t *testing.T) {
 		var p Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(
 				&p, "p",
@@ -89,7 +89,7 @@ func TestReturn(t *testing.T) {
 
 	t.Run("Column alias", func(t *testing.T) {
 		var p Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&p, "p", db.Props{"name": "'Keanu Reeves'"}))).
 			Return(db.Qual(&p.Nationality, "citizenship")).Compile()
@@ -106,7 +106,7 @@ func TestReturn(t *testing.T) {
 
 	t.Run("Optional properties", func(t *testing.T) {
 		var bornIn any
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Var("n"))).
 			Return(db.Qual(&bornIn, "n.bornIn")).Compile()
@@ -127,7 +127,7 @@ func TestReturn(t *testing.T) {
 
 	t.Run("Unique results", func(t *testing.T) {
 		var m []any
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Qual(Person{}, "p", db.Props{"name": "'Keanu Reeves'"})).

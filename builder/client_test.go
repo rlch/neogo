@@ -1,17 +1,17 @@
-package query_test
+package builder_test
 
 import (
 	"fmt"
 	"strings"
 	"testing"
 
+	_ "github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 	"github.com/rlch/neogo/internal/tests"
-	_ "github.com/rlch/neogo/query"
 )
 
-func c() *internal.CypherClient { return internal.NewCypherClient() }
+func c() *internal.CypherClient { return internal.NewCypherClient(internal.NewRegistry()) }
 
 func ExampleIdentifier_nil() {
 	c().

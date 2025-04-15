@@ -11,7 +11,7 @@ import (
 func TestOrderBy(t *testing.T) {
 	t.Run("Order nodes by property", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Bind("n", &n)),
@@ -37,7 +37,7 @@ func TestOrderBy(t *testing.T) {
 
 	t.Run("Order nodes by multiple properties", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Bind("n", &n))).
 			Return(
@@ -61,7 +61,7 @@ func TestOrderBy(t *testing.T) {
 
 	t.Run("Order nodes by ID", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n"))).
 			Return(
@@ -86,7 +86,7 @@ func TestOrderBy(t *testing.T) {
 
 	t.Run("Order nodes by expression", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n"))).
 			Return(
@@ -111,7 +111,7 @@ func TestOrderBy(t *testing.T) {
 
 	t.Run("Order nodes by descending order", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n"))).
 			Return(
@@ -135,7 +135,7 @@ func TestOrderBy(t *testing.T) {
 
 	t.Run("Ordering null", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n"))).
 			Return(
@@ -160,7 +160,7 @@ func TestOrderBy(t *testing.T) {
 
 	t.Run("Ordering in a WITH clause", func(t *testing.T) {
 		var names []string
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node("n")).
 			With(db.With("n", db.OrderBy("age", true))).

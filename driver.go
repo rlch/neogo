@@ -7,8 +7,8 @@ import (
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
+	"github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/internal"
-	"github.com/rlch/neogo/query"
 )
 
 // New creates a new neogo [Driver] from a [neo4j.DriverWithContext].
@@ -48,10 +48,10 @@ type (
 	}
 
 	// Expression is an interface for compiling a Cypher expression outside the context of a query.
-	Expression = query.Expression
+	Expression = builder.Expression
 
 	// Query is the interface for constructing a Cypher query.
-	Query = query.Query
+	Query = builder.Builder
 
 	// Work is a function that allows Cypher to be executed within a Transaction.
 	Work func(start func() Query) error
@@ -100,13 +100,12 @@ type (
 
 type (
 	driver struct {
-		internal.Registry
+		*internal.Registry
 		db                   neo4j.DriverWithContext
 		causalConsistencyKey func(ctx context.Context) string
 	}
 	session struct {
 		*driver
-		internal.Registry
 		db         neo4j.DriverWithContext
 		execConfig execConfig
 		session    neo4j.SessionWithContext
@@ -148,7 +147,7 @@ func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execC
 // [IAbstract], [INode] and [IRelationship] to be used with [neogo].
 func WithTypes(types ...any) func(*driver) {
 	return func(d *driver) {
-		d.Registry.RegisterTypes(types...)
+		d.RegisterTypes(types...)
 	}
 }
 
@@ -172,11 +171,10 @@ func (d *driver) Exec(configurers ...func(*execConfig)) Query {
 	}
 	session := &session{
 		driver:     d,
-		Registry:   d.Registry,
 		db:         d.db,
 		execConfig: config,
 	}
-	return session.newClient(internal.NewCypherClient())
+	return session.newClient(internal.NewCypherClient(d.Registry))
 }
 
 func (d *driver) ensureCausalConsistency(ctx context.Context, sc *neo4j.SessionConfig) {
@@ -203,10 +201,9 @@ func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.Ses
 	d.ensureCausalConsistency(ctx, &config)
 	sess := d.db.NewSession(ctx, config)
 	return &session{
-		driver:   d,
-		Registry: d.Registry,
-		db:       d.db,
-		session:  sess,
+		driver:  d,
+		db:      d.db,
+		session: sess,
 	}
 }
 
@@ -219,10 +216,9 @@ func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.Se
 	d.ensureCausalConsistency(ctx, &config)
 	sess := d.db.NewSession(ctx, config)
 	return &session{
-		driver:   d,
-		Registry: d.Registry,
-		db:       d.db,
-		session:  sess,
+		driver:  d,
+		db:      d.db,
+		session: sess,
 	}
 }
 
@@ -245,7 +241,7 @@ func (s *session) Close(ctx context.Context, errs ...error) error {
 func (s *session) ReadTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		return nil, work(func() Query {
-			c := s.newClient(internal.NewCypherClient())
+			c := s.newClient(internal.NewCypherClient(s.Registry))
 			c.currentTx = tx
 			return c
 		})
@@ -256,7 +252,7 @@ func (s *session) ReadTransaction(ctx context.Context, work Work, configurers ..
 func (s *session) WriteTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		return nil, work(func() Query {
-			c := s.newClient(internal.NewCypherClient())
+			c := s.newClient(internal.NewCypherClient(s.Registry))
 			c.currentTx = tx
 			return c
 		})
@@ -274,7 +270,7 @@ func (s *session) BeginTransaction(ctx context.Context, configurers ...func(*neo
 
 func (t *transactionImpl) Run(work Work) error {
 	return work(func() Query {
-		c := t.session.newClient(internal.NewCypherClient())
+		c := t.session.newClient(internal.NewCypherClient(t.session.Registry))
 		c.currentTx = t.tx
 		return c
 	})

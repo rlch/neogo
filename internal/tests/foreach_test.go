@@ -10,7 +10,7 @@ import (
 // TODO: probs needs more tests lol
 func TestForEach(t *testing.T) {
 	t.Run("Return a limited subset of the rows", func(t *testing.T) {
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Path(db.Node("start").To(db.Var(nil, db.VarLength("*")), "finish"), "p"),

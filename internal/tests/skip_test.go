@@ -11,7 +11,7 @@ import (
 func TestSkip(t *testing.T) {
 	t.Run("Skip first three rows", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n"))).
 			Return(
@@ -34,7 +34,7 @@ func TestSkip(t *testing.T) {
 
 	t.Run("Return middle two rows", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n"))).
 			Return(
@@ -58,7 +58,7 @@ func TestSkip(t *testing.T) {
 
 	t.Run("Using an expression with SKIP to return a subset of the rows", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n"))).
 			Return(

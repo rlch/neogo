@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 	"github.com/rlch/neogo/internal/tests"
-	"github.com/rlch/neogo/query"
 )
 
 func TestUnmarshalRecord(t *testing.T) {
@@ -464,7 +464,11 @@ func TestUnmarshalRecords(t *testing.T) {
 	})
 
 	t.Run("binds to [][]Abstract", func(t *testing.T) {
-		s := &session{}
+		s := &session{
+			driver: &driver{
+				Registry: internal.NewRegistry(),
+			},
+		}
 		s.RegisterTypes(&tests.BaseOrganism{}, &tests.BasePet{})
 		var n [][]tests.Organism
 		cy := &internal.CompiledCypher{
@@ -567,6 +571,62 @@ func TestUnmarshalRecords(t *testing.T) {
 			Cute: true,
 		}, n[0][0])
 	})
+
+	t.Run("unmarshalling slices", func(t *testing.T) {
+		require := require.New(t)
+		s := &session{
+			driver: &driver{
+				Registry: internal.NewRegistry(),
+			},
+		}
+
+		type Person struct {
+			ID int `json:"id"`
+		}
+
+		// UNWIND [1, 2, 3] AS id
+		// WITH {id: id} AS person
+		// WITH collect(person) AS persons
+		var persons [][]*Person
+		record := &neo4j.Record{
+			Keys: []string{"persons"},
+			Values: []any{
+				[]any{
+					map[string]any{"id": 1},
+					map[string]any{"id": 2},
+					map[string]any{"id": 3},
+				},
+			},
+		}
+		err := s.unmarshalRecord(&internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"persons": reflect.ValueOf(&persons),
+			},
+		}, record)
+		require.NoError(err)
+
+		// (*db.Record)(0xc0005a34a0)({
+		//  Values: ([]interface {}) (len=1 cap=1) {
+		//   ([]interface {}) (len=3 cap=3) {
+		//    (map[string]interface {}) (len=1) {
+		//     (string) (len=2) "id": (int64) 1
+		//    },
+		//    (map[string]interface {}) (len=1) {
+		//     (string) (len=2) "id": (int64) 2
+		//    },
+		//    (map[string]interface {}) (len=1) {
+		//     (string) (len=2) "id": (int64) 3
+		//    }
+		//   }
+		//  },
+		//  Keys: ([]string) (len=1 cap=1) {
+		//   (string) (len=7) "persons"
+		//  }
+		// })
+
+		require.NoError(err)
+		require.Len(persons, 1)
+	})
 }
 
 func TestStream(t *testing.T) {
@@ -580,7 +640,7 @@ func TestStream(t *testing.T) {
 		err := d.Exec().
 			Unwind(db.NamedParam(nums, "nums"), "i").
 			Return(db.Qual(&nums, "i")).
-			Stream(ctx, func(r query.Result) error {
+			Stream(ctx, func(r builder.Result) error {
 				return nil
 			})
 		assert.Error(t, err)
@@ -599,7 +659,7 @@ func TestStream(t *testing.T) {
 		err := d.Exec().
 			Unwind("range(0, 10)", "i").
 			Return(db.Qual(&num, "i")).
-			Stream(ctx, func(r query.Result) error {
+			Stream(ctx, func(r builder.Result) error {
 				n := 0
 				for r.Next(ctx) {
 					if err := r.Read(); err != nil {
@@ -716,7 +776,7 @@ func TestResultImpl(t *testing.T) {
 		err := d.Exec().
 			Unwind("range(0, 1)", "i").
 			Return(db.Qual(&num, "i")).
-			Stream(ctx, func(r query.Result) error {
+			Stream(ctx, func(r builder.Result) error {
 				assert.True(t, r.Next(ctx))
 				assert.True(t, r.Peek(ctx), "should be true when there is one record to process after current record")
 				assert.True(t, r.Next(ctx))
@@ -731,7 +791,7 @@ func TestResultImpl(t *testing.T) {
 		err := d.Exec().
 			Unwind("range(0, 0)", "i").
 			Return(db.Qual(&num, "i")).
-			Stream(ctx, func(r query.Result) error {
+			Stream(ctx, func(r builder.Result) error {
 				assert.True(t, r.Next(ctx), "should be true when there is one record to process")
 				assert.False(t, r.Next(ctx), "should be false when there is no record to process")
 				return nil
@@ -745,7 +805,7 @@ func TestResultImpl(t *testing.T) {
 			err := d.Exec().
 				Unwind("range(0, 0)", "i").
 				Return(db.Qual(&num, "i")).
-				Stream(ctx, func(r query.Result) error {
+				Stream(ctx, func(r builder.Result) error {
 					return r.Err()
 				})
 			assert.NoError(t, err)
@@ -753,7 +813,7 @@ func TestResultImpl(t *testing.T) {
 
 		t.Run("should throw error when there is error in resultWithContext", func(t *testing.T) {
 			var n []any
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(internal.NewRegistry())
 			cy, err := c.
 				Match(db.Node(db.Var(n, db.Name("n")))).
 				Return(n).
@@ -770,7 +830,7 @@ func TestResultImpl(t *testing.T) {
 				_, resultErr := result.Single(ctx)
 				assert.Error(t, resultErr)
 
-				var res query.Result = &resultImpl{
+				var res builder.Result = &resultImpl{
 					ResultWithContext: result,
 					compiled:          cy,
 				}
@@ -786,7 +846,7 @@ func TestResultImpl(t *testing.T) {
 			var num int
 			err := d.Exec().Unwind("range(0, 5)", "i").
 				Return(db.Qual(&num, "i")).
-				Stream(ctx, func(r query.Result) error {
+				Stream(ctx, func(r builder.Result) error {
 					for i := 0; r.Next(ctx); i++ {
 						err := r.Read()
 						assert.NoError(t, err)
@@ -801,7 +861,7 @@ func TestResultImpl(t *testing.T) {
 			var num string
 			err := d.Exec().Unwind("range(0, 5)", "i").
 				Return(db.Qual(&num, "i")).
-				Stream(ctx, func(r query.Result) error {
+				Stream(ctx, func(r builder.Result) error {
 					assert.True(t, r.Next(ctx))
 					return r.Read()
 				})
@@ -818,22 +878,22 @@ func TestClient(t *testing.T) {
 		c.Bind(nil)
 		err := c.Exec().
 			// All Client methods
-			Subquery(func(c Query) query.Runner {
+			Subquery(func(c Query) builder.Runner {
 				return c.Union(
-					func(c Query) query.Runner {
+					func(c Query) builder.Runner {
 						return c.Return("n")
 					},
-					func(c Query) query.Runner {
+					func(c Query) builder.Runner {
 						return c.Use("graph").Return("n")
 					},
 				)
 			}).
-			Subquery(func(c Query) query.Runner {
+			Subquery(func(c Query) builder.Runner {
 				return c.UnionAll(
-					func(c Query) query.Runner {
+					func(c Query) builder.Runner {
 						return c.Call("aff")
 					},
-					func(c Query) query.Runner {
+					func(c Query) builder.Runner {
 						return c.Return("n")
 					},
 				)
@@ -849,7 +909,7 @@ func TestClient(t *testing.T) {
 			DetachDelete().
 			Set().
 			Remove().
-			ForEach("a", "m", func(c query.Updater[any]) {
+			ForEach("a", "m", func(c builder.Updater[any]) {
 				c.Set()
 			}).
 
@@ -860,7 +920,7 @@ func TestClient(t *testing.T) {
 			Call("call").
 			Yield("yield").
 			Show("").
-			Subquery(func(c Query) query.Runner {
+			Subquery(func(c Query) builder.Runner {
 				return c.Match(db.Node("m"))
 			}).
 			Cypher("").

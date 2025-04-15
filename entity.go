@@ -27,14 +27,6 @@ func NodeWithID[N any, PN interface {
 	return n
 }
 
-func ExtractNodeLabels(i any) []string {
-	return internal.ExtractNodeLabels(i)
-}
-
-func ExtractRelationshipType(relationship any) string {
-	return internal.ExtractRelationshipType(relationship)
-}
-
 type (
 	// INode is an interface for nodes.
 	// See [Node] for the default implementation.

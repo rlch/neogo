@@ -12,7 +12,7 @@ func TestMatch(t *testing.T) {
 	t.Run("Basic node finding", func(t *testing.T) {
 		t.Run("Get all nodes", func(t *testing.T) {
 			var n []any
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.Match(db.Node(db.Var(n, db.Name("n")))).Return(n).Compile()
 			Check(t, cy, err, internal.CompiledCypher{
 				Cypher: `
@@ -26,7 +26,7 @@ func TestMatch(t *testing.T) {
 		t.Run("Get all nodes with a label", func(t *testing.T) {
 			var m Movie
 			var mts []string
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(&m)).
 				Return(db.Bind(&m.Title, &mts)).
@@ -44,7 +44,7 @@ func TestMatch(t *testing.T) {
 
 		t.Run("Related nodes", func(t *testing.T) {
 			var m Movie
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(
 					db.Node(
@@ -70,7 +70,7 @@ func TestMatch(t *testing.T) {
 		})
 
 		t.Run("Match with labels", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var m Movie
 			cy, err := c.Match(db.Node(db.Var(
 				Person{},
@@ -90,7 +90,7 @@ func TestMatch(t *testing.T) {
 		})
 
 		t.Run("Match with a label expression for the node labels", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var name, title string
 			cy, err := c.Match(
 				db.Node(db.Var("n", db.Label("Movie|Person"))),
@@ -113,7 +113,7 @@ func TestMatch(t *testing.T) {
 
 	t.Run("Relationship basics", func(t *testing.T) {
 		t.Run("Outgoing relationships", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var m Movie
 			cy, err := c.
 				Match(
@@ -140,7 +140,7 @@ func TestMatch(t *testing.T) {
 		})
 
 		t.Run("Relationship variables", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var out any
 			cy, err := c.
 				Match(db.Node(db.Var(
@@ -165,7 +165,7 @@ func TestMatch(t *testing.T) {
 		})
 
 		t.Run("Match on an undirected relationship", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var a, b any
 			cy, err := c.
 				Match(
@@ -193,7 +193,7 @@ func TestMatch(t *testing.T) {
 		})
 
 		t.Run("Match on relationship type", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var name string
 			cy, err := c.
 				Match(db.Node(db.Qual(
@@ -216,7 +216,7 @@ func TestMatch(t *testing.T) {
 		})
 
 		t.Run("Match on multiple relationship types", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var name string
 			cy, err := c.Match(db.Node(
 				db.Var(
@@ -239,7 +239,7 @@ func TestMatch(t *testing.T) {
 		})
 
 		t.Run("Match on relationship type and use a variable", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var r ActedIn
 			cy, err := c.
 				Match(db.Node(db.Var(
@@ -263,7 +263,7 @@ func TestMatch(t *testing.T) {
 
 	t.Run("Relationships in depth", func(t *testing.T) {
 		t.Run("Relationship types with uncommon characters", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var martin, rob Person
 			cy, err := c.
 				Match(
@@ -302,7 +302,7 @@ func TestMatch(t *testing.T) {
 		})
 
 		t.Run("Multiple relationships", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			var mTitle, dName string
 			cy, err := c.
 				Match(
@@ -334,7 +334,7 @@ func TestMatch(t *testing.T) {
 
 	t.Run("OPTIONAL MATCH", func(t *testing.T) {
 		t.Run("In more detail", func(t *testing.T) {
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			a := Person{}
 			r := Directed{}
 			cy, err := c.
@@ -368,7 +368,7 @@ func TestMatch(t *testing.T) {
 				a Person
 				x any
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(
 					db.Qual(
@@ -397,7 +397,7 @@ func TestMatch(t *testing.T) {
 				x    any
 				name string
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(
 					db.Qual(
@@ -427,7 +427,7 @@ func TestMatch(t *testing.T) {
 				name  string
 				typeR string
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(
 					db.Qual(

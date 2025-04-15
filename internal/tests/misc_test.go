@@ -9,7 +9,7 @@ import (
 )
 
 func TestCypher(t *testing.T) {
-	c := internal.NewCypherClient()
+	c := internal.NewCypherClient(r)
 	var n any
 	cy, err := c.
 		Match(db.Node(db.Qual(&n, "n"))).
@@ -30,7 +30,7 @@ func TestCypher(t *testing.T) {
 }
 
 func TestExprInPropertyIdentifier(t *testing.T) {
-	c := internal.NewCypherClient()
+	c := internal.NewCypherClient(r)
 	cy, err := c.Unwind(
 		db.Expr("[?, ?, ?, ?]", "a", 2, []int{1}, nil),
 		"x",

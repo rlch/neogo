@@ -11,7 +11,7 @@ import (
 func TestSet(t *testing.T) {
 	t.Run("Set a property", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n", db.Props{"name": "'Andy'"}))).
 			Set(db.SetPropValue(&n.Surname, "'Taylor'")).
@@ -33,7 +33,7 @@ func TestSet(t *testing.T) {
 
 	t.Run("Update a property", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n", db.Props{"name": "'Andy'"}))).
 			Set(db.SetPropValue(&n.Age, "toString(n.age)")).
@@ -55,7 +55,7 @@ func TestSet(t *testing.T) {
 
 	t.Run("Remove a property", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(db.Node(db.Qual(&n, "n", db.Props{"name": "'Andy'"}))).
 			Set(db.SetPropValue(&n.Name, "null")).
@@ -81,7 +81,7 @@ func TestSet(t *testing.T) {
 			pn     Person
 			hungry bool
 		)
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Patterns(
@@ -113,7 +113,7 @@ func TestSet(t *testing.T) {
 
 	t.Run("Replace all properties using a map and =", func(t *testing.T) {
 		var p Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Qual(&p, "p", db.Props{"name": "'Peter'"})),
@@ -138,7 +138,7 @@ func TestSet(t *testing.T) {
 
 	t.Run("Remove all properties using an empty map and =", func(t *testing.T) {
 		var p Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Qual(&p, "p", db.Props{"name": "'Peter'"})),
@@ -163,7 +163,7 @@ func TestSet(t *testing.T) {
 	t.Run("Mutate specific properties using a map and +=", func(t *testing.T) {
 		var p Person
 		var hungry bool
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Qual(&p, "p", db.Props{"name": "'Peter'"})),
@@ -189,7 +189,7 @@ func TestSet(t *testing.T) {
 
 	t.Run("Set multiple properties using one SET clause", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Qual(&n, "n", db.Props{"name": "'Andy'"})),
@@ -212,7 +212,7 @@ func TestSet(t *testing.T) {
 
 	t.Run("Set a property using a parameter", func(t *testing.T) {
 		var n Person
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Qual(&n, "n", db.Props{"name": "'Andy'"})),
@@ -245,7 +245,7 @@ func TestSet(t *testing.T) {
 			"name":     "Andy",
 			"position": "Developer",
 		}
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Qual(&n, "n", db.Props{"name": "'Andy'"})),
@@ -274,7 +274,7 @@ func TestSet(t *testing.T) {
 	t.Run("Set a label on a node", func(t *testing.T) {
 		var n Person
 		var labels []string
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Qual(&n, "n", db.Props{"name": "'Stefan'"})),
@@ -299,7 +299,7 @@ func TestSet(t *testing.T) {
 	t.Run("Set multiple labels on a node", func(t *testing.T) {
 		var n Person
 		var labels []string
-		c := internal.NewCypherClient()
+		c := internal.NewCypherClient(r)
 		cy, err := c.
 			Match(
 				db.Node(db.Qual(&n, "n", db.Props{"name": "'George'"})),

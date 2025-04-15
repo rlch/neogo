@@ -3,7 +3,7 @@ package neorm
 import (
 	"testing"
 
-	"github.com/rlch/neogo/db"
+	"github.com/rlch/neogo/internal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,13 +21,48 @@ func TestLoad(t *testing.T) {
 
 	client := NewTransaction()
 
+	client.Save(Person{
+		Node: internal.Node{ID: "adam"},
+		Cats: []*IsOwner{
+			{
+				ID:  "alskdjfh",
+				Cat: &Cat{},
+			},
+		},
+	})
+
 	err := client.
-		Preload(
-			"Cats.Cat",
-			db.Where(),
+		Query(
+			"r{id}:Cats c{}:.",
+			"r.active = false AND c.alive = ?", true,
 		).
-		Preload("Cats.Cat.Owner").
+		Query("Friends {}:.").
 		Find(&adam)
+		// MATCH (adam:Person {id: $id})
+		// CALL {
+		//   WITH adam
+		//   MATCH (adam)-[r:IS_OWNER]->(c:Cat)
+		//   WHERE r.active = false AND c.alive = true
+		//   RETURN collect(o) as owners, collect(c) as cats
+		// }
+		// CALL {
+		//   WITH adam
+		//   MATCH (adam)-[:FRIENDS_WITH]->(f:Person)
+		//   RETURN collect(f) as friends
+		// }
+		// RETURN adam as person, owners, cats, friends
+
+	err = client.
+		Query(":Friends {name}:.").
+		Delete(&adam)
+		// MATCH (adam:Person {id: $id})
+		// CALL {
+		//   WITH adam
+		//   MATCH (adam)-[v1:FRIENDS_WITH]->(v2:Person)
+		//   REMOVE v2.name
+		// }
+		// DELETE adam
+
 	require.NoError(err)
 
 	for _, cat := range adam.Cats {

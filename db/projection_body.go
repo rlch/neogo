@@ -1,14 +1,14 @@
 package db
 
 import (
+	"github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/internal"
-	"github.com/rlch/neogo/query"
 )
 
 // With adds configuration to a projection item for use in a [WITH] clause.
 //
 // [WITH]: https://neo4j.com/docs/cypher-manual/current/clauses/where/#usage-with-with-clause
-func With(identifier query.Identifier, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
+func With(identifier builder.Identifier, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
 	m := &internal.ProjectionBody{}
 	m.Identifier = identifier
 	for _, opt := range opts {
@@ -20,7 +20,7 @@ func With(identifier query.Identifier, opts ...internal.ProjectionBodyOption) *i
 // Return adds configuration to a projection item for use in a [RETURN] clause.
 //
 // [RETURN]: https://neo4j.com/docs/cypher-manual/current/clauses/return/
-func Return(identifier query.Identifier, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
+func Return(identifier builder.Identifier, opts ...internal.ProjectionBodyOption) *internal.ProjectionBody {
 	return With(identifier, opts...)
 }
 
@@ -30,7 +30,7 @@ func Return(identifier query.Identifier, opts ...internal.ProjectionBodyOption) 
 //	ORDER BY <identifier> [ASC|DESC]
 //
 // [ORDER BY]: https://neo4j.com/docs/cypher-manual/current/clauses/order-by/
-func OrderBy(identifier query.PropertyIdentifier, asc bool) internal.ProjectionBodyOption {
+func OrderBy(identifier builder.PropertyIdentifier, asc bool) internal.ProjectionBodyOption {
 	return &internal.Configurer{
 		ProjectionBody: func(m *internal.ProjectionBody) {
 			if m.OrderBy == nil {

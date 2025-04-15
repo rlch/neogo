@@ -15,7 +15,7 @@ func TestMerge(t *testing.T) {
 				robert any
 				labels []string
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Merge(db.Node(db.Qual(&robert, "robert", db.Label("Critic")))).
 				Return(&robert, db.Qual(&labels, "labels(robert)")).
@@ -35,7 +35,7 @@ func TestMerge(t *testing.T) {
 
 		t.Run("Merge single node with properties", func(t *testing.T) {
 			var charlie any
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Merge(db.Node(db.Qual(&charlie, "charlie", db.Props{
 					"name": "'Charlie Sheen'",
@@ -57,7 +57,7 @@ func TestMerge(t *testing.T) {
 
 		t.Run("Merge single node specifying both label and property", func(t *testing.T) {
 			var michael Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Merge(db.Node(db.Qual(&michael, "michael", db.Props{
 					"name": "'Michael Douglas'",
@@ -82,7 +82,7 @@ func TestMerge(t *testing.T) {
 				person   Person
 				location Location
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&person, "person"))).
 				Merge(db.Node(db.Qual(&location, "location", db.Props{
@@ -109,7 +109,7 @@ func TestMerge(t *testing.T) {
 	t.Run("Use ON CREATE and ON MATCH", func(t *testing.T) {
 		t.Run("Merge with ON CREATE", func(t *testing.T) {
 			var keanu Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Merge(
 					db.Node(
@@ -140,7 +140,7 @@ func TestMerge(t *testing.T) {
 
 		t.Run("Merge with ON MATCH", func(t *testing.T) {
 			var person Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Merge(
 					db.Node(db.Qual(&person, "person")),
@@ -165,7 +165,7 @@ func TestMerge(t *testing.T) {
 
 		t.Run("Merge with ON CREATE and ON MATCH", func(t *testing.T) {
 			var keanu Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Merge(
 					db.Node(db.Qual(&keanu, "keanu", db.Props{
@@ -196,7 +196,7 @@ func TestMerge(t *testing.T) {
 
 		t.Run("Merge with ON MATCH setting multiple properties", func(t *testing.T) {
 			var person Person
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Merge(
 					db.Node(db.Qual(&person, "person")),
@@ -233,7 +233,7 @@ func TestMerge(t *testing.T) {
 				wallStreet Movie
 				typeR      string
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(
 					db.Patterns(
@@ -271,7 +271,7 @@ func TestMerge(t *testing.T) {
 				reiner Person
 				movie  Movie
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(
 					db.Patterns(
@@ -309,9 +309,9 @@ func TestMerge(t *testing.T) {
 			var (
 				charlie Person
 				oliver  Person
-				r       Knows
+				knows   Knows
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(
 					db.Patterns(
@@ -325,9 +325,9 @@ func TestMerge(t *testing.T) {
 				).
 				Merge(
 					db.Node(&charlie).
-						Related(db.Qual(&r, "r"), &oliver),
+						Related(db.Qual(&knows, "r"), &oliver),
 				).
-				Return(&r).
+				Return(&knows).
 				Compile()
 
 			Check(t, cy, err, internal.CompiledCypher{
@@ -339,7 +339,7 @@ func TestMerge(t *testing.T) {
 					RETURN r
 					`,
 				Bindings: map[string]reflect.Value{
-					"r": reflect.ValueOf(&r),
+					"r": reflect.ValueOf(&knows),
 				},
 			})
 		})
@@ -349,7 +349,7 @@ func TestMerge(t *testing.T) {
 				person   Person
 				location Location
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&person, "person"))).
 				Merge(
@@ -386,16 +386,16 @@ func TestMerge(t *testing.T) {
 				internal.Relationship `neo4j:"HAS_CHAUFFEUR"`
 			}
 			var (
-				person    Person
-				r         HasChauffeur
-				chauffeur Chaffeur
+				person       Person
+				hasChauffeur HasChauffeur
+				chauffeur    Chaffeur
 			)
-			c := internal.NewCypherClient()
+			c := internal.NewCypherClient(r)
 			cy, err := c.
 				Match(db.Node(db.Qual(&person, "person"))).
 				Merge(
 					db.Node(&person).To(
-						db.Qual(&r, "r"),
+						db.Qual(&hasChauffeur, "r"),
 						db.Qual(&chauffeur, "chauffeur", db.Props{
 							"name": &person.ChauffeurName,
 						}),

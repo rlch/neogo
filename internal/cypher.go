@@ -21,9 +21,9 @@ type CompiledCypher struct {
 	IsWrite    bool
 }
 
-func newCypher() *cypher {
+func newCypher(registry *Registry) *cypher {
 	return &cypher{
-		Scope:   newScope(),
+		Scope:   newScope(registry),
 		Builder: &strings.Builder{},
 	}
 }
@@ -48,13 +48,16 @@ var (
 func (s *cypher) catch(op func()) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("Panicked while building the following query:\n%s", s.String())
-			debug.PrintStack()
 			err, ok := r.(error)
+			if ok {
+				s.AddError(err)
+			}
+			fmt.Printf("Panicked while building the following query:\n%s", s.String())
+			s.Print()
+			debug.PrintStack()
 			if !ok {
 				panic(err)
 			}
-			s.AddError(err)
 		}
 	}()
 	op()
@@ -75,7 +78,7 @@ func (cy *cypher) writeNode(m *member) {
 				cy.AddError(err)
 			}
 		} else {
-			nodeLabels := ExtractNodeLabels(m.identifier)
+			nodeLabels := cy.ExtractNodeLabels(m.identifier)
 			cy.WriteString("(")
 			padProps := false
 			if m.expr != "" {
@@ -153,7 +156,7 @@ func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
 				inner = m.expr + inner
 			}
 		} else {
-			label := ExtractRelationshipType(m.identifier)
+			label := cy.ExtractRelationshipType(m.identifier)
 			if m.variable != nil && m.variable.Pattern != "" {
 				inner = ":" + string(m.variable.Pattern)
 			} else if label != "" {
@@ -320,13 +323,13 @@ func (cy *cypher) writePattern(pattern *nodePattern) {
 			}
 		}
 		for {
-			nodeM := cy.registerNode(pattern)
+			nodeM := cy.addNode(pattern)
 			cy.writeNode(nodeM)
 			rs := pattern.relationship
 			if rs == nil {
 				break
 			}
-			rsM := cy.registerRelationship(rs)
+			rsM := cy.addRelationship(rs)
 			cy.writeRelationship(rsM, rs)
 
 			if next := pattern.next(); next != pattern {
@@ -362,7 +365,7 @@ func (cy *cypher) writeUnionClause(unions []func(*CypherClient) *CypherRunner, a
 	runners := make([]*CypherRunner, len(unions))
 	for i, union := range unions {
 		rootScope := cy.clone()
-		rootCy := newCypher()
+		rootCy := newCypher(cy.Registry)
 		rootCy.Scope = rootScope
 		childCy := newCypherClient(rootCy)
 		// Parent scope of CALL should be propagated to UNION if exists
@@ -458,7 +461,7 @@ func (cy *cypher) writeWhereClause(where *Where, inline bool) {
 
 func (cy *cypher) writeUnwindClause(expr any, as string) {
 	cy.WriteString("UNWIND ")
-	m := cy.register(expr, false, nil)
+	m := cy.add(expr, false, nil)
 	_, err := fmt.Fprintf(cy, "%s AS %s", m.expr, as)
 	if err != nil {
 		cy.AddError(err)
@@ -471,7 +474,7 @@ func (cy *cypher) writeUnwindClause(expr any, as string) {
 
 func (cy *cypher) writeSubqueryClause(subquery func(c *CypherClient) *CypherRunner) {
 	cy.catch(func() {
-		child := NewCypherClient()
+		child := NewCypherClient(cy.Registry)
 		child.Parent = cy.Scope
 		child.mergeParentScope(child.Parent)
 		runSubquery := subquery(child)
@@ -512,7 +515,7 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 				return m, false
 			}
 		}
-		return cy.register(v, false, nil), true
+		return cy.add(v, false, nil), true
 	}
 	cy.catch(func() {
 		cy.WriteString(clause + " ")
@@ -688,8 +691,8 @@ func (cy *cypher) writeForEachClause(identifier, elementsExpr any, do func(c *Cy
 		cy.WriteString("FOREACH (")
 		value := cy.valueIdentifier(elementsExpr)
 
-		foreach := newCypher()
-		m := foreach.register(identifier, false, nil)
+		foreach := newCypher(cy.Registry)
+		m := foreach.add(identifier, false, nil)
 		_, err := fmt.Fprintf(cy, "%s IN %s | ", m.expr, value)
 		if err != nil {
 			cy.AddError(err)
@@ -723,7 +726,7 @@ func (cy *cypher) writeShowClause(procedure string) {
 func (cy *cypher) writeYieldClause(identifiers ...any) {
 	cy.writeSinglelineQuery("YIELD", len(identifiers), func(i int) {
 		v := identifiers[i]
-		m := cy.register(v, false, nil)
+		m := cy.add(v, false, nil)
 		cy.WriteString(m.expr)
 		if m.alias != "" {
 			_, err := fmt.Fprintf(cy, " AS %s", m.alias)

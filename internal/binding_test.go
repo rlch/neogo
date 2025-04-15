@@ -120,20 +120,6 @@ func (b *relationshipValuer) Unmarshal(v *neo4j.Relationship) error {
 	return nil
 }
 
-func TestUnwindValue(t *testing.T) {
-	t.Run("pointers to values", func(t *testing.T) {
-		n := 10
-		v := unwindValue(reflect.ValueOf(&n))
-		require.Equal(t, v.Interface(), n)
-	})
-
-	t.Run("values", func(t *testing.T) {
-		n := 10
-		v := unwindValue(reflect.ValueOf(n))
-		require.Equal(t, v.Interface(), n)
-	})
-}
-
 func TestBindValuer(t *testing.T) {
 	t.Run("err nil when not implemented", func(t *testing.T) {
 		ok, err := bindValuer(false, reflect.ValueOf(10))
@@ -175,7 +161,7 @@ func TestBindCasted(t *testing.T) {
 }
 
 func TestBindValue(t *testing.T) {
-	r := &Registry{}
+	r := NewRegistry()
 	r.RegisterTypes(&BaseOrganism{})
 
 	t.Run("Primitive coercion", func(t *testing.T) {
@@ -445,7 +431,7 @@ func TestBindValue(t *testing.T) {
 	})
 
 	t.Run("Abstract using registered types", func(t *testing.T) {
-		rWithAbstract := &Registry{}
+		rWithAbstract := NewRegistry()
 		rWithAbstract.RegisterTypes(
 			&BaseOrganism{},
 		)
@@ -468,7 +454,7 @@ func TestBindValue(t *testing.T) {
 	})
 
 	t.Run("Abstract using registered concrete types", func(t *testing.T) {
-		rWithAbstract := &Registry{}
+		rWithAbstract := NewRegistry()
 		rWithAbstract.RegisterTypes(
 			&Human{},
 			&Dog{},
