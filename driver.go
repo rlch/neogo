@@ -102,7 +102,7 @@ type (
 	driver struct {
 		registry
 		db                   neo4j.DriverWithContext
-		defaultDatabaseName         string
+		defaultDatabaseName  string
 		causalConsistencyKey func(ctx context.Context) string
 	}
 	session struct {
@@ -121,7 +121,7 @@ type (
 
 var causalConsistencyCache map[string]neo4j.Bookmarks = map[string]neo4j.Bookmarks{}
 
-// set used database
+// WithDefaultDatabaseName set default database name
 //   - example  neogo.New(db.Driver, neogo.WithDbName(database))
 func WithDefaultDatabaseName(databaseName string) Config {
 	return func(d *driver) {
