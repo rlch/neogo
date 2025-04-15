@@ -2,6 +2,7 @@ package neogo
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -886,5 +887,31 @@ func TestClient(t *testing.T) {
 			Print().
 			Run(context.Background())
 		require.NoError(t, err)
+	})
+}
+
+func TestUnmarshallingSlices(t *testing.T) {
+	t.Run("unmarshalling slices", func(t *testing.T) {
+		ctx := context.Background()
+		neo4jDriver, cancel := startNeo4J(ctx)
+		defer cancel(ctx)
+		d := New(neo4jDriver)
+
+		type Person struct {
+			ID int
+		}
+
+		var persons [][]Person
+		err := d.Exec().
+			Cypher(`
+      UNWIND [1, 2, 3] AS id
+      WITH {id: id} AS person
+      WITH collect(person) AS persons
+      `).
+			Return(db.Qual(&persons, "persons")).
+			Run(context.Background())
+		fmt.Printf("persons: %v\n", persons)
+		require.NoError(t, err)
+		require.Len(t, persons, 1)
 	})
 }
