@@ -585,6 +585,37 @@ func TestUnmarshalRecords(t *testing.T) {
 			Cute: true,
 		}, n[0][0])
 	})
+
+	t.Run("unmarshalling slices", func(t *testing.T) {
+		require := require.New(t)
+		s := &session{}
+
+		type Person struct {
+			ID int `json:"id"`
+		}
+
+		// UNWIND [1, 2, 3] AS id
+		// WITH {id: id} AS person
+		// WITH collect(person) AS persons
+		var persons [][]*Person
+		record := &neo4j.Record{
+			Keys: []string{"persons"},
+			Values: []any{
+				[]any{
+					map[string]any{"id": 1},
+					map[string]any{"id": 2},
+					map[string]any{"id": 3},
+				},
+			},
+		}
+		err := s.unmarshalRecord(&internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"persons": reflect.ValueOf(&persons),
+			},
+		}, record)
+		require.NoError(err)
+		require.Len(persons, 1)
+	})
 }
 
 func TestStream(t *testing.T) {

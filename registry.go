@@ -196,7 +196,8 @@ func (r *registry) bindValue(from any, to reflect.Value) (err error) {
 		}
 
 		// Recursively deserialize slices
-		switch reflect.TypeOf(from).Kind() {
+		fromT := reflect.TypeOf(from)
+		switch fromT.Kind() {
 		case reflect.Slice:
 			if to.Kind() == reflect.Ptr {
 				to = to.Elem()
@@ -204,20 +205,36 @@ func (r *registry) bindValue(from any, to reflect.Value) (err error) {
 			if to.Kind() != reflect.Slice {
 				return errors.New("cannot bind slice to non-slice type")
 			}
+			toT = to.Type()
 			fromV := reflect.ValueOf(from)
 			n := fromV.Len()
-			to.Set(reflect.MakeSlice(to.Type(), n, n))
-			for i := 0; i < n; i++ {
-				fromI := fromV.Index(i).Interface()
-				toI := to.Index(i)
-				if toI.CanAddr() {
-					toI = toI.Addr()
+			// If the depth of from and to is equal, there's a 1:1 relationship between the record and the output type.
+			// If the depth of from is 1 lower than that of to, we assume the result from neo4j is a single record representing the first
+			// element of the slice of the output, to.
+			fromDepth, toDepth := computeDepth(fromT), computeDepth(toT)
+			if fromDepth == toDepth {
+				to.Set(reflect.MakeSlice(toT, n, n))
+				for i := range n {
+					fromI := fromV.Index(i).Interface()
+					toI := to.Index(i)
+					if toI.CanAddr() {
+						toI = toI.Addr()
+					}
+					err := r.bindValue(fromI, toI)
+					if err != nil {
+						return fmt.Errorf("error binding slice element %d: %w", i, err)
+					}
 				}
-				err := r.bindValue(fromI, toI)
+			} else if fromDepth+1 == toDepth {
+				to.Set(reflect.MakeSlice(toT, 1, 1))
+				err := r.bindValue(from, to.Index(0))
 				if err != nil {
-					return fmt.Errorf("error binding slice element %d: %w", i, err)
+					return fmt.Errorf("error binding value to first index of slice: %w", err)
 				}
+			} else {
+				return fmt.Errorf("cannot bind slice of depth %d to slice of depth %d", fromDepth, toDepth)
 			}
+
 			return nil
 		}
 
@@ -394,4 +411,12 @@ func (r *registry) bindAbstractNode(node neo4j.Node, to reflect.Value) error {
 		to.Set(toImpl)
 	}
 	return nil
+}
+
+func computeDepth(t reflect.Type) (depth int) {
+	for t.Kind() == reflect.Slice {
+		depth++
+		t = t.Elem()
+	}
+	return
 }
