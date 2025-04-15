@@ -604,27 +604,6 @@ func TestUnmarshalRecords(t *testing.T) {
 			},
 		}, record)
 		require.NoError(err)
-
-		// (*db.Record)(0xc0005a34a0)({
-		//  Values: ([]interface {}) (len=1 cap=1) {
-		//   ([]interface {}) (len=3 cap=3) {
-		//    (map[string]interface {}) (len=1) {
-		//     (string) (len=2) "id": (int64) 1
-		//    },
-		//    (map[string]interface {}) (len=1) {
-		//     (string) (len=2) "id": (int64) 2
-		//    },
-		//    (map[string]interface {}) (len=1) {
-		//     (string) (len=2) "id": (int64) 3
-		//    }
-		//   }
-		//  },
-		//  Keys: ([]string) (len=1 cap=1) {
-		//   (string) (len=7) "persons"
-		//  }
-		// })
-
-		require.NoError(err)
 		require.Len(persons, 1)
 	})
 }
