@@ -252,7 +252,6 @@ func TestUnmarshalRecord(t *testing.T) {
 			Name: "Michael Scott",
 		}, n[0])
 	})
-
 }
 
 func TestUnmarshalRecords(t *testing.T) {
