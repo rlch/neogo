@@ -4,7 +4,6 @@ import (
 	"context"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/stretchr/testify/assert"
@@ -217,6 +216,43 @@ func TestUnmarshalRecord(t *testing.T) {
 			Name: "Jessie", Surname: "Pinkman",
 		}, n[0])
 	})
+	t.Run("binds to abstract nodes with length 1", func(t *testing.T) {
+		var n []tests.Organism
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		err := s.unmarshalRecord(cy,
+			&neo4j.Record{
+				Keys: []string{"n"},
+				Values: []any{
+					neo4j.Node{
+						Labels: []string{
+							"Organism",
+							"Human",
+						},
+						Props: map[string]any{
+							"id":    "boss",
+							"name":  "Michael Scott",
+							"alive": true,
+						},
+					},
+				},
+			})
+		assert.NoError(t, err)
+		assert.Len(t, n, 1, "Expected single record to be bound to slice of length 1")
+		assert.Equal(t, &tests.Human{
+			BaseOrganism: tests.BaseOrganism{
+				Node: internal.Node{
+					ID: "boss",
+				},
+				Alive: true,
+			},
+			Name: "Michael Scott",
+		}, n[0])
+	})
+
 }
 
 func TestUnmarshalRecords(t *testing.T) {
@@ -919,77 +955,4 @@ func TestClient(t *testing.T) {
 			Run(context.Background())
 		require.NoError(t, err)
 	})
-}
-
-type ITestNode interface {
-	IAbstract
-	Base() *BaseNode
-}
-
-type BaseNode struct {
-	Abstract `neo4j:"AbstractTestNode"`
-	Node
-	CreatedAt time.Time `json:"createdAt"`
-	Name      string    `json:"name"`
-}
-
-var _ IAbstract = (*BaseNode)(nil)
-
-func (b *BaseNode) Base() *BaseNode {
-	return b
-}
-
-func (BaseNode) Implementers() []IAbstract {
-	return []IAbstract{
-		&ConcreteTestNode{},
-	}
-}
-
-type ConcreteTestNode struct {
-	BaseNode `neo4j:"ConcreteTestNode"`
-	Value    string `json:"value"`
-}
-
-func TestUnmarshalSingleAbstractNodeToSlice(t *testing.T) {
-	ctx := context.Background()
-	driver, cleanup := startNeo4J(ctx)
-	defer func() {
-		_ = cleanup(ctx)
-	}()
-	d := New(driver, WithTypes(&BaseNode{}))
-	// Create a concrete node first
-	testNode := ConcreteTestNode{
-		BaseNode: BaseNode{
-			Name:      "TestNodeA",
-			CreatedAt: time.Now(),
-		},
-		Value: "test value",
-	}
-	err := d.Exec().
-		Cypher(`
-		CREATE (n:ConcreteTestNode:AbstractTestNode)
-		SET n += $props
-		`).
-		RunWithParams(ctx, map[string]any{
-			"props": testNode,
-		})
-	assert.NoError(t, err)
-
-	// Try to match the single node and unmarshal into slice of abstract type
-	var results []ITestNode
-	err = d.Exec().
-		Cypher(`MATCH (n:AbstractTestNode) WHERE n.name = 'TestNodeA'`).
-		Return(db.Qual(&results, "n")).
-		// @rlch: This only works with 'collect(n)', eg:
-		//Return(db.Qual(&results, "collect(n)")).
-		Run(ctx)
-
-	// Should not error and return slice with one node
-	assert.NoError(t, err)
-	assert.Len(t, results, 1, "Expected slice with one node")
-
-	// Verify the value
-	if err == nil {
-		assert.Equal(t, testNode.Name, results[0].Base().Name)
-	}
 }
