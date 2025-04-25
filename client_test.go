@@ -216,6 +216,7 @@ func TestUnmarshalRecord(t *testing.T) {
 			Name: "Jessie", Surname: "Pinkman",
 		}, n[0])
 	})
+
 	t.Run("binds to abstract nodes with length 1", func(t *testing.T) {
 		var n []tests.Organism
 		cy := &internal.CompiledCypher{
