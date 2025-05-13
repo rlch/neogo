@@ -1,0 +1,36 @@
+name: Remove Notion tag from PR title
+on:
+  issue_comment:
+    types:
+      - created
+jobs:
+  check-comment-author:
+    name: Modify PR title
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request != null && github.event.comment.user.login == 'notion-workspace[bot]'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get PR title and check for ISSUE-x or TASK-x
+        id: check-title
+        env:
+          GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.issue.number }}
+          PR_TITLE=$(gh pr view $PR_NUMBER --json title --jq .title)
+          if [[ "$PR_TITLE" =~ (ISSUE|TASK)-[0-9]+ ]]; then
+            echo "has_tag=true" >> $GITHUB_OUTPUT
+            echo "Found ISSUE-x or TASK-x in PR title: $PR_TITLE"
+          else
+            echo "has_tag=false" >> $GITHUB_OUTPUT
+            echo "No ISSUE-x or TASK-x found in PR title: $PR_TITLE"
+          fi
+      - name: Remove Notion tag
+        env:
+          GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
+        if: steps.check-title.outputs.has_tag == 'true'
+        run: |
+          PR_NUMBER=${{ github.event.issue.number }}
+          PR_TITLE=$(gh pr view $PR_NUMBER --json title --jq .title)
+          # Remove [ISSUE-x] or [TASK-x] pattern and trim any extra spaces
+          NEW_TITLE=$(echo "$PR_TITLE" | sed -E 's/\[(ISSUE|TASK)-[0-9]+\]\s*//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          gh pr edit $PR_NUMBER --title "$NEW_TITLE"
