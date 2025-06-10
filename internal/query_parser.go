@@ -1,4 +1,4 @@
-package neorm
+package internal
 
 import (
 	"bytes"

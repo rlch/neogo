@@ -6,6 +6,7 @@ import (
 
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWhere(t *testing.T) {
@@ -778,6 +779,86 @@ func TestWhere(t *testing.T) {
 				Parameters: map[string]any{
 					"statuses": statuses,
 				},
+			})
+		})
+	})
+
+	t.Run("Implicit syntax", func(t *testing.T) {
+		// t.Run("Tries to convert 3 arguments to a Cond()", func(t *testing.T) {
+		// 	c := internal.NewCypherClient(r)
+		// 	cy, err := c.
+		// 		Match(db.Node("n")).
+		// 		Where("n.id", "=", db.String("123")).
+		// 		Return("n").
+		// 		Compile()
+		// 	Check(t, cy, err, internal.CompiledCypher{
+		// 		Cypher: `
+		// 		MATCH (n)
+		// 		WHERE n.id = "123"
+		// 		RETURN n
+		// 		`,
+		// 	})
+		// })
+
+		t.Run("Forwards all WhereOptions", func(t *testing.T) {
+			c := internal.NewCypherClient(r)
+			cy, err := c.
+				Match(db.Node("n")).
+				Where(
+					db.Cond("n.id", "=", db.String("123")),
+					db.Cond("n.name", "=", db.String("Test")),
+				).
+				Return("n").
+				Compile()
+			Check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH (n)
+				WHERE n.id = "123" AND n.name = "Test"
+				RETURN n
+				`,
+			})
+		})
+
+		t.Run("Creates an expression for multiple arguemnts", func(t *testing.T) {
+			c := internal.NewCypherClient(r)
+			cy, err := c.
+				Match(db.Node("n")).
+				Where(
+					"n.id = ?", "123",
+				).
+				Return("n").
+				Compile()
+			Check(t, cy, err, internal.CompiledCypher{
+				Cypher: `
+				MATCH (n)
+				WHERE n.id = $v1
+				RETURN n
+				`,
+				Parameters: map[string]any{
+					"v1": "123",
+				},
+			})
+		})
+
+		t.Run("Fails when expecting all WhereOptions", func(t *testing.T) {
+			c := internal.NewCypherClient(r)
+			require.PanicsWithError(t, "expected all args to be ICondition, but arg 1 is string", func() {
+				_, _ = c.
+					Match(db.Node("n")).
+					Where(db.Cond("n.id", "=", "1"), "oopsie").
+					Return("n").
+					Compile()
+			})
+		})
+
+		t.Run("Fails when the first arguemnt is not a string or ICondition", func(t *testing.T) {
+			c := internal.NewCypherClient(r)
+			require.PanicsWithError(t, "expected condition to be ICondition, <key> <op> <value> or <expr> <args>", func() {
+				_, _ = c.
+					Match(db.Node("n")).
+					Where(123).
+					Return("n").
+					Compile()
 			})
 		})
 	})

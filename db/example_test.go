@@ -281,7 +281,7 @@ func ExamplePropsExpr() {
 func ExampleWhere() {
 	c().
 		Match(Node("n")).
-		Where(Cond("n.name", "=", String("Alice"))).
+		Where("n.name", "=", String("Alice")).
 		Print()
 	// Output:
 	// MATCH (n)

@@ -267,8 +267,7 @@ func (r *Registry) BindAbstractNode(node neo4j.Node, to reflect.Value) error {
 	if err != nil {
 		return err
 	}
-	impl := implNode.typ
-	toImpl := reflect.New(reflect.TypeOf(impl).Elem())
+	toImpl := reflect.New(implNode.Type())
 	err = r.BindValue(node.Props, toImpl)
 	if err != nil {
 		return err

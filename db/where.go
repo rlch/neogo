@@ -24,7 +24,7 @@ func Where(args ...any) interface {
 			for i, arg := range args {
 				opt, ok := arg.(internal.WhereOption)
 				if !ok {
-					panic(fmt.Sprintf("expected option %d to be of type WhereOption, got %T. See Where() documentation.", i, arg))
+					panic(fmt.Errorf("expected option %d to be of type WhereOption, got %T. See Where() documentation", i, arg))
 				}
 				opts = append(opts, opt)
 			}
@@ -33,7 +33,7 @@ func Where(args ...any) interface {
 				Expr(expr, args[1:]...),
 			}
 		} else {
-			panic(fmt.Sprintf("expected first argument to be a string expression or WhereOption, got %T. See Where() documentation.", args[0]))
+			panic(fmt.Errorf("expected first argument to be a string expression or WhereOption, got %T. See Where() documentation", args[0]))
 		}
 	}
 	return &internal.Configurer{

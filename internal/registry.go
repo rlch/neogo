@@ -16,7 +16,7 @@ type (
 	}
 	RegisteredEntity interface {
 		Name() string
-		Type() any
+		Type() reflect.Type
 		FieldsToProps() map[string]string
 	}
 	RegisteredAbstractNode struct {
@@ -25,7 +25,7 @@ type (
 	}
 	RegisteredNode struct {
 		name          string
-		typ           any
+		rType         reflect.Type
 		fieldsToProps map[string]string
 
 		Labels        []string
@@ -33,7 +33,7 @@ type (
 	}
 	RegisteredRelationship struct {
 		name          string
-		typ           any
+		rType         reflect.Type
 		fieldsToProps map[string]string
 
 		Reltype   string
@@ -45,8 +45,10 @@ type (
 		*RegisteredNode
 	}
 	RelationshipTarget struct {
-		Dir bool // true = ->, false = <-
-		// Rel will be nil if the relationship is a shorthand.
+		// Many will be true if there is a (one/many)-to-many relationship between the source and target node.
+		Many bool
+		// true = ->, false = <-
+		Dir bool
 		Rel *RegisteredRelationship
 	}
 )
@@ -55,8 +57,12 @@ func (r *RegisteredNode) Name() string {
 	return r.name
 }
 
-func (r *RegisteredNode) Type() any {
-	return r.typ
+func (r *RegisteredNode) Type() reflect.Type {
+	return r.rType
+}
+
+func (r *RegisteredNode) ReflectType() any {
+	return r.rType
 }
 
 func (r *RegisteredNode) FieldsToProps() map[string]string {
@@ -67,8 +73,8 @@ func (r *RegisteredRelationship) Name() string {
 	return r.name
 }
 
-func (r *RegisteredRelationship) Type() any {
-	return r.typ
+func (r *RegisteredRelationship) Type() reflect.Type {
+	return r.rType
 }
 
 func (r *RegisteredRelationship) FieldsToProps() map[string]string {
@@ -118,7 +124,8 @@ func (r *Registry) RegisterType(typ any) (registered any) {
 
 func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 	vv := UnwindValue(reflect.ValueOf(v))
-	name := vv.Type().Name()
+	vvt := vv.Type()
+	name := vvt.Name()
 	if n, ok := r.registeredTypes[name]; ok {
 		if reg, ok := n.(*RegisteredNode); ok {
 			return reg
@@ -127,7 +134,7 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 		}
 	}
 	registered := &RegisteredNode{
-		typ:           v,
+		rType:         vvt,
 		name:          name,
 		Labels:        []string{},
 		fieldsToProps: make(map[string]string),
@@ -169,21 +176,23 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 
 			parts := strings.Split(neo4jTag, ",")
 			if len(parts) == 0 {
-				return false, fmt.Errorf("invalid tag format for field %s.%s: %s", vv.Type().Name(), typ.Name, neo4jTag)
+				return false, fmt.Errorf("invalid tag format for field %s.%s: %s", vvt.Name(), typ.Name, neo4jTag)
 			}
 			registerRelationshipField := func(dir bool, shorthand string) error {
 				relType := typ.Type
+				isMany := false
 				if relType.Kind() == reflect.Slice {
 					relType = relType.Elem()
+					isMany = true
 				}
 				if relType.Kind() != reflect.Ptr {
-					return fmt.Errorf("invalid relationship for field %s.%s", vv.Type().Name(), typ.Name)
+					return fmt.Errorf("invalid relationship for field %s.%s", vvt.Name(), typ.Name)
 				}
 				var relReg *RegisteredRelationship
 				if shorthand != "" {
 					node, ok := reflect.New(relType.Elem()).Interface().(INode)
 					if !ok {
-						return fmt.Errorf("expected a pointer to a struct, implementing INode for field %s.%s", vv.Type().Name(), typ.Name)
+						return fmt.Errorf("expected a pointer to a struct, implementing INode for field %s.%s", vvt.Name(), typ.Name)
 					}
 					target := r.RegisterNode(node)
 					relReg = &RegisteredRelationship{Reltype: shorthand}
@@ -202,16 +211,18 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 							RegisteredNode: target,
 						}
 					}
+					r.registeredTypes[shorthand] = relReg
 				} else {
 					rel, ok := reflect.New(relType.Elem()).Interface().(IRelationship)
 					if !ok {
-						return fmt.Errorf("expected a pointer to a struct, implementing IRelationship for field %s.%s", vv.Type().Name(), typ.Name)
+						return fmt.Errorf("expected a pointer to a struct, implementing IRelationship for field %s.%s", vvt.Name(), typ.Name)
 					}
 					relReg = r.RegisterRelationship(rel)
 				}
 				registered.Relationships[typ.Name] = RelationshipTarget{
-					Dir: dir,
-					Rel: relReg,
+					Dir:  dir,
+					Rel:  relReg,
+					Many: isMany,
 				}
 				return nil
 			}
@@ -222,7 +233,7 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 					return false, err
 				}
 			case "":
-				return false, fmt.Errorf("field has empty neo4j label / direction: %s.%s", vv.Type().Name(), typ.Name)
+				return false, fmt.Errorf("field has empty neo4j label / direction: %s.%s", vvt.Name(), typ.Name)
 			default:
 				// TODO: There should be labels that aren't bindable (created with neogo.Label)
 				if typ.Anonymous {
@@ -285,13 +296,14 @@ func (r *Registry) RegisterAbstractNode(typ any, typAbs IAbstract) *RegisteredAb
 
 func (r *Registry) RegisterRelationship(v IRelationship) *RegisteredRelationship {
 	vv := UnwindValue(reflect.ValueOf(v))
-	name := vv.Type().Name()
+	vvt := vv.Type()
+	name := vvt.Name()
 	if v, ok := r.registeredTypes[name]; ok {
 		return v.(*RegisteredRelationship)
 	}
 	registered := &RegisteredRelationship{
 		name:          name,
-		typ:           v,
+		rType:         vvt,
 		fieldsToProps: make(map[string]string),
 	}
 	r.Relationships = append(r.Relationships, registered)
@@ -309,18 +321,18 @@ func (r *Registry) RegisterRelationship(v IRelationship) *RegisteredRelationship
 			}
 			parts := strings.Split(neo4jTag, ",")
 			if len(parts) == 0 {
-				return false, fmt.Errorf("invalid tag format for field %s.%s: %s", vv.Type().Name(), typ.Name, neo4jTag)
+				return false, fmt.Errorf("invalid tag format for field %s.%s: %s", vvt.Name(), typ.Name, neo4jTag)
 			}
 			switch parts[0] {
 			case "startNode", "endNode":
 				isStart := parts[0] == "startNode"
 				nodeType := typ.Type
 				if nodeType.Kind() != reflect.Ptr {
-					return false, fmt.Errorf("expected a pointer to a struct, implementing INode for field %s.%s", vv.Type().Name(), typ.Name)
+					return false, fmt.Errorf("expected a pointer to a struct, implementing INode for field %s.%s", vvt.Name(), typ.Name)
 				}
 				node, ok := reflect.New(nodeType.Elem()).Interface().(INode)
 				if !ok {
-					return false, fmt.Errorf("expected a pointer to a struct, implementing INode for field %s.%s", vv.Type().Name(), typ.Name)
+					return false, fmt.Errorf("expected a pointer to a struct, implementing INode for field %s.%s", vvt.Name(), typ.Name)
 				}
 				nodeReg := r.RegisterNode(node)
 				if isStart {
@@ -335,10 +347,10 @@ func (r *Registry) RegisterRelationship(v IRelationship) *RegisteredRelationship
 					}
 				}
 			case "":
-				return false, fmt.Errorf("field has empty neo4j label: %s.%s", vv.Type().Name(), typ.Name)
+				return false, fmt.Errorf("field has empty neo4j label: %s.%s", vvt.Name(), typ.Name)
 			default:
 				if registered.Reltype != "" {
-					return false, fmt.Errorf("relationship has multiple neo4j labels: %s.%s", vv.Type().Name(), typ.Name)
+					return false, fmt.Errorf("relationship has multiple neo4j labels: %s.%s", vvt.Name(), typ.Name)
 				}
 				registered.Reltype = parts[0]
 			}
@@ -369,6 +381,10 @@ func (r *Registry) Get(typ reflect.Type) (entity RegisteredEntity) {
 		return r.registeredTypes["Base"+name]
 	}
 	return nil
+}
+
+func (r *Registry) GetByName(name string) (entity RegisteredEntity) {
+	return r.registeredTypes[name]
 }
 
 func (r *Registry) GetConcreteImplementation(nodeLabels []string) (*RegisteredNode, error) {

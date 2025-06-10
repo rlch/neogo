@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -60,8 +61,9 @@ type (
 	}
 )
 
-var isWriteRe = regexp.MustCompile(
-	`\b(CREATE|MERGE|DELETE|SET|REMOVE|CALL)\b`,
+var (
+	isWriteRe               = regexp.MustCompile(`\b(CREATE|MERGE|DELETE|SET|REMOVE|CALL)\b`)
+	errInvalidConditionArgs = errors.New("expected condition to be ICondition, <key> <op> <value> or <expr> <args>")
 )
 
 func newCypherQuerier(cy *cypher) *CypherQuerier {
@@ -78,6 +80,7 @@ func newCypherReader(cy *cypher, parent *Scope) *CypherReader {
 	return &CypherReader{
 		cypher:       cy,
 		CypherRunner: newCypherRunner(cy, false),
+		Parent:       parent,
 	}
 }
 
@@ -178,10 +181,51 @@ func (c *CypherReader) Eval(expression func(*Scope, *strings.Builder)) *CypherQu
 	return newCypherQuerier(c.cypher)
 }
 
-func (c *CypherQuerier) Where(opts ...WhereOption) *CypherQuerier {
+func (c *CypherQuerier) Where(args ...any) *CypherQuerier {
 	where := &Where{}
-	for _, opt := range opts {
-		opt.configureWhere(where)
+	argsToCondition := func() (ICondition, error) {
+		if len(args) == 0 {
+			return nil, errInvalidConditionArgs
+		}
+		if firstCond, ok := args[0].(ICondition); ok {
+			if len(args) == 1 {
+				return firstCond, nil
+			}
+			conds := make([]*Condition, len(args))
+			for i, arg := range args {
+				if cond, ok := arg.(ICondition); ok {
+					conds[i] = cond.Condition()
+				} else {
+					return nil, fmt.Errorf("expected all args to be ICondition, but arg %d is %T", i, arg)
+				}
+			}
+			return &Condition{And: conds}, nil
+		}
+		// tryParseCond := func() ICondition {
+		// 	key := args[0]
+		// 	op, ok := args[1].(string)
+		// 	if !ok {
+		// 		return nil
+		// 	}
+		// 	value := args[2]
+		// 	return &Condition{Key: key, Op: op, Value: value}
+		// }
+		// if len(args) == 3 {
+		// 	if cond := tryParseCond(); cond != nil {
+		// 		return cond, nil
+		// 	}
+		// }
+		query, ok := args[0].(string)
+		if !ok {
+			return nil, errInvalidConditionArgs
+		}
+		return &Expr{Value: query, Args: args[1:]}, nil
+	}
+	cond, err := argsToCondition()
+	if err != nil {
+		panic(err)
+	} else {
+		cond.configureWhere(where)
 	}
 	c.writeWhereClause(where, false)
 	return newCypherQuerier(c.cypher)

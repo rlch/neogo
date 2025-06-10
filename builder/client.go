@@ -159,7 +159,7 @@ type Querier interface {
 	Updater[Querier]
 
 	// Where writes a WHERE clause to the query.
-	Where(opts ...internal.WhereOption) Querier
+	Where(args ...any) Querier
 }
 
 // Updater is the interface for updating data in the database.

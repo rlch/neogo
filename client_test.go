@@ -397,7 +397,7 @@ func TestUnmarshalRecords(t *testing.T) {
 
 	t.Run("binds to abstract nodes", func(t *testing.T) {
 		s := &session{}
-		s.RegisterTypes(&tests.BaseOrganism{}, &tests.BasePet{})
+		s.reg.RegisterTypes(&tests.BaseOrganism{}, &tests.BasePet{})
 		var n []tests.Organism
 		cy := &internal.CompiledCypher{
 			Bindings: map[string]reflect.Value{
@@ -466,10 +466,10 @@ func TestUnmarshalRecords(t *testing.T) {
 	t.Run("binds to [][]Abstract", func(t *testing.T) {
 		s := &session{
 			driver: &driver{
-				Registry: internal.NewRegistry(),
+				reg: internal.NewRegistry(),
 			},
 		}
-		s.RegisterTypes(&tests.BaseOrganism{}, &tests.BasePet{})
+		s.reg.RegisterTypes(&tests.BaseOrganism{}, &tests.BasePet{})
 		var n [][]tests.Organism
 		cy := &internal.CompiledCypher{
 			Bindings: map[string]reflect.Value{
@@ -534,7 +534,7 @@ func TestUnmarshalRecords(t *testing.T) {
 
 	t.Run("binds to [][]Concrete where Concrete is an implementation of Abstract", func(t *testing.T) {
 		s := &session{}
-		s.RegisterTypes(&tests.BaseOrganism{}, &tests.BasePet{})
+		s.reg.RegisterTypes(&tests.BaseOrganism{}, &tests.BasePet{})
 		var n [][]tests.BasePet
 		cy := &internal.CompiledCypher{
 			Bindings: map[string]reflect.Value{
@@ -576,7 +576,7 @@ func TestUnmarshalRecords(t *testing.T) {
 		require := require.New(t)
 		s := &session{
 			driver: &driver{
-				Registry: internal.NewRegistry(),
+				reg: internal.NewRegistry(),
 			},
 		}
 

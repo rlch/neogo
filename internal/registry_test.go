@@ -1,11 +1,10 @@
 package internal
 
 import (
-	"fmt"
+	"maps"
 	"reflect"
 	"testing"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,37 +61,37 @@ type (
 
 var (
 	simpleNodeReg = &RegisteredNode{
-		typ:           &simpleNode{},
+		rType:         reflect.TypeOf(simpleNode{}),
 		name:          "simpleNode",
 		Labels:        []string{"Simple"},
 		fieldsToProps: map[string]string{"ID": "id"},
 	}
 	nestedLabelsNodeReg = &RegisteredNode{
-		typ:           &nestedLabelsNode{},
+		rType:         reflect.TypeOf(nestedLabelsNode{}),
 		name:          "nestedLabelsNode",
 		Labels:        []string{"Simple", "Nested"},
 		fieldsToProps: map[string]string{"ID": "id"},
 	}
 	nestedLabelsUsingLabelNodeReg = &RegisteredNode{
-		typ:           &nestedLabelsUsingLabelNode{},
+		rType:         reflect.TypeOf(nestedLabelsUsingLabelNode{}),
 		name:          "nestedLabelsUsingLabelNode",
 		Labels:        []string{"Simple", "Nested", "Label"},
 		fieldsToProps: map[string]string{"ID": "id"},
 	}
 	nodeWithPropertiesReg = &RegisteredNode{
-		typ:           &nodeWithProperties{},
+		rType:         reflect.TypeOf(nodeWithProperties{}),
 		name:          "nodeWithProperties",
 		Labels:        []string{"Simple"},
 		fieldsToProps: map[string]string{"ID": "id", "Name": "name"},
 	}
 	simpleRelationshipReg = &RegisteredRelationship{
-		typ:           &simpleRelationship{},
+		rType:         reflect.TypeOf(simpleRelationship{}),
 		name:          "simpleRelationship",
 		Reltype:       "SIMPLE",
 		fieldsToProps: map[string]string{"Field": "field"},
 	}
 	nodeWithRelationshipReg = &RegisteredNode{
-		typ:           &nodeWithRelationship{},
+		rType:         reflect.TypeOf(nodeWithRelationship{}),
 		name:          "nodeWithRelationship",
 		Labels:        []string{"Simple"},
 		fieldsToProps: map[string]string{"ID": "id"},
@@ -106,12 +105,14 @@ var (
 				Rel: simpleRelationshipReg,
 			},
 			"Forwards": {
-				Dir: true,
-				Rel: simpleRelationshipReg,
+				Dir:  true,
+				Rel:  simpleRelationshipReg,
+				Many: true,
 			},
 			"Backwards": {
-				Dir: false,
-				Rel: simpleRelationshipReg,
+				Dir:  false,
+				Rel:  simpleRelationshipReg,
+				Many: true,
 			},
 		},
 	}
@@ -141,12 +142,10 @@ func init() {
 		RegisteredNode: nodeWithRelationshipReg,
 	}
 
-	for field, r := range nodeWithRelationshipReg.Relationships {
-		nodeWithRelationshipReg.Relationships[field] = r
-	}
+	maps.Copy(nodeWithRelationshipReg.Relationships, nodeWithRelationshipReg.Relationships)
 
 	*shorthandRelationshipNodeReg = RegisteredNode{
-		typ:           &shorthandRelationshipNode{},
+		rType:         reflect.TypeOf(shorthandRelationshipNode{}),
 		name:          "shorthandRelationshipNode",
 		Labels:        []string{"Simple"},
 		fieldsToProps: map[string]string{"ID": "id"},
@@ -160,19 +159,19 @@ func init() {
 				Rel: shorthandRelationshipReg(false),
 			},
 			"Forwards": {
-				Dir: true,
-				Rel: shorthandRelationshipReg(true),
+				Dir:  true,
+				Rel:  shorthandRelationshipReg(true),
+				Many: true,
 			},
 			"Backwards": {
-				Dir: false,
-				Rel: shorthandRelationshipReg(false),
+				Dir:  false,
+				Rel:  shorthandRelationshipReg(false),
+				Many: true,
 			},
 		},
 	}
 
-	for field, r := range shorthandRelationshipNodeReg.Relationships {
-		shorthandRelationshipNodeReg.Relationships[field] = r
-	}
+	maps.Copy(shorthandRelationshipNodeReg.Relationships, shorthandRelationshipNodeReg.Relationships)
 }
 
 func TestRegisterNode(t *testing.T) {
@@ -219,8 +218,6 @@ func TestRegisterNode(t *testing.T) {
 			reg, err := panicToErr(
 				func() *RegisteredNode { return r.RegisterNode(test.node) },
 			)
-			fmt.Println("want", spew.Sdump(test.want))
-			fmt.Println("got", spew.Sdump(reg))
 			if test.wantErr != "" {
 				require.ErrorContains(err, test.wantErr)
 			} else if err != nil {
@@ -240,7 +237,7 @@ func TestGet(t *testing.T) {
 		require.Equal(
 			&RegisteredNode{
 				name:   "Human",
-				typ:    &Human{},
+				rType:  reflect.TypeOf(Human{}),
 				Labels: []string{"Organism", "Human"},
 				fieldsToProps: map[string]string{
 					"ID":    "id",
@@ -257,7 +254,7 @@ func TestGet(t *testing.T) {
 		require.Equal(
 			&RegisteredNode{
 				name:   "Human",
-				typ:    &Human{},
+				rType:  reflect.TypeOf(Human{}),
 				Labels: []string{"Organism", "Human"},
 				fieldsToProps: map[string]string{
 					"ID":    "id",
@@ -298,7 +295,7 @@ func TestGetConcreteImplementation(t *testing.T) {
 		r.RegisterTypes(&BaseOrganism{})
 		impl, err := r.GetConcreteImplementation([]string{"Organism"})
 		require.NoError(err)
-		require.Equal(&BaseOrganism{}, impl.typ)
+		require.Equal(reflect.TypeOf(BaseOrganism{}), impl.Type())
 	})
 
 	t.Run("finds concrete implementation that satisfies labels", func(t *testing.T) {
@@ -307,6 +304,6 @@ func TestGetConcreteImplementation(t *testing.T) {
 		r.RegisterTypes(&BaseOrganism{})
 		impl, err := r.GetConcreteImplementation([]string{"Human", "Organism"})
 		require.NoError(err)
-		require.Equal(&Human{}, impl.typ)
+		require.Equal(reflect.TypeOf(Human{}), impl.Type())
 	})
 }

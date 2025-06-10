@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -51,13 +52,13 @@ func (s *cypher) catch(op func()) {
 			err, ok := r.(error)
 			if ok {
 				s.AddError(err)
+			} else {
+				s.AddError(fmt.Errorf("unexpected panic: %v", r))
 			}
 			fmt.Printf("Panicked while building the following query:\n%s", s.String())
 			s.Print()
 			debug.PrintStack()
-			if !ok {
-				panic(err)
-			}
+			panic(s.err.Error())
 		}
 	}()
 	op()
@@ -608,9 +609,7 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 				orderByKeys[i] = key.(string)
 				i++
 			}
-			sort.Slice(orderByKeys, func(u, v int) bool {
-				return orderByKeys[u] < orderByKeys[v]
-			})
+			slices.Sort(orderByKeys)
 			for i, sb := range orderByKeys {
 				asc := subclause.OrderBy[sb]
 				if i > 0 {

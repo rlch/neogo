@@ -89,7 +89,8 @@ func TestDriver(t *testing.T) {
     WITH count(n) AS count, n, c
 		DETACH DELETE n, c
 		`).
-		Return(db.Qual(&count, "count")).
+		Match(db.Query(&adam, "Friends p:.")).
+		Return(db.Qual(&count, "count"), "c").
 		Run(ctx)
 	if err != nil {
 		t.Errorf("failed to delete test nodes: %s", err)

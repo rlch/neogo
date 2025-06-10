@@ -193,7 +193,7 @@ func ExampleQuery_Subquery() {
 	// RETURN p.name, numberOfConnections
 }
 
-func ExampleQuery_Call() {
+func ExampleReader_Call() {
 	var labels []string
 	c().
 		Call("db.labels()").
@@ -207,7 +207,7 @@ func ExampleQuery_Call() {
 	// RETURN label
 }
 
-func ExampleQuery_Show() {
+func ExampleReader_Show() {
 	var (
 		name any
 		sig  string
@@ -229,7 +229,7 @@ func ExampleQuery_Show() {
 	// RETURN signature
 }
 
-func ExampleQuery_Unwind() {
+func ExampleReader_Unwind() {
 	events := map[string]any{
 		"events": []map[string]any{
 			{

@@ -27,6 +27,9 @@ type (
 	//
 	// It's safe for concurrent use.
 	Driver interface {
+		// Registry returns the internal registry used by this driver.
+		Registry() *internal.Registry
+
 		// DB returns the underlying neo4j driver.
 		DB() neo4j.DriverWithContext
 
@@ -100,7 +103,7 @@ type (
 
 type (
 	driver struct {
-		*internal.Registry
+		reg                  *internal.Registry
 		db                   neo4j.DriverWithContext
 		causalConsistencyKey func(ctx context.Context) string
 	}
@@ -147,9 +150,11 @@ func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execC
 // [IAbstract], [INode] and [IRelationship] to be used with [neogo].
 func WithTypes(types ...any) func(*driver) {
 	return func(d *driver) {
-		d.RegisterTypes(types...)
+		d.reg.RegisterTypes(types...)
 	}
 }
+
+func (d *driver) Registry() *internal.Registry { return d.reg }
 
 func (d *driver) DB() neo4j.DriverWithContext { return d.db }
 
@@ -174,7 +179,7 @@ func (d *driver) Exec(configurers ...func(*execConfig)) Query {
 		db:         d.db,
 		execConfig: config,
 	}
-	return session.newClient(internal.NewCypherClient(d.Registry))
+	return session.newClient(internal.NewCypherClient(d.reg))
 }
 
 func (d *driver) ensureCausalConsistency(ctx context.Context, sc *neo4j.SessionConfig) {
@@ -241,7 +246,7 @@ func (s *session) Close(ctx context.Context, errs ...error) error {
 func (s *session) ReadTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		return nil, work(func() Query {
-			c := s.newClient(internal.NewCypherClient(s.Registry))
+			c := s.newClient(internal.NewCypherClient(s.reg))
 			c.currentTx = tx
 			return c
 		})
@@ -252,7 +257,7 @@ func (s *session) ReadTransaction(ctx context.Context, work Work, configurers ..
 func (s *session) WriteTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		return nil, work(func() Query {
-			c := s.newClient(internal.NewCypherClient(s.Registry))
+			c := s.newClient(internal.NewCypherClient(s.reg))
 			c.currentTx = tx
 			return c
 		})
@@ -270,7 +275,7 @@ func (s *session) BeginTransaction(ctx context.Context, configurers ...func(*neo
 
 func (t *transactionImpl) Run(work Work) error {
 	return work(func() Query {
-		c := t.session.newClient(internal.NewCypherClient(t.session.Registry))
+		c := t.session.newClient(internal.NewCypherClient(t.session.reg))
 		c.currentTx = t.tx
 		return c
 	})

@@ -28,6 +28,9 @@ var (
 )
 
 type (
+	queryPattern struct {
+		Pattern
+	}
 	nodePattern struct {
 		pathName     string
 		data         any
