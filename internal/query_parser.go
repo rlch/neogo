@@ -153,7 +153,7 @@ func (p *parser) scanIgnoreWhitespace() (tok token, lit string) {
 	return
 }
 
-func (p *parser) parse() (query []*querySelector, err error) {
+func (p *parser) parse() (query QuerySpec, err error) {
 	expectNextField := func() error {
 		tok, lit := p.scan()
 		p.unscan()
@@ -163,8 +163,8 @@ func (p *parser) parse() (query []*querySelector, err error) {
 		return nil
 	}
 
-	parseSelector := func() (*querySelector, error) {
-		qp := &querySelector{}
+	parseSelector := func() (*QuerySelector, error) {
+		qp := &QuerySelector{}
 		tok, lit := p.scanIgnoreWhitespace()
 		switch tok {
 		case tokenIdent:

@@ -12,8 +12,10 @@ func TestCypherClient(t *testing.T) {
 		t.Run("false when using non-write clauses", func(t *testing.T) {
 			cy := newCypher(r)
 			newCypherClient(cy).
-				Match(&CypherPattern{
-					ns: []*nodePattern{{data: "n"}},
+				Match(&CypherPatterns{
+					resolver: func(r *Registry) []*nodePatternPart {
+						return []*nodePatternPart{{data: "n"}}
+					},
 				}).
 				Where(&Condition{
 					Key:   "n.age",
@@ -28,8 +30,10 @@ func TestCypherClient(t *testing.T) {
 		t.Run("true when using write clauses", func(t *testing.T) {
 			cy := newCypher(r)
 			newCypherClient(cy).
-				Create(&CypherPattern{
-					ns: []*nodePattern{{data: "n"}},
+				Create(&CypherPatterns{
+					resolver: func(r *Registry) []*nodePatternPart {
+						return []*nodePatternPart{{data: "n"}}
+					},
 				}).
 				Return("n", "y")
 			assert.Equal(t, true, cy.isWrite)
@@ -52,8 +56,10 @@ func TestCypherClient(t *testing.T) {
 			cy := newCypher(r)
 			newCypherClient(cy).
 				Subquery(func(c *CypherClient) *CypherRunner {
-					return c.Create(&CypherPattern{
-						ns: []*nodePattern{{data: "n"}},
+					return c.Create(&CypherPatterns{
+						resolver: func(r *Registry) []*nodePatternPart {
+							return []*nodePatternPart{{data: "n"}}
+						},
 					}).CypherRunner
 				}).
 				Return("n")

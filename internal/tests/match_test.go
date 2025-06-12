@@ -6,6 +6,7 @@ import (
 
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMatch(t *testing.T) {
@@ -450,6 +451,32 @@ func TestMatch(t *testing.T) {
 					"x.name":  reflect.ValueOf(&name),
 				},
 			})
+		})
+	})
+
+	t.Run("Query syntax", func(t *testing.T) {
+		c := internal.NewCypherClient(r)
+		var m Movie
+		sel, err := internal.ResolveQuery(r, &m, "m:. a:ActedIn p:.")
+		require.NoError(t, err)
+
+		cy, err := c.
+			Match(db.Query(&m, "m:. a:ActedIn p:.").Related(nil, &m)).
+			Return("*").Compile()
+
+		Check(t, cy, err, internal.CompiledCypher{
+			Cypher: `
+			MATCH (m:Movie)<-[a:ACTED_IN]-(p:Person)--(m)
+			RETURN *
+			`,
+			Bindings: map[string]reflect.Value{
+				"m": reflect.ValueOf(&m),
+				"a": cy.Bindings["a"],
+				"p": cy.Bindings["p"],
+			},
+			Queries: map[string]*internal.NodeSelection{
+				"m": sel,
+			},
 		})
 	})
 }

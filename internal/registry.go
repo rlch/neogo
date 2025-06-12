@@ -29,7 +29,7 @@ type (
 		fieldsToProps map[string]string
 
 		Labels        []string
-		Relationships map[string]RelationshipTarget
+		Relationships map[string]*RelationshipTarget
 	}
 	RegisteredRelationship struct {
 		name          string
@@ -81,11 +81,11 @@ func (r *RegisteredRelationship) FieldsToProps() map[string]string {
 	return r.fieldsToProps
 }
 
-func (r RelationshipTarget) Target() *RegisteredNode {
+func (r RelationshipTarget) Target() *NodeTarget {
 	if r.Dir {
-		return r.Rel.EndNode.RegisteredNode
+		return &r.Rel.EndNode
 	} else {
-		return r.Rel.StartNode.RegisteredNode
+		return &r.Rel.StartNode
 	}
 }
 
@@ -138,7 +138,7 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 		name:          name,
 		Labels:        []string{},
 		fieldsToProps: make(map[string]string),
-		Relationships: make(map[string]RelationshipTarget),
+		Relationships: make(map[string]*RelationshipTarget),
 	}
 
 	r.Nodes = append(r.Nodes, registered)
@@ -219,7 +219,7 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 					}
 					relReg = r.RegisterRelationship(rel)
 				}
-				registered.Relationships[typ.Name] = RelationshipTarget{
+				registered.Relationships[typ.Name] = &RelationshipTarget{
 					Dir:  dir,
 					Rel:  relReg,
 					Many: isMany,

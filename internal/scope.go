@@ -3,6 +3,7 @@ package internal
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"strconv"
@@ -17,6 +18,7 @@ func newScope(registry *Registry) *Scope {
 	return &Scope{
 		Registry:       registry,
 		bindings:       make(map[string]reflect.Value),
+		queries:        make(map[string]*NodeSelection),
 		names:          make(map[reflect.Value]string),
 		generatedNames: map[string]struct{}{},
 		fields:         make(map[uintptr]field),
@@ -32,6 +34,7 @@ type (
 
 		isWrite        bool
 		bindings       map[string]reflect.Value
+		queries        map[string]*NodeSelection
 		generatedNames map[string]struct{}
 		names          map[reflect.Value]string
 		fields         map[uintptr]field
@@ -90,6 +93,13 @@ Bindings:
 {{- range $key, $value := .Bindings }}
   {{ $key }}: {{ $value | printf "%v" }},
 {{- end }}
+}
+
+Queries:
+{
+{{- range $key, $value := .Queries }}
+  {{ $key }}: {{ $value | printf "%v" }},
+{{- end }}
 }` + "\n")
 	if err != nil {
 		panic(err)
@@ -97,13 +107,23 @@ Bindings:
 	err = t.Execute(os.Stdout, struct {
 		Parameters map[string]any
 		Bindings   map[string]reflect.Value
+		Queries    map[string]*NodeSelection
 	}{
 		Parameters: s.parameters,
 		Bindings:   s.bindings,
+		Queries:    s.queries,
 	})
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (m *member) name() string {
+	name := m.alias
+	if name == "" {
+		name = m.expr
+	}
+	return name
 }
 
 func (m *member) Print() {
@@ -122,33 +142,24 @@ func (m *member) Print() {
 
 func (s *Scope) clone() *Scope {
 	bindings := make(map[string]reflect.Value, len(s.bindings))
-	for k, v := range s.bindings {
-		bindings[k] = v
-	}
+	maps.Copy(bindings, s.bindings)
+	queries := make(map[string]*NodeSelection, len(s.queries))
+	maps.Copy(queries, s.queries)
 	generatedNames := make(map[string]struct{}, len(s.generatedNames))
-	for k, v := range s.generatedNames {
-		generatedNames[k] = v
-	}
+	maps.Copy(generatedNames, s.generatedNames)
 	names := make(map[reflect.Value]string, len(s.names))
-	for k, v := range s.names {
-		names[k] = v
-	}
+	maps.Copy(names, s.names)
 	fields := make(map[uintptr]field, len(s.fields))
-	for k, v := range s.fields {
-		fields[k] = v
-	}
+	maps.Copy(fields, s.fields)
 	paramCounter := s.paramCounter
 	parameters := make(map[string]any, len(s.parameters))
-	for k, v := range s.parameters {
-		parameters[k] = v
-	}
+	maps.Copy(parameters, s.parameters)
 	paramAddrs := make(map[uintptr]string, len(s.paramAddrs))
-	for k, v := range s.paramAddrs {
-		paramAddrs[k] = v
-	}
+	maps.Copy(paramAddrs, s.paramAddrs)
 	return &Scope{
 		Registry:       s.Registry,
 		bindings:       bindings,
+		queries:        queries,
 		generatedNames: generatedNames,
 		names:          names,
 		fields:         fields,
@@ -169,14 +180,13 @@ func (child *Scope) mergeParentScope(parent *Scope) {
 		child.bindings[generatedName] = v
 		child.names[v] = generatedName
 	}
-	for k, v := range parent.fields {
-		child.fields[k] = v
-	}
+	maps.Copy(child.fields, parent.fields)
 	child.Registry = parent.Registry
 }
 
 func (s *Scope) clear() {
 	s.bindings = map[string]reflect.Value{}
+	s.queries = map[string]*NodeSelection{}
 	s.names = map[reflect.Value]string{}
 	s.generatedNames = map[string]struct{}{}
 	s.fields = map[uintptr]field{}
@@ -185,24 +195,13 @@ func (s *Scope) clear() {
 }
 
 func (s *Scope) MergeChildScope(child *Scope) {
-	for k, v := range child.bindings {
-		s.bindings[k] = v
-	}
-	for k, v := range child.names {
-		s.names[k] = v
-	}
-	for k, v := range child.generatedNames {
-		s.generatedNames[k] = v
-	}
-	for k, v := range child.fields {
-		s.fields[k] = v
-	}
-	for k, v := range child.parameters {
-		s.parameters[k] = v
-	}
-	for k, v := range child.paramAddrs {
-		s.paramAddrs[k] = v
-	}
+	maps.Copy(s.bindings, child.bindings)
+	maps.Copy(s.queries, child.queries)
+	maps.Copy(s.names, child.names)
+	maps.Copy(s.generatedNames, child.generatedNames)
+	maps.Copy(s.fields, child.fields)
+	maps.Copy(s.parameters, child.parameters)
+	maps.Copy(s.paramAddrs, child.paramAddrs)
 	s.paramCounter = child.paramCounter
 	if child.isWrite {
 		s.isWrite = true
@@ -281,10 +280,7 @@ func (s *Scope) replaceBinding(m *member) {
 	canElem := vT.Kind() == reflect.Ptr ||
 		vT.Kind() == reflect.Slice
 
-	name := m.alias
-	if name == "" {
-		name = m.expr
-	}
+	name := m.name()
 	if m.variable != nil && m.variable.Bind != nil {
 		bind := reflect.ValueOf(m.variable.Bind)
 		if bind.Kind() != reflect.Ptr {
@@ -340,7 +336,12 @@ func (s *Scope) lookup(value any) *member {
 	return s.add(value, true, nil)
 }
 
-func (s *Scope) add(value any, lookup bool, isNode *bool) *member {
+func (s *Scope) add(
+	value any,
+	lookup bool,
+	// true if the identifier is a node, false if it is a relationship
+	isNode *bool,
+) *member {
 	if value == nil {
 		return nil
 	}
@@ -514,7 +515,7 @@ func (s *Scope) add(value any, lookup bool, isNode *bool) *member {
 					value = value.Elem()
 				}
 				innerT := value.Type()
-				for i := 0; i < innerT.NumField(); i++ {
+				for i := range innerT.NumField() {
 					f := value.Field(i)
 					if !f.IsValid() || !f.CanInterface() || f.IsZero() {
 						continue
@@ -553,12 +554,16 @@ func (s *Scope) add(value any, lookup bool, isNode *bool) *member {
 	return m
 }
 
-func (s *Scope) addNode(n *nodePattern) *member {
+func (s *Scope) addNode(n *nodePatternPart) *member {
 	t := true
-	return s.add(n.data, false, &t)
+	member := s.add(n.data, false, &t)
+	if n.selection != nil && member.expr != "" {
+		s.queries[member.name()] = n.selection
+	}
+	return member
 }
 
-func (s *Scope) addRelationship(n *relationshipPattern) *member {
+func (s *Scope) addRelationship(n *rsPatternPart) *member {
 	f := false
 	return s.add(n.data, false, &f)
 }

@@ -1,20 +1,27 @@
 package internal
 
-import "errors"
+import (
+	"errors"
+)
 
 type (
 	Pattern interface {
 		Patterns
 		ICondition
 
-		nodePattern() *nodePattern
+		createNodePattern(*Registry) *nodePatternPart
+
+		setRelationship(
+			dir *bool,
+			relationshipMatch, nodeMatch any,
+		) Pattern
 		Related(relationshipMatch, nodeMatch any) Pattern
 		From(relationshipMatch, nodeMatch any) Pattern
 		To(relationshipMatch, nodeMatch any) Pattern
 	}
 
 	Patterns interface {
-		nodes() []*nodePattern
+		nodes(*Registry) []*nodePatternPart
 	}
 )
 
@@ -23,28 +30,120 @@ var (
 		Pattern
 		// A path can be used in a WHERE condition
 		WhereOption
-	} = (*CypherPath)(nil)
-	_ Patterns = (*CypherPattern)(nil)
+	} = (*CypherPattern)(nil)
+	_ Patterns = (*CypherPatterns)(nil)
 )
 
 type (
-	queryPattern struct {
-		Pattern
+	CypherPattern struct {
+		resolver func(*Registry) *nodePatternPart
 	}
-	nodePattern struct {
-		pathName     string
+	CypherPatterns struct {
+		resolver func(*Registry) []*nodePatternPart
+	}
+	nodePatternPart struct {
+		pathName string
+		// Defined for the head node of the query.
+		selection    *NodeSelection
 		data         any
-		relationship *relationshipPattern
+		relationship *rsPatternPart
 	}
-	relationshipPattern struct {
+	rsPatternPart struct {
 		data    any
-		to      *nodePattern
-		from    *nodePattern
-		related *nodePattern
+		to      *nodePatternPart
+		from    *nodePatternPart
+		related *nodePatternPart
 	}
 )
 
-func (n *nodePattern) next() *nodePattern {
+func NewNode(match any) Pattern {
+	return &CypherPattern{
+		resolver: func(_ *Registry) *nodePatternPart {
+			return &nodePatternPart{data: match}
+		},
+	}
+}
+
+func NewPath(path Pattern, name string) Pattern {
+	return &CypherPattern{
+		resolver: func(r *Registry) *nodePatternPart {
+			n := path.createNodePattern(r)
+			n.pathName = name
+			return n
+		},
+	}
+}
+
+func NewQueryPattern(rootIdentifier any, query string) Pattern {
+	return &CypherPattern{
+		resolver: func(r *Registry) *nodePatternPart {
+			nodeMatch := func(sel *NodeSelection) (node any) {
+				node = sel.alloc
+				if sel.name != "" {
+					node = Variable{
+						Identifier: node,
+						Name:       sel.name,
+					}
+				}
+				return
+			}
+			rsMatch := func(sel *RelationshipSelection) (rs any) {
+				rs = sel.alloc
+				if sel.name != "" {
+					rs = Variable{
+						Identifier: rs,
+						Name:       sel.name,
+					}
+				}
+				return
+			}
+			headSel, err := ResolveQuery(r, rootIdentifier, query)
+			var pattern Pattern = &CypherPattern{
+				resolver: func(_ *Registry) *nodePatternPart {
+					return &nodePatternPart{
+						data:      nodeMatch(headSel),
+						selection: headSel,
+					}
+				},
+			}
+			if err != nil {
+				panic(err)
+			}
+			nextSel := headSel
+			for nextSel != nil {
+				relSel := nextSel.next
+				if relSel == nil {
+					break
+				}
+				nextSel = relSel.next
+				if relSel.target.Dir {
+					pattern = pattern.To(rsMatch(relSel), nodeMatch(nextSel))
+				} else {
+					pattern = pattern.From(rsMatch(relSel), nodeMatch(nextSel))
+				}
+			}
+			p := pattern.createNodePattern(r)
+			return p
+		},
+	}
+}
+
+func Paths(paths ...Pattern) Patterns {
+	if len(paths) == 0 {
+		panic(errors.New("no paths"))
+	}
+	return &CypherPatterns{
+		resolver: func(r *Registry) []*nodePatternPart {
+			ns := make([]*nodePatternPart, len(paths))
+			for i, path := range paths {
+				ns[i] = path.createNodePattern(r)
+			}
+			return ns
+		},
+	}
+}
+
+func (n *nodePatternPart) next() *nodePatternPart {
 	if n.relationship == nil {
 		return n
 	}
@@ -59,7 +158,7 @@ func (n *nodePattern) next() *nodePattern {
 	}
 }
 
-func (n *nodePattern) tail() *nodePattern {
+func (n *nodePatternPart) tail() *nodePatternPart {
 	tail := n
 	if tail == nil {
 		panic(errors.New("head is nil"))
@@ -67,70 +166,62 @@ func (n *nodePattern) tail() *nodePattern {
 	for tail != nil && tail.relationship != nil {
 		tail = tail.next()
 	}
+
 	return tail
 }
 
-func NewNode(match any) Pattern {
-	return &CypherPath{n: &nodePattern{data: match}}
+func (c *CypherPattern) Related(relationshipMatch, nodeMatch any) Pattern {
+	return c.setRelationship(nil, relationshipMatch, nodeMatch)
 }
 
-func NewPath(path Pattern, name string) Pattern {
-	n := path.nodePattern()
-	n.pathName = name
-	return &CypherPath{n: path.nodePattern()}
+func (c *CypherPattern) From(relationshipMatch, nodeMatch any) Pattern {
+	falseVal := false
+	return c.setRelationship(&falseVal, relationshipMatch, nodeMatch)
 }
 
-func Paths(paths ...Pattern) Patterns {
-	if len(paths) == 0 {
-		panic(errors.New("no paths"))
-	}
-	ns := make([]*nodePattern, len(paths))
-	for i, path := range paths {
-		ns[i] = path.nodePattern()
-	}
-	return &CypherPattern{ns: ns}
+func (c *CypherPattern) To(relationshipMatch, nodeMatch any) Pattern {
+	trueVal := true
+	return c.setRelationship(&trueVal, relationshipMatch, nodeMatch)
 }
 
-func (c *CypherPath) Related(relationshipMatch, nodeMatch any) Pattern {
-	c.n.tail().relationship = &relationshipPattern{
-		data:    relationshipMatch,
-		related: &nodePattern{data: nodeMatch},
-	}
-	return c
-}
-
-func (c *CypherPath) From(relationshipMatch, nodeMatch any) Pattern {
-	c.n.tail().relationship = &relationshipPattern{
-		data: relationshipMatch,
-		from: &nodePattern{data: nodeMatch},
-	}
-	return c
-}
-
-func (c *CypherPath) To(relationshipMatch, nodeMatch any) Pattern {
-	c.n.tail().relationship = &relationshipPattern{
-		data: relationshipMatch,
-		to:   &nodePattern{data: nodeMatch},
+func (c *CypherPattern) setRelationship(
+	dir *bool,
+	relationshipMatch, nodeMatch any,
+) Pattern {
+	prevResolver := c.resolver
+	c.resolver = func(r *Registry) *nodePatternPart {
+		prev := prevResolver(r)
+		rel := &rsPatternPart{data: relationshipMatch}
+		next := &nodePatternPart{data: nodeMatch}
+		if dir == nil {
+			rel.related = next
+		} else if *dir {
+			rel.to = next
+		} else {
+			rel.from = next
+		}
+		prev.tail().relationship = rel
+		return prev
 	}
 	return c
 }
 
-func (c *CypherPath) nodePattern() *nodePattern {
-	return c.n
+func (c *CypherPattern) createNodePattern(r *Registry) *nodePatternPart {
+	return c.resolver(r)
 }
 
-func (c *CypherPath) nodes() []*nodePattern {
-	return []*nodePattern{c.n}
+func (c *CypherPattern) nodes(r *Registry) []*nodePatternPart {
+	return []*nodePatternPart{c.resolver(r)}
 }
 
-func (c *CypherPath) Condition() *Condition {
+func (c *CypherPattern) Condition() *Condition {
 	return &Condition{Path: c}
 }
 
-func (c *CypherPath) configureWhere(w *Where) {
+func (c *CypherPattern) configureWhere(w *Where) {
 	c.Condition().configureWhere(w)
 }
 
-func (c *CypherPattern) nodes() []*nodePattern {
-	return c.ns
+func (c *CypherPatterns) nodes(r *Registry) []*nodePatternPart {
+	return c.resolver(r)
 }

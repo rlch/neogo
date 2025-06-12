@@ -95,7 +95,7 @@ var (
 		name:          "nodeWithRelationship",
 		Labels:        []string{"Simple"},
 		fieldsToProps: map[string]string{"ID": "id"},
-		Relationships: map[string]RelationshipTarget{
+		Relationships: map[string]*RelationshipTarget{
 			"Forward": {
 				Dir: true,
 				Rel: simpleRelationshipReg,
@@ -149,7 +149,7 @@ func init() {
 		name:          "shorthandRelationshipNode",
 		Labels:        []string{"Simple"},
 		fieldsToProps: map[string]string{"ID": "id"},
-		Relationships: map[string]RelationshipTarget{
+		Relationships: map[string]*RelationshipTarget{
 			"Forward": {
 				Dir: true,
 				Rel: shorthandRelationshipReg(true),

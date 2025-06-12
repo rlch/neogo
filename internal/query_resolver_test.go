@@ -30,13 +30,13 @@ type IsOwner struct {
 }
 
 // qs returns a simple querySelector using the provided field, name and props.
-func qs(field, name string, props ...string) querySelector {
+func qs(field, name string, props ...string) QuerySelector {
 	if len(props) == 1 && props[0] == "" {
 		props = []string{}
 	} else if len(props) == 0 {
 		props = nil
 	}
-	return querySelector{
+	return QuerySelector{
 		field: field,
 		name:  name,
 		props: props,
@@ -44,19 +44,19 @@ func qs(field, name string, props ...string) querySelector {
 }
 
 func TestResolveQuery(t *testing.T) {
-	tx := NewTestTx()
-	tx.driver.Registry().RegisterNode(&Owner{})
+	r := NewRegistry()
+	r.RegisterNode(&Owner{})
 	var (
-		regOwner      = tx.driver.Registry().Get(reflect.TypeOf(&Person{})).(*internal.RegisteredNode)
-		regIsOwner    = tx.driver.Registry().Get(reflect.TypeOf(&IsOwner{})).(*internal.RegisteredRelationship)
-		regCat        = tx.driver.Registry().Get(reflect.TypeOf(&Cat{})).(*internal.RegisteredNode)
-		regBestFriend = tx.driver.Registry().GetByName("BEST_FRIEND").(*internal.RegisteredRelationship)
+		regOwner      = r.Get(reflect.TypeOf(&Owner{})).(*RegisteredNode)
+		regIsOwner    = r.Get(reflect.TypeOf(&IsOwner{})).(*RegisteredRelationship)
+		regCat        = r.Get(reflect.TypeOf(&Cat{})).(*RegisteredNode)
+		regBestFriend = r.GetByName("BEST_FRIEND").(*RegisteredRelationship)
 	)
 	for _, test := range []struct {
 		name      string
 		root      any
 		query     string
-		expect    *nodeSelection
+		expect    *NodeSelection
 		expectErr string
 	}{
 		{
@@ -101,38 +101,51 @@ func TestResolveQuery(t *testing.T) {
 			name:  "simple query with one selector",
 			root:  &Owner{},
 			query: ".",
-			expect: &nodeSelection{
+			expect: &NodeSelection{
 				alloc:         &Owner{},
-				querySelector: qs(".", ""),
-				reg:           regOwner,
+				QuerySelector: qs(".", ""),
+				target: &NodeTarget{
+					RegisteredNode: regOwner,
+				},
 			},
 		},
 		{
 			name:  "simple query with props and name",
 			root:  &Owner{},
 			query: "n{name}:.",
-			expect: &nodeSelection{
+			expect: &NodeSelection{
 				alloc:         &Owner{},
-				querySelector: qs(".", "n", "name"),
-				reg:           regOwner,
+				QuerySelector: qs(".", "n", "name"),
+				target: &NodeTarget{
+					RegisteredNode: regOwner,
+				},
 			},
 		},
 		{
 			name:  "relationship with explicit node selector",
 			root:  &Owner{},
 			query: ". o:Cats c{}:.",
-			expect: &nodeSelection{
+			expect: &NodeSelection{
 				alloc:         &Owner{},
-				querySelector: qs(".", ""),
-				reg:           regOwner,
-				next: &relationshipSelection{
+				QuerySelector: qs(".", ""),
+				target: &NodeTarget{
+					RegisteredNode: regOwner,
+				},
+				next: &RelationshipSelection{
 					alloc:         ([]*IsOwner)(nil),
-					querySelector: qs("Cats", "o"),
-					reg:           regIsOwner,
-					next: &nodeSelection{
+					QuerySelector: qs("Cats", "o"),
+					target: &RelationshipTarget{
+						Many: true,
+						Dir:  true,
+						Rel:  regIsOwner,
+					},
+					next: &NodeSelection{
 						alloc:         ([]*Cat)(nil),
-						querySelector: qs(".", "c", ""),
-						reg:           regCat,
+						QuerySelector: qs(".", "c", ""),
+						target: &NodeTarget{
+							Field:          "Cat",
+							RegisteredNode: regCat,
+						},
 					},
 				},
 			},
@@ -141,18 +154,27 @@ func TestResolveQuery(t *testing.T) {
 			name:  "relationship with implicit node selector",
 			root:  &Owner{},
 			query: ". Cats",
-			expect: &nodeSelection{
-				querySelector: qs(".", ""),
-				reg:           regOwner,
-				alloc:         &Owner{},
-				next: &relationshipSelection{
-					querySelector: qs("Cats", ""),
-					reg:           regIsOwner,
-					alloc:         ([]*IsOwner)(nil),
-					next: &nodeSelection{
-						querySelector: qs(".", ""),
-						reg:           regCat,
-						alloc:         ([]*Cat)(nil),
+			expect: &NodeSelection{
+				QuerySelector: qs(".", ""),
+				target: &NodeTarget{
+					RegisteredNode: regOwner,
+				},
+				alloc: &Owner{},
+				next: &RelationshipSelection{
+					QuerySelector: qs("Cats", ""),
+					target: &RelationshipTarget{
+						Many: true,
+						Dir:  true,
+						Rel:  regIsOwner,
+					},
+					alloc: ([]*IsOwner)(nil),
+					next: &NodeSelection{
+						QuerySelector: qs(".", ""),
+						target: &NodeTarget{
+							Field:          "Cat",
+							RegisteredNode: regCat,
+						},
+						alloc: ([]*Cat)(nil),
 					},
 				},
 			},
@@ -161,17 +183,25 @@ func TestResolveQuery(t *testing.T) {
 			name:  "shorthand relationship selection",
 			root:  &Owner{},
 			query: "BestFriend",
-			expect: &nodeSelection{
-				querySelector: qs(".", "", ""),
-				reg:           regOwner,
-				alloc:         &Owner{},
-				next: &relationshipSelection{
-					querySelector: qs("BestFriend", ""),
-					reg:           regBestFriend,
-					next: &nodeSelection{
-						querySelector: qs(".", ""),
-						reg:           regOwner,
-						alloc:         &Owner{},
+			expect: &NodeSelection{
+				QuerySelector: qs(".", "", ""),
+				target: &NodeTarget{
+					RegisteredNode: regOwner,
+				},
+				alloc: &Owner{},
+				next: &RelationshipSelection{
+					QuerySelector: qs("BestFriend", ""),
+					target: &RelationshipTarget{
+						Dir:  true,
+						Rel:  regBestFriend,
+						Many: false,
+					},
+					next: &NodeSelection{
+						QuerySelector: qs(".", ""),
+						target: &NodeTarget{
+							RegisteredNode: regOwner,
+						},
+						alloc: &Owner{},
 					},
 				},
 			},
@@ -180,33 +210,53 @@ func TestResolveQuery(t *testing.T) {
 			name:  "multiple relationships with implicit node selector",
 			root:  &Owner{},
 			query: "BestFriend . Cats Cat Owner",
-			expect: &nodeSelection{
-				querySelector: qs(".", "", ""),
-				reg:           regOwner,
-				alloc:         &Owner{},
-				next: &relationshipSelection{
-					querySelector: qs("BestFriend", ""),
-					reg:           regBestFriend,
-					next: &nodeSelection{
-						querySelector: qs(".", ""),
-						reg:           regOwner,
-						alloc:         &Owner{},
-						next: &relationshipSelection{
-							querySelector: qs("Cats", ""),
-							reg:           regIsOwner,
-							alloc:         ([]*IsOwner)(nil),
-							next: &nodeSelection{
-								querySelector: qs("Cat", ""),
-								reg:           regCat,
-								alloc:         ([]*Cat)(nil),
-								next: &relationshipSelection{
-									querySelector: qs("Owner", ""),
-									reg:           regIsOwner,
-									alloc:         ([]*IsOwner)(nil),
-									next: &nodeSelection{
-										querySelector: qs(".", ""),
-										reg:           regOwner,
-										alloc:         ([]*Owner)(nil),
+			expect: &NodeSelection{
+				QuerySelector: qs(".", "", ""),
+				target: &NodeTarget{
+					RegisteredNode: regOwner,
+				},
+				alloc: &Owner{},
+				next: &RelationshipSelection{
+					QuerySelector: qs("BestFriend", ""),
+					target: &RelationshipTarget{
+						Dir: true,
+						Rel: regBestFriend,
+					},
+					next: &NodeSelection{
+						QuerySelector: qs(".", ""),
+						target: &NodeTarget{
+							RegisteredNode: regOwner,
+						},
+						alloc: &Owner{},
+						next: &RelationshipSelection{
+							QuerySelector: qs("Cats", ""),
+							target: &RelationshipTarget{
+								Many: true,
+								Dir:  true,
+								Rel:  regIsOwner,
+							},
+							alloc: ([]*IsOwner)(nil),
+							next: &NodeSelection{
+								QuerySelector: qs("Cat", ""),
+								target: &NodeTarget{
+									Field:          "Cat",
+									RegisteredNode: regCat,
+								},
+								alloc: ([]*Cat)(nil),
+								next: &RelationshipSelection{
+									QuerySelector: qs("Owner", ""),
+									target: &RelationshipTarget{
+										Dir: false,
+										Rel: regIsOwner,
+									},
+									alloc: ([]*IsOwner)(nil),
+									next: &NodeSelection{
+										QuerySelector: qs(".", ""),
+										target: &NodeTarget{
+											Field:          "Owner",
+											RegisteredNode: regOwner,
+										},
+										alloc: ([]*Owner)(nil),
 									},
 								},
 							},
@@ -219,34 +269,56 @@ func TestResolveQuery(t *testing.T) {
 			name:  "> 1 layer of allocation depth",
 			root:  []*Owner{},
 			query: "Cats . Owner . Cats",
-			expect: &nodeSelection{
-				querySelector: qs(".", "", ""),
-				reg:           regOwner,
-				alloc:         []*Owner{},
-				next: &relationshipSelection{
-					querySelector: qs("Cats", ""),
-					reg:           regIsOwner,
-					alloc:         ([][]*IsOwner)(nil),
-					next: &nodeSelection{
-						querySelector: qs(".", ""),
-						reg:           regCat,
-						alloc:         ([][]*Cat)(nil),
-						next: &relationshipSelection{
-							querySelector: qs("Owner", ""),
-							reg:           regIsOwner,
-							alloc:         ([][]*IsOwner)(nil),
-							next: &nodeSelection{
-								querySelector: qs(".", ""),
-								reg:           regOwner,
-								alloc:         ([][]*Owner)(nil),
-								next: &relationshipSelection{
-									querySelector: qs("Cats", ""),
-									reg:           regIsOwner,
-									alloc:         ([][][]*IsOwner)(nil),
-									next: &nodeSelection{
-										querySelector: qs(".", ""),
-										reg:           regCat,
-										alloc:         ([][][]*Cat)(nil),
+			expect: &NodeSelection{
+				QuerySelector: qs(".", "", ""),
+				target: &NodeTarget{
+					RegisteredNode: regOwner,
+				},
+				alloc: []*Owner{},
+				next: &RelationshipSelection{
+					QuerySelector: qs("Cats", ""),
+					target: &RelationshipTarget{
+						Many: true,
+						Dir:  true,
+						Rel:  regIsOwner,
+					},
+					alloc: ([][]*IsOwner)(nil),
+					next: &NodeSelection{
+						QuerySelector: qs(".", ""),
+						target: &NodeTarget{
+							Field:          "Cat",
+							RegisteredNode: regCat,
+						},
+						alloc: ([][]*Cat)(nil),
+						next: &RelationshipSelection{
+							QuerySelector: qs("Owner", ""),
+							target: &RelationshipTarget{
+								Dir: false,
+								Rel: regIsOwner,
+							},
+							alloc: ([][]*IsOwner)(nil),
+							next: &NodeSelection{
+								QuerySelector: qs(".", ""),
+								target: &NodeTarget{
+									Field:          "Owner",
+									RegisteredNode: regOwner,
+								},
+								alloc: ([][]*Owner)(nil),
+								next: &RelationshipSelection{
+									QuerySelector: qs("Cats", ""),
+									target: &RelationshipTarget{
+										Many: true,
+										Dir:  true,
+										Rel:  regIsOwner,
+									},
+									alloc: ([][][]*IsOwner)(nil),
+									next: &NodeSelection{
+										QuerySelector: qs(".", ""),
+										target: &NodeTarget{
+											Field:          "Cat",
+											RegisteredNode: regCat,
+										},
+										alloc: ([][][]*Cat)(nil),
 									},
 								},
 							},
@@ -258,11 +330,10 @@ func TestResolveQuery(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			require := require.New(t)
-			selectors, err := newQueryParser(test.query).parse()
-			require.NoError(err)
-			selection, err := tx.resolveQuery(
+			selection, err := ResolveQuery(
+				r,
 				test.root,
-				querySpec{selectors: selectors},
+				test.query,
 			)
 			if test.expectErr != "" {
 				require.ErrorContains(err, test.expectErr)

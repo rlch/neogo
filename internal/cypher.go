@@ -19,6 +19,7 @@ type CompiledCypher struct {
 	Cypher     string
 	Parameters map[string]any
 	Bindings   map[string]reflect.Value
+	Queries    map[string]*NodeSelection
 	IsWrite    bool
 }
 
@@ -149,7 +150,7 @@ func (cy *cypher) writeNode(m *member) {
 // patternFiller ::= [ relationshipVariable ] [ typeExpression ]
 //
 //	[ propertyKeyValueExpression ] [ "WHERE" booleanExpression ]
-func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
+func (cy *cypher) writeRelationship(m *member, rs *rsPatternPart) {
 	if m != nil {
 		var inner string
 		if !m.isNew {
@@ -278,7 +279,7 @@ func (cy *cypher) writeCondition(c *Condition, parseKey, parseValue func(any) st
 			if c.Path != nil {
 				prevBuilder := cy.Builder
 				cy.Builder = &strings.Builder{}
-				cy.writePattern(c.Path.nodePattern())
+				cy.writePattern(c.Path.createNodePattern(cy.Registry))
 				s += cy.String()
 				cy.Builder = prevBuilder
 			} else if n := len(c.Xor); n > 0 {
@@ -315,7 +316,7 @@ func (cy *cypher) writeCondition(c *Condition, parseKey, parseValue func(any) st
 	})
 }
 
-func (cy *cypher) writePattern(pattern *nodePattern) {
+func (cy *cypher) writePattern(pattern *nodePatternPart) {
 	cy.catch(func() {
 		if pattern.pathName != "" {
 			_, err := fmt.Fprintf(cy, "%s = ", pattern.pathName)
@@ -342,7 +343,7 @@ func (cy *cypher) writePattern(pattern *nodePattern) {
 	})
 }
 
-func (cy *cypher) writeReadingClause(patterns []*nodePattern, optional bool) {
+func (cy *cypher) writeReadingClause(patterns []*nodePatternPart, optional bool) {
 	clause := "MATCH"
 	if optional {
 		clause = "OPTIONAL " + clause
@@ -390,7 +391,7 @@ func (cy *cypher) writeUnionClause(unions []func(*CypherClient) *CypherRunner, a
 }
 
 func (cy *cypher) writeCreateClause(
-	nodes []*nodePattern,
+	nodes []*nodePatternPart,
 ) {
 	cy.writeMultilineQuery("CREATE", len(nodes), func(i int) {
 		cy.writePattern(nodes[i])
@@ -398,7 +399,7 @@ func (cy *cypher) writeCreateClause(
 }
 
 func (cy *cypher) writeMergeClause(
-	node *nodePattern,
+	node *nodePatternPart,
 	opts ...MergeOption,
 ) {
 	merge := &Merge{}
@@ -739,7 +740,7 @@ func (cy *cypher) writeYieldClause(identifiers ...any) {
 func (cy *cypher) writeSinglelineQuery(clause string, n int, each func(i int)) {
 	cy.catch(func() {
 		cy.WriteString(clause + " ")
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if i > 0 {
 				cy.WriteString(", ")
 			}
@@ -757,7 +758,7 @@ func (cy *cypher) writeMultilineQuery(clause string, n int, each func(i int)) {
 		} else {
 			cy.WriteString(" ")
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if i > 0 {
 				cy.WriteString(",\n" + indent)
 			}

@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/goccy/go-json"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
@@ -386,7 +385,6 @@ func (s *session) unmarshalResult(
 			return fmt.Errorf("cannot collect records: %w", err)
 		}
 		records = append([]*neo4j.Record{first}, records...)
-		spew.Dump("unmarshalRecords", records)
 		if err = s.unmarshalRecords(cy, records); err != nil {
 			return fmt.Errorf("cannot unmarshal records: %w", err)
 		}
@@ -395,7 +393,6 @@ func (s *session) unmarshalResult(
 		if single == nil {
 			return nil
 		}
-		spew.Dump("unmarshalRecord", single)
 		if err = s.unmarshalRecord(cy, single); err != nil {
 			return fmt.Errorf("cannot unmarshal record: %w", err)
 		}

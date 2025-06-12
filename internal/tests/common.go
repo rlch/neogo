@@ -24,9 +24,19 @@ func Check(t *testing.T, cy *internal.CompiledCypher, err error, want internal.C
 	if want.Bindings == nil {
 		want.Bindings = map[string]reflect.Value{}
 	}
+	if want.Queries == nil {
+		want.Queries = map[string]*internal.NodeSelection{}
+	}
 	require.Equal(t, want.Cypher, cy.Cypher)
 	require.Equal(t, want.Parameters, cy.Parameters)
 	require.Equal(t, want.Bindings, cy.Bindings)
+	require.Equal(t, want.Queries, cy.Queries)
+}
+
+func CheckCypher(t *testing.T, cy *internal.CompiledCypher, err error, want string) {
+	require.NoError(t, err)
+	want = canon(want)
+	require.Equal(t, want, cy.Cypher)
 }
 
 var r = internal.NewRegistry()
@@ -59,6 +69,8 @@ type (
 		Title    string `json:"title"`
 		Released int    `json:"released"`
 		Tagline  string `json:"tagline"`
+
+		ActedIn []*ActedIn `neo4j:"<-" json:"-"`
 	}
 	Person struct {
 		internal.Node `neo4j:"Person"`
@@ -75,6 +87,8 @@ type (
 		LastSeen      int     `json:"lastSeen"`
 		Found         bool    `json:"found"`
 		ChauffeurName string  `json:"chauffeurName"`
+
+		ActedIn []*ActedIn `neo4j:"->" json:"-"`
 	}
 
 	Company struct {
@@ -94,6 +108,9 @@ type (
 		internal.Relationship `neo4j:"ACTED_IN"`
 
 		Role string `json:"role"`
+
+		Actor *Person `neo4j:"startNode" json:"-"`
+		Movie *Movie  `neo4j:"endNode" json:"-"`
 	}
 	Directed struct {
 		internal.Relationship `neo4j:"DIRECTED"`

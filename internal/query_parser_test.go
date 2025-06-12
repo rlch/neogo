@@ -45,7 +45,7 @@ func TestParser_ParseStatement(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		query []*querySelector
+		query []*QuerySelector
 		err   string
 	}{
 		{
@@ -56,14 +56,14 @@ func TestParser_ParseStatement(t *testing.T) {
 		{
 			name:  "single field",
 			input: `Person`,
-			query: []*querySelector{
+			query: []*QuerySelector{
 				{field: "Person"},
 			},
 		},
 		{
 			name:  "multiple fields",
 			input: `Person Friends Questions`,
-			query: []*querySelector{
+			query: []*QuerySelector{
 				{field: "Person"},
 				{field: "Friends"},
 				{field: "Questions"},
@@ -72,7 +72,7 @@ func TestParser_ParseStatement(t *testing.T) {
 		{
 			name:  "dot is considered a field",
 			input: `Person Friends . Questions`,
-			query: []*querySelector{
+			query: []*QuerySelector{
 				{field: "Person"},
 				{field: "Friends"},
 				{field: "."},
@@ -82,35 +82,35 @@ func TestParser_ParseStatement(t *testing.T) {
 		{
 			name:  ": ignored",
 			input: `:Person`,
-			query: []*querySelector{
+			query: []*QuerySelector{
 				{field: "Person"},
 			},
 		},
 		{
 			name:  "simple qualifier",
 			input: `p:Person`,
-			query: []*querySelector{
+			query: []*QuerySelector{
 				{field: "Person", name: "p"},
 			},
 		},
 		{
 			name:  "empty props yields non-nil empty slice",
 			input: `{}:Person`,
-			query: []*querySelector{
+			query: []*QuerySelector{
 				{field: "Person", props: []string{}},
 			},
 		},
 		{
 			name:  "props handled correctly",
 			input: `{a, bb,    ccc}:Person`,
-			query: []*querySelector{
+			query: []*QuerySelector{
 				{field: "Person", props: []string{"a", "bb", "ccc"}},
 			},
 		},
 		{
 			name:  "qualifier and props",
 			input: `a{b}:C`,
-			query: []*querySelector{
+			query: []*QuerySelector{
 				{field: "C", props: []string{"b"}, name: "a"},
 			},
 		},
@@ -120,7 +120,7 @@ func TestParser_ParseStatement(t *testing.T) {
 		{
 			name:  "complex example",
 			input: `p{name}:Person :FriendsWith . o{acquiredAt}:Owns pp:Pet`,
-			query: []*querySelector{
+			query: []*QuerySelector{
 				{field: "Person", props: []string{"name"}, name: "p"},
 				{field: "FriendsWith"},
 				{field: "."},

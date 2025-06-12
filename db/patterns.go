@@ -73,5 +73,5 @@ func Patterns(paths ...Pattern) internal.Patterns {
 
 // Query creates a [Pattern] from a [builder.Identifier], using a ORM-style query string.
 func Query(identifier builder.Identifier, query string) Pattern {
-	return internal.NewQuery(identifier, query)
+	return internal.NewQueryPattern(identifier, query)
 }

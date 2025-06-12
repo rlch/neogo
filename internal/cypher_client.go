@@ -3,6 +3,7 @@ package internal
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"regexp"
@@ -24,12 +25,6 @@ func newCypherClient(cy *cypher) *CypherClient {
 }
 
 type (
-	CypherPath struct {
-		n *nodePattern
-	}
-	CypherPattern struct {
-		ns []*nodePattern
-	}
 	CypherClient struct {
 		*cypher
 		*CypherReader
@@ -127,12 +122,12 @@ func (c *CypherClient) UnionAll(unions ...func(c *CypherClient) *CypherRunner) *
 }
 
 func (c *CypherReader) OptionalMatch(patterns Patterns) *CypherQuerier {
-	c.writeReadingClause(patterns.nodes(), true)
+	c.writeReadingClause(patterns.nodes(c.Registry), true)
 	return newCypherQuerier(c.cypher)
 }
 
 func (c *CypherReader) Match(patterns Patterns) *CypherQuerier {
-	c.writeReadingClause(patterns.nodes(), false)
+	c.writeReadingClause(patterns.nodes(c.Registry), false)
 	return newCypherQuerier(c.cypher)
 }
 
@@ -232,12 +227,12 @@ func (c *CypherQuerier) Where(args ...any) *CypherQuerier {
 }
 
 func (c *CypherUpdater[To]) Create(pattern Patterns) To {
-	c.writeCreateClause(pattern.nodes())
+	c.writeCreateClause(pattern.nodes(c.Registry))
 	return c.To(c.cypher)
 }
 
 func (c *CypherUpdater[To]) Merge(pattern Pattern, opts ...MergeOption) To {
-	c.writeMergeClause(pattern.nodePattern(), opts...)
+	c.writeMergeClause(pattern.createNodePattern(c.Registry), opts...)
 	return c.To(c.cypher)
 }
 
@@ -272,9 +267,7 @@ func (c *CypherYielder) Yield(identifiers ...any) *CypherQuerier {
 }
 
 func (c *CypherRunner) CompileWithParams(params map[string]any) (*CompiledCypher, error) {
-	for k, v := range params {
-		c.parameters[k] = v
-	}
+	maps.Copy(c.parameters, params)
 	return c.Compile()
 }
 
@@ -288,6 +281,7 @@ func (c *CypherRunner) Compile() (*CompiledCypher, error) {
 		Cypher:     out,
 		Parameters: c.parameters,
 		Bindings:   c.bindings,
+		Queries:    c.queries,
 		IsWrite:    c.isWrite,
 	}
 	if c.err != nil {
@@ -320,6 +314,14 @@ Bindings:
 {{- range $key, $value := .Bindings }}
   {{ $key }}: {{ $value | printf "%v" }},
 {{- end }}
+}
+
+
+Queries:
+{
+{{- range $key, $value := .Queries }}
+  {{ $key }}: {{ $value | printf "%v" }},
+{{- end }}
 }` + "\n")
 	if err != nil {
 		panic(err)
@@ -328,11 +330,13 @@ Bindings:
 		Cypher     string
 		Parameters map[string]any
 		Bindings   map[string]reflect.Value
+		Queries    map[string]*NodeSelection
 		IsWrite    bool
 	}{
 		Cypher:     c.String(),
 		Parameters: c.parameters,
 		Bindings:   c.bindings,
+		Queries:    c.queries,
 		IsWrite:    c.isWrite,
 	})
 	if err != nil {
