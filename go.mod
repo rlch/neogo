@@ -3,7 +3,6 @@ module github.com/rlch/neogo
 go 1.23
 
 require (
-	github.com/davecgh/go-spew v1.1.1
 	github.com/dlclark/regexp2 v1.11.5
 	github.com/goccy/go-json v0.10.2
 	github.com/iancoleman/strcase v0.3.0
@@ -21,6 +20,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/containerd/containerd v1.7.3 // indirect
 	github.com/cpuguy83/dockercfg v0.3.1 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
 	github.com/docker/docker v24.0.5+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect

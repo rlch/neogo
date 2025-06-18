@@ -16,7 +16,8 @@ import (
 )
 
 func TestUnmarshalRecord(t *testing.T) {
-	s := &session{}
+	s := &session{driver: &driver{}}
+	s.reg = internal.NewRegistry()
 	t.Run("err on non-existent key", func(t *testing.T) {
 		n := tests.Person{}
 		cy := &internal.CompiledCypher{
@@ -62,6 +63,43 @@ func TestUnmarshalRecord(t *testing.T) {
 		assert.Equal(t, tests.Person{
 			Name: "Jessie", Surname: "Pinkman",
 		}, n)
+	})
+
+	t.Run("binds to abstract nodes with length 1", func(t *testing.T) {
+		var n []tests.Organism
+		cy := &internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"n": reflect.ValueOf(&n),
+			},
+		}
+		err := s.unmarshalRecord(cy,
+			&neo4j.Record{
+				Keys: []string{"n"},
+				Values: []any{
+					neo4j.Node{
+						Labels: []string{
+							"Organism",
+							"Human",
+						},
+						Props: map[string]any{
+							"id":    "boss",
+							"name":  "Michael Scott",
+							"alive": true,
+						},
+					},
+				},
+			})
+		assert.NoError(t, err)
+		assert.Len(t, n, 1, "Expected single record to be bound to slice of length 1")
+		assert.Equal(t, &tests.Human{
+			BaseOrganism: tests.BaseOrganism{
+				Node: internal.Node{
+					ID: "boss",
+				},
+				Alive: true,
+			},
+			Name: "Michael Scott",
+		}, n[0])
 	})
 
 	t.Run("binds to null", func(t *testing.T) {

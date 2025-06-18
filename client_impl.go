@@ -397,10 +397,10 @@ func (s *session) unmarshalResult(
 			return fmt.Errorf("cannot unmarshal record: %w", err)
 		}
 	}
-	names := cy.Names()
-	for name, query := range cy.Queries {
-		rootBinding := cy.Bindings[name]
-	}
+	// names := cy.Names()
+	// for name, query := range cy.Queries {
+	// 	rootBinding := cy.Bindings[name]
+	// }
 	return nil
 }
 
