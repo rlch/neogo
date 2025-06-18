@@ -24,6 +24,50 @@ func TestCypherClient(t *testing.T) {
 			assert.Equal(t, false, cy.isWrite)
 		})
 
+		t.Run("true when using a procedure in Cypher", func(t *testing.T) {
+			cy := newCypher()
+			newCypherClient(cy).
+				Cypher(`
+				CALL db.myProcedure()
+				`).
+				Return("n")
+			assert.Equal(t, true, cy.isWrite)
+		})
+
+		t.Run("false when using a subquery in Cypher", func(t *testing.T) {
+			cy := newCypher()
+			newCypherClient(cy).
+				Cypher(`
+				CALL {
+				 MATCH (n:Person)
+				 RETURN n
+				}
+				`).
+				Return("n")
+			assert.Equal(t, false, cy.isWrite)
+		})
+
+		t.Run("false when using a subquery with arguments in Cypher", func(t *testing.T) {
+			cy := newCypher()
+			newCypherClient(cy).
+				Cypher(`
+				CALL (whatever) {
+				 MATCH (n:Person)
+				 RETURN n
+				}
+				`).
+				Return("n")
+			assert.Equal(t, false, cy.isWrite)
+		})
+
+		t.Run("true when a procedure is called", func(t *testing.T) {
+			cy := newCypher()
+			newCypherClient(cy).
+				Call("myProcedure").
+				Return("n")
+			assert.Equal(t, true, cy.isWrite)
+		})
+
 		t.Run("true when using write clauses", func(t *testing.T) {
 			cy := newCypher()
 			newCypherClient(cy).
@@ -57,6 +101,16 @@ func TestCypherClient(t *testing.T) {
 				}).
 				Return("n")
 			assert.Equal(t, true, cy.isWrite)
+		})
+
+		t.Run("false when using ready-only clauses in subquery", func(t *testing.T) {
+			cy := newCypher()
+			newCypherClient(cy).
+				Subquery(func(c *CypherClient) *CypherRunner {
+					return c.Match(nil).CypherRunner
+				}).
+				Return("n")
+			assert.Equal(t, false, cy.isWrite)
 		})
 
 		t.Run("true when using Cypher in subquery if a write clause is used", func(t *testing.T) {

@@ -59,7 +59,7 @@ type (
 )
 
 var isWriteRe = regexp.MustCompile(
-	`\b(CREATE|MERGE|DELETE|SET|REMOVE|CALL)\b`,
+	`\b(CREATE|MERGE|DELETE|SET|REMOVE|CALL\s+\w.*)\b`,
 )
 
 func newCypherQuerier(cy *cypher) *CypherQuerier {
@@ -148,6 +148,7 @@ func (c *CypherReader) Unwind(identifier any, as string) *CypherQuerier {
 
 func (c *CypherReader) Call(procedure string) *CypherYielder {
 	c.writeCallClause(procedure)
+	c.isWrite = true
 	return newCypherYielder(c.cypher)
 }
 
