@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.7](https://github.com/rlch/neogo/compare/v1.0.6...v1.0.7) (2025-06-18)
+
+
+### Bug Fixes
+
+* Handle binding to a slice of a depth 1 higher than result ([0c53b5a](https://github.com/rlch/neogo/commit/0c53b5a1a3d3c0f203da481a7efb6e3b93365f28))
+* Reproduction for unmarshalling single record to a Abstract Node Slice ([#29](https://github.com/rlch/neogo/issues/29)) ([4c2a6b9](https://github.com/rlch/neogo/commit/4c2a6b9a3f525ee3b2899ce92905dd7c70e3bf8e))
+* Subqueries shouldn't enforce write transactions ([03626bc](https://github.com/rlch/neogo/commit/03626bc4f9dea73b83086f555d49c0a068389a67))
+* Temporarily log isWrite ([0096e93](https://github.com/rlch/neogo/commit/0096e935a5a1d440ade1ee75b030dee8fbf3bffc))
+
 ## [1.0.6](https://github.com/rlch/neogo/compare/v1.0.5...v1.0.6) (2025-03-28)
 
 
