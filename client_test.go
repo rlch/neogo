@@ -17,6 +17,7 @@ import (
 
 func TestUnmarshalRecord(t *testing.T) {
 	s := &session{}
+	s.registry.registerTypes(&tests.Human{})
 	t.Run("err on non-existent key", func(t *testing.T) {
 		n := tests.Person{}
 		cy := &internal.CompiledCypher{
