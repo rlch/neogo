@@ -169,19 +169,19 @@ func (p *parser) parse() (query QuerySpec, err error) {
 		switch tok {
 		case tokenIdent:
 			if err := expectNextField(); err == nil {
-				qp.field = lit
+				qp.Field = lit
 				return qp, nil
 			}
-			qp.name = lit
+			qp.Name = lit
 			tok, _ = p.scan()
 		case tokenDot:
-			qp.field = "."
+			qp.Field = "."
 			return qp, expectNextField()
 		case tokenEOF:
 			return nil, nil
 		}
 		if tok == tokenLeftBrace {
-			qp.props, err = p.parseProps()
+			qp.Props, err = p.parseProps()
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse fields: %w", err)
 			}
@@ -194,7 +194,7 @@ func (p *parser) parse() (query QuerySpec, err error) {
 		}
 		switch tok {
 		case tokenIdent, tokenDot:
-			qp.field = lit
+			qp.Field = lit
 			return qp, expectNextField()
 		default:
 			return nil, errUnexpectedToken(lit)

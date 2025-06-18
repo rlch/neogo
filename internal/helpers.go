@@ -21,7 +21,7 @@ func WalkStruct(
 	if vt.Kind() != reflect.Struct || v.Kind() != reflect.Struct {
 		return fmt.Errorf("expected struct, got %s", vt.Kind())
 	}
-	for i := 0; i < vt.NumField(); i++ {
+	for i := range vt.NumField() {
 		vtf := vt.Field(i)
 		vf := v.Field(i)
 		shouldRecurse, err := visit(i, vtf, vf)

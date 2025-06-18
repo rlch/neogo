@@ -504,43 +504,10 @@ func (s *Scope) add(
 					break
 				}
 			}
-
 			// Instead of injecting struct as parameter, inject its fields as
 			// qualified parameters. This allows props to be used in MATCH and MERGE
 			// clause for instance, where a property expression is not allowed.
-			props := make(Props)
-			var bindFieldsFrom func(reflect.Value)
-			bindFieldsFrom = func(value reflect.Value) {
-				for value.Kind() == reflect.Ptr {
-					value = value.Elem()
-				}
-				innerT := value.Type()
-				for i := range innerT.NumField() {
-					f := value.Field(i)
-					if !f.IsValid() || !f.CanInterface() || f.IsZero() {
-						continue
-					}
-					fT := innerT.Field(i)
-					name, ok := extractJSONFieldName(fT)
-					if !ok {
-						if fT.Anonymous {
-							bindFieldsFrom(f)
-						}
-						continue
-					}
-					propName := name
-					if m.expr != "" {
-						propName = m.expr + "_" + name
-					}
-
-					prop := f.Interface()
-					props[name] = Param{
-						Name:  propName,
-						Value: &prop,
-					}
-				}
-			}
-			bindFieldsFrom(inner)
+			props := identifierToProps(inner, m.expr)
 			if len(props) > 0 {
 				if m.variable == nil {
 					m.variable = &Variable{}
@@ -566,6 +533,43 @@ func (s *Scope) addNode(n *nodePatternPart) *member {
 func (s *Scope) addRelationship(n *rsPatternPart) *member {
 	f := false
 	return s.add(n.data, false, &f)
+}
+
+func identifierToProps(identifier reflect.Value, qualifier string) Props {
+	props := make(Props)
+	for identifier.Kind() == reflect.Ptr {
+		identifier = identifier.Elem()
+	}
+	if identifier.Kind() != reflect.Struct {
+		return nil
+	}
+	innerT := identifier.Type()
+	for i := range innerT.NumField() {
+		f := identifier.Field(i)
+		if !f.IsValid() || !f.CanInterface() || f.IsZero() {
+			continue
+		}
+		fT := innerT.Field(i)
+		name, ok := extractJSONFieldName(fT)
+		if !ok {
+			if fT.Anonymous {
+				innerProps := identifierToProps(f, qualifier)
+				maps.Copy(props, innerProps)
+			}
+			continue
+		}
+		propName := name
+		if qualifier != "" {
+			propName = qualifier + "_" + name
+		}
+
+		prop := f.Interface()
+		props[name] = Param{
+			Name:  propName,
+			Value: &prop,
+		}
+	}
+	return props
 }
 
 func (s *Scope) Name(identifier any) string {

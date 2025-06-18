@@ -15,14 +15,6 @@ type cypher struct {
 	*strings.Builder
 }
 
-type CompiledCypher struct {
-	Cypher     string
-	Parameters map[string]any
-	Bindings   map[string]reflect.Value
-	Queries    map[string]*NodeSelection
-	IsWrite    bool
-}
-
 func newCypher(registry *Registry) *cypher {
 	return &cypher{
 		Scope:   newScope(registry),
@@ -36,6 +28,36 @@ func (c *cypher) Params() map[string]any {
 
 func (c *cypher) Bindings() map[string]reflect.Value {
 	return c.bindings
+}
+
+func (c *cypher) Names() map[reflect.Value]string {
+	if c.bindings == nil {
+		return nil
+	}
+	names := make(map[reflect.Value]string, len(c.bindings))
+	for name, value := range c.bindings {
+		names[value] = name
+	}
+	return names
+}
+
+type CompiledCypher struct {
+	Cypher     string
+	Parameters map[string]any
+	Bindings   map[string]reflect.Value
+	Queries    map[string]*NodeSelection
+	IsWrite    bool
+}
+
+func (c *CompiledCypher) Names() map[reflect.Value]string {
+	if c.Bindings == nil {
+		return nil
+	}
+	names := make(map[reflect.Value]string, len(c.Bindings))
+	for name, value := range c.Bindings {
+		names[value] = name
+	}
+	return names
 }
 
 var (

@@ -10,27 +10,27 @@ import (
 type (
 	QuerySpec     []*QuerySelector
 	QuerySelector struct {
-		// name is the name of the variable that is used in the query.
-		name string
-		// field is the name of the field should be loaded.
-		field string
-		// props represents the properties of the JSON payload that should be loaded into the struct.
+		// Name is the Name of the variable that is used in the query.
+		Name string
+		// Field is the name of the Field should be loaded.
+		Field string
+		// Props represents the properties of the JSON payload that should be loaded into the struct.
 		// If this is empty, all properties will be loaded. If this is nil, none will be loaded.
-		props []string
+		Props []string
 	}
 	NodeSelection struct {
 		QuerySelector
-		// alloc is the allocated value for this node. It is only populated when the selection is qualified.
-		alloc  any
-		target *NodeTarget
-		next   *RelationshipSelection
+		Alloc   any
+		Payload any
+		Target  *NodeTarget
+		Next    *RelationshipSelection
 	}
 	RelationshipSelection struct {
 		QuerySelector
-		// alloc is the allocated value for this relationship. It is only populated when the selection is qualified.
-		alloc  any
-		target *RelationshipTarget
-		next   *NodeSelection
+		Alloc   any
+		Payload any
+		Target  *RelationshipTarget
+		Next    *NodeSelection
 	}
 )
 
@@ -43,7 +43,9 @@ func ResolveQuery(r *Registry, root any, query string) (head *NodeSelection, err
 		return nil, errors.New("no target node/relationship provided")
 	}
 	typ := reflect.TypeOf(root)
+	isSlice := false
 	for typ.Kind() == reflect.Slice {
+		isSlice = true
 		typ = typ.Elem()
 	}
 	target := r.Get(typ)
@@ -69,22 +71,22 @@ func ResolveQuery(r *Registry, root any, query string) (head *NodeSelection, err
 		allocationDepth = 0
 		rootSelector    *QuerySelector
 	)
-	if rootSelector = selectors[0]; rootSelector.field == "." {
+	if rootSelector = selectors[0]; rootSelector.Field == "." {
 		i++
 	} else {
 		rootSelector = &QuerySelector{
-			field: ".",
-			props: []string{},
+			Field: ".",
+			Props: []string{},
 		}
 	}
 	head = &NodeSelection{
 		QuerySelector: *rootSelector,
-		alloc:         root,
-		target: &NodeTarget{
+		Alloc:         root,
+		Target: &NodeTarget{
 			RegisteredNode: current,
 		},
 	}
-	if reflect.TypeOf(root).Kind() == reflect.Slice {
+	if isSlice {
 		allocationDepth = 1
 	}
 	if err := head.validateProps(); err != nil {
@@ -94,10 +96,11 @@ func ResolveQuery(r *Registry, root any, query string) (head *NodeSelection, err
 	var (
 		prevNodeSel = head
 		prevRelSel  *RelationshipSelection
+		curV        = reflect.ValueOf(root)
 	)
 	for i < len(selectors) {
 		selector := selectors[i]
-		if selector.field == "." {
+		if selector.Field == "." {
 			return nil, fmt.Errorf("ambiguous selector in query argument %d: %s", i, query)
 		}
 		var (
@@ -107,64 +110,105 @@ func ResolveQuery(r *Registry, root any, query string) (head *NodeSelection, err
 		)
 		allocate := func(typ reflect.Type) any {
 			alloc := reflect.New(typ)
-			for range allocationDepth {
+			effDepth := allocationDepth
+			for range effDepth {
 				alloc = reflect.Zero(reflect.SliceOf(alloc.Type()))
 			}
 			return alloc.Interface()
 		}
-		for field, rsTarget := range prevNodeSel.target.Relationships {
-			if field != selector.field {
-				continue
-			}
-			if rsTarget.Many {
-				allocationDepth++
-			}
-			var alloc any
-			// If the relationship is  shorthand, we don't need to allocate a value for it.
-			if rType := rsTarget.Rel.Type(); rType != nil {
-				alloc = allocate(rsTarget.Rel.Type())
-			}
-			curRelSel = &RelationshipSelection{
-				QuerySelector: *selector,
-				target:        rsTarget,
-				alloc:         alloc,
-			}
-			if err := curRelSel.validateProps(); err != nil {
-				return nil, err
-			}
-			nextNode = rsTarget.Target()
-			if rsTarget.Dir {
-				nextField = rsTarget.Rel.EndNode.Field
-			} else {
-				nextField = rsTarget.Rel.StartNode.Field
-			}
-			break
+		rsTarget, ok := prevNodeSel.Target.Relationships[selector.Field]
+		if !ok {
+			return nil, fmt.Errorf("relationship %s not found in node %s", selector.Field, prevNodeSel.Target.Name())
 		}
-		if curRelSel == nil {
-			return nil, fmt.Errorf("relationship %s not found in node %s", selector.field, prevNodeSel.target.Name())
+		curRelSel = &RelationshipSelection{
+			QuerySelector: *selector,
+			Target:        rsTarget,
 		}
-		prevNodeSel.next = curRelSel
+		if err := curRelSel.validateProps(); err != nil {
+			return nil, err
+		}
+		nextNode = rsTarget.Target()
+		if rsTarget.Dir {
+			nextField = rsTarget.Rel.EndNode.Field
+		} else {
+			nextField = rsTarget.Rel.StartNode.Field
+		}
+		prevNodeSel.Next = curRelSel
 		prevRelSel = curRelSel
 
 		i++
 		if i == len(selectors) {
-			selector = &QuerySelector{field: "."}
+			selector = &QuerySelector{Field: "."}
 		} else {
 			selector = selectors[i]
 		}
-		if selector.field != "." && selector.field != nextField {
-			return nil, fmt.Errorf("field %s not found in relationship %s, expected %s or '.'", selector.field, curRelSel.target.Rel.Name(), nextField)
+		if selector.Field != "." && selector.Field != nextField {
+			return nil, fmt.Errorf("field %s not found in relationship %s, expected %s or '.'", selector.Field, curRelSel.Target.Rel.Name(), nextField)
 		}
-		alloc := allocate(nextNode.Type())
 		curNodeSel := &NodeSelection{
 			QuerySelector: *selector,
-			target:        nextNode,
-			alloc:         alloc,
+			Target:        nextNode,
 		}
 		if err := curNodeSel.validateProps(); err != nil {
 			return nil, err
 		}
-		prevRelSel.next = curNodeSel
+
+		// Create allocations
+		// We check for the case where the depth of the result needs to be increased by 1.
+		// This is where we're returning either the node or relationship in a *-to-many relationship.
+		if rsTarget.Many && (curRelSel.Name != "" || curNodeSel.Name != "") {
+			allocationDepth++
+		}
+		// If the relationship is shorthand, we don't need to allocate a value for it.
+		rType := rsTarget.Rel.Type()
+		if rType != nil {
+			curRelSel.Alloc = allocate(rType)
+		}
+		curNodeSel.Alloc = allocate(nextNode.Type())
+
+		attachPayload := func() {
+			curV = UnwindValue(curV)
+			if curV.Kind() != reflect.Struct || curV.IsZero() {
+				return
+			}
+			relV := curV.FieldByName(curRelSel.Field)
+			if rType != nil {
+				if curRelSel.Target.Many {
+					relV = UnwindValue(relV)
+					if relV.Kind() != reflect.Struct {
+						return
+					}
+					relV = relV.FieldByName("V")
+					if !relV.IsValid() || !relV.CanInterface() {
+						return
+					}
+				}
+				curRelSel.Payload = relV.Interface()
+			}
+			relV = UnwindValue(relV)
+			if relV.Kind() != reflect.Struct {
+				return
+			}
+			curV = relV.FieldByName(curNodeSel.Target.Field)
+			// Handle shorthand relationships
+			if rType == nil && curRelSel.Target.Many {
+				curV = UnwindValue(curV)
+				if curV.Kind() != reflect.Struct {
+					return
+				}
+				curV = relV.FieldByName("V")
+				if !curV.IsValid() {
+					return
+				}
+			}
+			if !curV.CanInterface() {
+				return
+			}
+			curNodeSel.Payload = curV.Interface()
+			curV = UnwindValue(curV)
+		}
+		attachPayload()
+		prevRelSel.Next = curNodeSel
 		prevNodeSel = curNodeSel
 		i++
 	}
@@ -172,28 +216,28 @@ func ResolveQuery(r *Registry, root any, query string) (head *NodeSelection, err
 }
 
 func (n *NodeSelection) validateProps() error {
-	ftp := n.target.FieldsToProps()
+	ftp := n.Target.FieldsToProps()
 	props := make(map[string]struct{}, len(ftp))
 	for _, prop := range ftp {
 		props[prop] = struct{}{}
 	}
-	for _, prop := range n.props {
+	for _, prop := range n.Props {
 		if _, ok := props[prop]; !ok {
-			return fmt.Errorf("property %s not found in node %s", prop, n.target.Name())
+			return fmt.Errorf("property %s not found in node %s", prop, n.Target.Name())
 		}
 	}
 	return nil
 }
 
 func (r *RelationshipSelection) validateProps() error {
-	ftp := r.target.Rel.FieldsToProps()
+	ftp := r.Target.Rel.FieldsToProps()
 	props := make(map[string]struct{}, len(ftp))
 	for _, prop := range ftp {
 		props[prop] = struct{}{}
 	}
-	for _, prop := range r.props {
+	for _, prop := range r.Props {
 		if _, ok := props[prop]; !ok {
-			return fmt.Errorf("property %s not found in relationship %s", prop, r.target.Rel.Name())
+			return fmt.Errorf("property %s not found in relationship %s", prop, r.Target.Rel.Name())
 		}
 	}
 	return nil
@@ -202,12 +246,12 @@ func (r *RelationshipSelection) validateProps() error {
 func (q QuerySpec) String() string {
 	var buf strings.Builder
 	for i, selector := range q {
-		if selector.name != "" || selector.props != nil {
-			buf.WriteString(selector.name)
-			buf.WriteString(fmt.Sprintf("{%s}", strings.Join(selector.props, ",")))
+		if selector.Name != "" || selector.Props != nil {
+			buf.WriteString(selector.Name)
+			buf.WriteString(fmt.Sprintf("{%s}", strings.Join(selector.Props, ",")))
 			buf.WriteString(":")
 		}
-		buf.WriteString(selector.field)
+		buf.WriteString(selector.Field)
 		if i != len(q)-1 {
 			buf.WriteString(" ")
 		}

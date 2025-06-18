@@ -70,7 +70,7 @@ type (
 		Released int    `json:"released"`
 		Tagline  string `json:"tagline"`
 
-		ActedIn []*ActedIn `neo4j:"<-" json:"-"`
+		ActedIn internal.Many[*ActedIn] `neo4j:"<-" json:"-"`
 	}
 	Person struct {
 		internal.Node `neo4j:"Person"`
@@ -88,7 +88,7 @@ type (
 		Found         bool    `json:"found"`
 		ChauffeurName string  `json:"chauffeurName"`
 
-		ActedIn []*ActedIn `neo4j:"->" json:"-"`
+		ActedIn internal.Many[*ActedIn] `neo4j:"->" json:"-"`
 	}
 
 	Company struct {

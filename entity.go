@@ -109,4 +109,6 @@ type (
 	//  	neogo.Label `neo4j:"Robot"`
 	//  }
 	Label = internal.Label
+
+	Many[T any] = internal.Many[T]
 )

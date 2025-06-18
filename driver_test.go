@@ -89,7 +89,6 @@ func TestDriver(t *testing.T) {
     WITH count(n) AS count, n, c
 		DETACH DELETE n, c
 		`).
-		Match(db.Query(&adam, "Friends p:.")).
 		Return(db.Qual(&count, "count"), "c").
 		Run(ctx)
 	if err != nil {

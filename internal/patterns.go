@@ -2,6 +2,7 @@ package internal
 
 import (
 	"errors"
+	"reflect"
 )
 
 type (
@@ -78,21 +79,25 @@ func NewQueryPattern(rootIdentifier any, query string) Pattern {
 	return &CypherPattern{
 		resolver: func(r *Registry) *nodePatternPart {
 			nodeMatch := func(sel *NodeSelection) (node any) {
-				node = sel.alloc
-				if sel.name != "" {
+				node = sel.Alloc
+				props := identifierToProps(reflect.ValueOf(sel.Payload), sel.Name)
+				if sel.Name != "" {
 					node = Variable{
 						Identifier: node,
-						Name:       sel.name,
+						Name:       sel.Name,
+						Props:      props,
 					}
 				}
 				return
 			}
 			rsMatch := func(sel *RelationshipSelection) (rs any) {
-				rs = sel.alloc
-				if sel.name != "" {
+				rs = sel.Alloc
+				props := identifierToProps(reflect.ValueOf(sel.Payload), sel.Name)
+				if sel.Name != "" {
 					rs = Variable{
 						Identifier: rs,
-						Name:       sel.name,
+						Name:       sel.Name,
+						Props:      props,
 					}
 				}
 				return
@@ -111,12 +116,12 @@ func NewQueryPattern(rootIdentifier any, query string) Pattern {
 			}
 			nextSel := headSel
 			for nextSel != nil {
-				relSel := nextSel.next
+				relSel := nextSel.Next
 				if relSel == nil {
 					break
 				}
-				nextSel = relSel.next
-				if relSel.target.Dir {
+				nextSel = relSel.Next
+				if relSel.Target.Dir {
 					pattern = pattern.To(rsMatch(relSel), nodeMatch(nextSel))
 				} else {
 					pattern = pattern.From(rsMatch(relSel), nodeMatch(nextSel))

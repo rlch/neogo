@@ -397,6 +397,10 @@ func (s *session) unmarshalResult(
 			return fmt.Errorf("cannot unmarshal record: %w", err)
 		}
 	}
+	names := cy.Names()
+	for name, query := range cy.Queries {
+		rootBinding := cy.Bindings[name]
+	}
 	return nil
 }
 
@@ -442,6 +446,28 @@ func (s *session) unmarshalRecords(
 			}
 		}
 	}
+	// names := cy.Names()
+	// for name, selection := range cy.Queries {
+	// 	root := selection.Alloc
+	// 	curAlloc := reflect.ValueOf(root)
+	// 	nextNode := []*internal.NodeSelection{selection}
+	// 	nextAlloc := []reflect.Value{curAlloc}
+	// 	// n, [a, b, c], [[w], [x], [y, z]], [[[1]], [[2]], [[3], [4, 5]]]
+	// 	for nextNode != nil {
+	// 		rel := selection.Next
+	// 		if rel == nil {
+	// 			break
+	// 		}
+	// 		// relBinding :=
+	// 		relAllocs := make([]*reflect.Value, len(nextAlloc))
+	// 		relAllocs := curAlloc.FieldByName(rel.Field)
+	// 		if _, ok := names[nextAlloc]; ok {
+	// 			relAlloc.Set(reflect.ValueOf(selection.Alloc))
+	// 		} else {
+	// 			rel.Allloc.Set(reflect.MakeSlice())
+	// 		}
+	// 	}
+	// }
 	return nil
 }
 

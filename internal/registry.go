@@ -181,12 +181,16 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 			registerRelationshipField := func(dir bool, shorthand string) error {
 				relType := typ.Type
 				isMany := false
-				if relType.Kind() == reflect.Slice {
-					relType = relType.Elem()
+				if relType.Kind() == reflect.Struct {
+					relField, ok := relType.FieldByName("S")
+					if !ok {
+						return fmt.Errorf("expected Many[T] for field %s.%s, where T is some node or relationship", vvt.Name(), typ.Name)
+					}
+					relType = relField.Type.Elem()
 					isMany = true
 				}
 				if relType.Kind() != reflect.Ptr {
-					return fmt.Errorf("invalid relationship for field %s.%s", vvt.Name(), typ.Name)
+					return fmt.Errorf("invalid relationship for field %s.%s. Got %s", vvt.Name(), typ.Name, relType)
 				}
 				var relReg *RegisteredRelationship
 				if shorthand != "" {
@@ -197,19 +201,11 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 					target := r.RegisterNode(node)
 					relReg = &RegisteredRelationship{Reltype: shorthand}
 					if dir {
-						relReg.StartNode = NodeTarget{
-							RegisteredNode: target,
-						}
-						relReg.EndNode = NodeTarget{
-							RegisteredNode: registered,
-						}
+						relReg.StartNode = NodeTarget{RegisteredNode: target}
+						relReg.EndNode = NodeTarget{RegisteredNode: registered}
 					} else {
-						relReg.StartNode = NodeTarget{
-							RegisteredNode: registered,
-						}
-						relReg.EndNode = NodeTarget{
-							RegisteredNode: target,
-						}
+						relReg.StartNode = NodeTarget{RegisteredNode: registered}
+						relReg.EndNode = NodeTarget{RegisteredNode: target}
 					}
 					r.registeredTypes[shorthand] = relReg
 				} else {

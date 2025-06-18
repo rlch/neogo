@@ -457,18 +457,23 @@ func TestMatch(t *testing.T) {
 	t.Run("Query syntax", func(t *testing.T) {
 		c := internal.NewCypherClient(r)
 		var m Movie
-		sel, err := internal.ResolveQuery(r, &m, "m:. a:ActedIn p:.")
-		require.NoError(t, err)
+		m.ActedIn.Set(&ActedIn{Role: "Director"})
 
 		cy, err := c.
 			Match(db.Query(&m, "m:. a:ActedIn p:.").Related(nil, &m)).
 			Return("*").Compile()
+		require.NoError(t, err)
 
+		sel, err := internal.ResolveQuery(r, &m, "m:. a:ActedIn p:.")
+		require.NoError(t, err)
 		Check(t, cy, err, internal.CompiledCypher{
 			Cypher: `
-			MATCH (m:Movie)<-[a:ACTED_IN]-(p:Person)--(m)
+			MATCH (m:Movie)<-[a:ACTED_IN {role: $a_role}]-(p:Person)--(m)
 			RETURN *
 			`,
+			Parameters: map[string]any{
+				"a_role": "Director",
+			},
 			Bindings: map[string]reflect.Value{
 				"m": reflect.ValueOf(&m),
 				"a": cy.Bindings["a"],

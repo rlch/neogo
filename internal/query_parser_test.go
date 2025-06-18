@@ -45,7 +45,7 @@ func TestParser_ParseStatement(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		query []*QuerySelector
+		query QuerySpec
 		err   string
 	}{
 		{
@@ -57,61 +57,61 @@ func TestParser_ParseStatement(t *testing.T) {
 			name:  "single field",
 			input: `Person`,
 			query: []*QuerySelector{
-				{field: "Person"},
+				{Field: "Person"},
 			},
 		},
 		{
 			name:  "multiple fields",
 			input: `Person Friends Questions`,
 			query: []*QuerySelector{
-				{field: "Person"},
-				{field: "Friends"},
-				{field: "Questions"},
+				{Field: "Person"},
+				{Field: "Friends"},
+				{Field: "Questions"},
 			},
 		},
 		{
 			name:  "dot is considered a field",
 			input: `Person Friends . Questions`,
 			query: []*QuerySelector{
-				{field: "Person"},
-				{field: "Friends"},
-				{field: "."},
-				{field: "Questions"},
+				{Field: "Person"},
+				{Field: "Friends"},
+				{Field: "."},
+				{Field: "Questions"},
 			},
 		},
 		{
 			name:  ": ignored",
 			input: `:Person`,
 			query: []*QuerySelector{
-				{field: "Person"},
+				{Field: "Person"},
 			},
 		},
 		{
 			name:  "simple qualifier",
 			input: `p:Person`,
 			query: []*QuerySelector{
-				{field: "Person", name: "p"},
+				{Field: "Person", Name: "p"},
 			},
 		},
 		{
 			name:  "empty props yields non-nil empty slice",
 			input: `{}:Person`,
 			query: []*QuerySelector{
-				{field: "Person", props: []string{}},
+				{Field: "Person", Props: []string{}},
 			},
 		},
 		{
 			name:  "props handled correctly",
 			input: `{a, bb,    ccc}:Person`,
 			query: []*QuerySelector{
-				{field: "Person", props: []string{"a", "bb", "ccc"}},
+				{Field: "Person", Props: []string{"a", "bb", "ccc"}},
 			},
 		},
 		{
 			name:  "qualifier and props",
 			input: `a{b}:C`,
 			query: []*QuerySelector{
-				{field: "C", props: []string{"b"}, name: "a"},
+				{Field: "C", Props: []string{"b"}, Name: "a"},
 			},
 		},
 		{
@@ -121,11 +121,11 @@ func TestParser_ParseStatement(t *testing.T) {
 			name:  "complex example",
 			input: `p{name}:Person :FriendsWith . o{acquiredAt}:Owns pp:Pet`,
 			query: []*QuerySelector{
-				{field: "Person", props: []string{"name"}, name: "p"},
-				{field: "FriendsWith"},
-				{field: "."},
-				{field: "Owns", props: []string{"acquiredAt"}, name: "o"},
-				{field: "Pet", name: "pp"},
+				{Field: "Person", Props: []string{"name"}, Name: "p"},
+				{Field: "FriendsWith"},
+				{Field: "."},
+				{Field: "Owns", Props: []string{"acquiredAt"}, Name: "o"},
+				{Field: "Pet", Name: "pp"},
 			},
 		},
 

@@ -39,10 +39,10 @@ type (
 	}
 	nodeWithRelationship struct {
 		simpleNode
-		Forward   *simpleRelationship   `json:"-" neo4j:"->"`
-		Backward  *simpleRelationship   `json:"-" neo4j:"<-"`
-		Forwards  []*simpleRelationship `json:"-" neo4j:"->"`
-		Backwards []*simpleRelationship `json:"-" neo4j:"<-"`
+		Forward   *simpleRelationship       `json:"-" neo4j:"->"`
+		Backward  *simpleRelationship       `json:"-" neo4j:"<-"`
+		Forwards  Many[*simpleRelationship] `json:"-" neo4j:"->"`
+		Backwards Many[*simpleRelationship] `json:"-" neo4j:"<-"`
 	}
 	simpleRelationship struct {
 		Relationship `neo4j:"SIMPLE"`
@@ -52,10 +52,10 @@ type (
 	}
 	shorthandRelationshipNode struct {
 		simpleNode
-		Forward   *simpleNode   `json:"-" neo4j:"SHORTHAND>"`
-		Backward  *simpleNode   `json:"-" neo4j:"<SHORTHAND"`
-		Forwards  []*simpleNode `json:"-" neo4j:"SHORTHAND>"`
-		Backwards []*simpleNode `json:"-" neo4j:"<SHORTHAND"`
+		Forward   *simpleNode       `json:"-" neo4j:"SHORTHAND>"`
+		Backward  *simpleNode       `json:"-" neo4j:"<SHORTHAND"`
+		Forwards  Many[*simpleNode] `json:"-" neo4j:"SHORTHAND>"`
+		Backwards Many[*simpleNode] `json:"-" neo4j:"<SHORTHAND"`
 	}
 )
 
