@@ -55,9 +55,21 @@ func (r *Registry) BindValue(from any, to reflect.Value) (err error) {
 
 	var ok bool
 	if from != nil {
+		handleSingleRecordToSlice := func(fromVal any) error {
+			sliceV := to
+			for sliceV.Kind() == reflect.Ptr {
+				sliceV = sliceV.Elem()
+			}
+			sliceV.Set(reflect.MakeSlice(sliceV.Type(), 1, 1))
+			return r.BindValue(fromVal, sliceV.Index(0).Addr())
+		}
 		// Valuer through Node / relationship
 		switch fromVal := from.(type) {
 		case neo4j.Node:
+			// Handle 1 record of an expected slice of nodes
+			if UnwindType(toT).Kind() == reflect.Slice {
+				return handleSingleRecordToSlice(fromVal)
+			}
 			ok, err := bindValuer(fromVal, to)
 			if err != nil {
 				return err
@@ -78,6 +90,10 @@ func (r *Registry) BindValue(from any, to reflect.Value) (err error) {
 			}
 			return r.BindValue(fromVal.Props, to)
 		case neo4j.Relationship:
+			// Handle 1 record of an expected slice of relationships
+			if UnwindType(toT).Kind() == reflect.Slice {
+				return handleSingleRecordToSlice(fromVal)
+			}
 			ok, err := bindValuer(fromVal, to)
 			if err != nil {
 				return err
