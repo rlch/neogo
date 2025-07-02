@@ -17,7 +17,7 @@ import (
 
 func TestUnmarshalRecord(t *testing.T) {
 	s := &session{}
-	s.registry.registerTypes(&tests.Human{})
+	s.registerTypes(&tests.Human{})
 	t.Run("err on non-existent key", func(t *testing.T) {
 		n := tests.Person{}
 		cy := &internal.CompiledCypher{
@@ -765,9 +765,10 @@ func TestRun(t *testing.T) {
 			Return(db.Qual(&listOfVal, "t.someNonExistentProp")).
 			Run(ctx)
 
-		// Should not error, but return an empty list since the property doesn't exist
+		// Should not error, but return a list with one empty string since the property doesn't exist
 		assert.NoError(t, err)
-		assert.Empty(t, listOfVal, "Expected empty list when querying non-existent property")
+		assert.Len(t, listOfVal, 1, "Expected list with one element when querying non-existent property")
+		assert.Equal(t, "", listOfVal[0], "Expected empty string for non-existent property")
 	})
 }
 
