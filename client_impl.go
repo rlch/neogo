@@ -62,7 +62,7 @@ func (s *session) newClient(cy *internal.CypherClient) *clientImpl {
 		session: s,
 		cy:      cy,
 		Reader:  s.newReader(cy.CypherReader),
-		Updater: newUpdater[query.Querier, *internal.CypherQuerier](
+		Updater: newUpdater(
 			s,
 			cy.CypherUpdater,
 			func(c *internal.CypherQuerier) query.Querier {
