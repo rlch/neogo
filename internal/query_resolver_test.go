@@ -4,8 +4,57 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/rlch/neogo/db"
 	"github.com/stretchr/testify/require"
 )
+
+type (
+	Topic struct {
+		Node      `neo4j:"Topic"`
+		Subtopics Many[*Subtopic] `neo4j:"CONTAINS>" json:"-"`
+	}
+	Subtopic struct {
+		Node   `neo4j:"Subtopic"`
+		Title  string
+		Skills Many[*Skill] `neo4j:"CONTAINS>" json:"-"`
+		Topics Many[*Topic] `neo4j:"<CONTAINS" json:"-"`
+	}
+	Skill struct {
+		Node      `neo4j:"Skill"`
+		Active    bool
+		Subtopics Many[*Subtopic] `neo4j:"<CONTAINS" json:"-"`
+	}
+)
+
+func main() {
+	b := newCypherClient(nil)
+	var topic Topic
+	topic.
+		Subtopics.Set(&Subtopic{Title: "asdf"}).
+		Skills.Set(&Skill{Active: true})
+	b.Create(db.Query(topic, ". Subtopics . Skills ."))
+
+	// topic.Subtopics.V.Skills.V.Active = true
+	// b = Find(
+	// 	b,
+	// 	&topic,
+	// 	"t:. Subtopics s:Skills",
+	// 	db.OrderBy("s.order"),
+	// 	db.Where("t.active = ?", true),
+	// )
+	match := b.Match(
+		db.Query(&topic, "t:. s:Subtopics v:Skills"),
+	)
+	b = CollectQuery(match)
+	// skills := topic.Subtopics.V.Skills.S
+	// MATCH (t:Topic)-[:CONTAINS]->(:Subtopic {title: "asdf"})-[:CONTAINS]->(s:Skill {active: true})
+	// WITH t, s, collect(v) AS v
+	// WITH t, collect(s) AS s, v
+}
+
+func Find(q *CypherClient, identifier any, queryString string) *CypherQuerier {
+	return nil
+}
 
 type Owner struct {
 	Node       `neo4j:"Owner"`
@@ -46,6 +95,7 @@ func qs(field, name string, props ...string) QuerySelector {
 func TestResolveQuery(t *testing.T) {
 	r := NewRegistry()
 	r.RegisterNode(&Owner{})
+
 	var (
 		regOwner      = r.Get(reflect.TypeOf(&Owner{})).(*RegisteredNode)
 		regIsOwner    = r.Get(reflect.TypeOf(&IsOwner{})).(*RegisteredRelationship)
@@ -335,9 +385,9 @@ func TestResolveQuery(t *testing.T) {
 		{
 			name:  "payload set in relationships",
 			root:  ownerWithProps,
-			query: "c:Cats . Owner . Cats cc:.",
+			query: ". c:Cats . Owner . Cats cc:.",
 			expect: &NodeSelection{
-				QuerySelector: qs(".", "", ""),
+				QuerySelector: qs(".", ""),
 				Target:        &NodeTarget{RegisteredNode: regOwner},
 				Alloc:         ownerWithProps,
 				Next: &RelationshipSelection{
