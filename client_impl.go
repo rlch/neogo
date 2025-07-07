@@ -271,6 +271,9 @@ func (c *runnerImpl) run(
 	if err != nil {
 		return nil, fmt.Errorf("cannot serialize parameters: %w", err)
 	}
+	if canonicalizedParams != nil {
+		canonicalizedParams["__isWrite"] = cy.IsWrite
+	}
 	return c.executeTransaction(
 		ctx, cy,
 		func(tx neo4j.ManagedTransaction) (any, error) {

@@ -244,13 +244,14 @@ func (r *Registry) BindValue(from any, to reflect.Value) (err error) {
 	}
 
 	// This handles a slice of length 1, treated as a single record value.
-	// NOTE: a nil record is considered an empty list!
-	if from != nil && reflect.TypeOf(from).Kind() != reflect.Slice {
-		sliceV := to
-		for sliceV.Kind() == reflect.Ptr {
-			sliceV = sliceV.Elem()
-		}
-		if sliceV.Kind() == reflect.Slice {
+	// When binding a single value (including nil) to a slice, create a slice with one element.
+	sliceV := to
+	for sliceV.Kind() == reflect.Ptr {
+		sliceV = sliceV.Elem()
+	}
+	if sliceV.Kind() == reflect.Slice {
+		// Handle non-slice values (including nil) by creating a slice with one element
+		if from == nil || reflect.TypeOf(from).Kind() != reflect.Slice {
 			sliceV.Set(reflect.MakeSlice(sliceV.Type(), 1, 1))
 			return r.BindValue(from, sliceV.Index(0).Addr())
 		}

@@ -18,6 +18,7 @@ import (
 func TestUnmarshalRecord(t *testing.T) {
 	s := &session{driver: &driver{}}
 	s.reg = internal.NewRegistry()
+	s.registerTypes(&tests.Human{})
 	t.Run("err on non-existent key", func(t *testing.T) {
 		n := tests.Person{}
 		cy := &internal.CompiledCypher{
@@ -681,6 +682,28 @@ func TestUnmarshalRecords(t *testing.T) {
 		require.NoError(err)
 		require.Len(persons, 1)
 	})
+
+	t.Run("unmarshalling nil record to slice", func(t *testing.T) {
+		require := require.New(t)
+		s := &session{}
+
+		type Person struct {
+			ID int `json:"id"`
+		}
+
+		var persons []*Person
+		record := &neo4j.Record{
+			Keys:   []string{"persons"},
+			Values: []any{nil},
+		}
+		err := s.unmarshalRecord(&internal.CompiledCypher{
+			Bindings: map[string]reflect.Value{
+				"persons": reflect.ValueOf(&persons),
+			},
+		}, record)
+		require.NoError(err)
+		require.Len(persons, 1)
+	})
 }
 
 func TestStream(t *testing.T) {
@@ -770,9 +793,10 @@ func TestRun(t *testing.T) {
 			Return(db.Qual(&listOfVal, "t.someNonExistentProp")).
 			Run(ctx)
 
-		// Should not error, but return an empty list since the property doesn't exist
+		// Should not error, but return a list with one empty string since the property doesn't exist
 		assert.NoError(t, err)
-		assert.Empty(t, listOfVal, "Expected empty list when querying non-existent property")
+		assert.Len(t, listOfVal, 1, "Expected list with one element when querying non-existent property")
+		assert.Equal(t, "", listOfVal[0], "Expected empty string for non-existent property")
 	})
 }
 
