@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/rlch/neogo/internal"
 	"github.com/rlch/neogo/query"
@@ -13,7 +14,7 @@ import (
 
 // New creates a new neogo [Driver] from a [neo4j.DriverWithContext].
 func New(neo4j neo4j.DriverWithContext, configurers ...Config) Driver {
-	d := driver{db: neo4j}
+	d := driver{db: neo4j, sessionSemaphore: semaphore.NewWeighted(100)}
 	for _, c := range configurers {
 		c(&d)
 	}
@@ -103,6 +104,7 @@ type (
 		registry
 		db                   neo4j.DriverWithContext
 		causalConsistencyKey func(ctx context.Context) string
+		sessionSemaphore     *semaphore.Weighted
 	}
 	session struct {
 		*driver
@@ -149,6 +151,12 @@ func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execC
 func WithTypes(types ...any) func(*driver) {
 	return func(d *driver) {
 		d.registry.registerTypes(types...)
+	}
+}
+
+func WithSessionSemaphore(semaphoreWeight int64) func(*driver) {
+	return func(d *driver) {
+		d.sessionSemaphore = semaphore.NewWeighted(semaphoreWeight)
 	}
 }
 
@@ -201,6 +209,9 @@ func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.Ses
 	}
 	config.AccessMode = neo4j.AccessModeRead
 	d.ensureCausalConsistency(ctx, &config)
+	if err := d.sessionSemaphore.Acquire(ctx, 1); err != nil {
+		panic(err)
+	}
 	sess := d.db.NewSession(ctx, config)
 	return &session{
 		driver:   d,
@@ -217,6 +228,9 @@ func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.Se
 	}
 	config.AccessMode = neo4j.AccessModeWrite
 	d.ensureCausalConsistency(ctx, &config)
+	if err := d.sessionSemaphore.Acquire(ctx, 1); err != nil {
+		panic(err)
+	}
 	sess := d.db.NewSession(ctx, config)
 	return &session{
 		driver:   d,
@@ -232,6 +246,7 @@ func (s *session) Session() neo4j.SessionWithContext {
 
 func (s *session) Close(ctx context.Context, errs ...error) error {
 	sessErr := s.session.Close(ctx)
+	s.driver.sessionSemaphore.Release(1)
 	if sessErr != nil {
 		errs = append(errs, sessErr)
 		return errors.Join(errs...)

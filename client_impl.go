@@ -485,6 +485,9 @@ func (c *runnerImpl) executeTransaction(
 			} else {
 				sessConfig.AccessMode = neo4j.AccessModeRead
 			}
+			if err := c.sessionSemaphore.Acquire(ctx, 1); err != nil {
+				panic(err)
+			}
 			sess = c.db.NewSession(ctx, sessConfig)
 			defer func() {
 				if sessConfig.AccessMode == neo4j.AccessModeWrite {
@@ -506,6 +509,7 @@ func (c *runnerImpl) executeTransaction(
 				if closeErr := sess.Close(ctx); closeErr != nil {
 					err = errors.Join(err, closeErr)
 				}
+				c.sessionSemaphore.Release(1)
 			}()
 		}
 		config := func(tc *neo4j.TransactionConfig) {
