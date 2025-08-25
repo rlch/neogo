@@ -3,21 +3,51 @@ package neogo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/auth"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/config"
 
 	"github.com/rlch/neogo/internal"
 	"github.com/rlch/neogo/query"
 )
 
 // New creates a new neogo [Driver] from a [neo4j.DriverWithContext].
-func New(neo4j neo4j.DriverWithContext, configurers ...Config) Driver {
-	d := driver{db: neo4j}
-	for _, c := range configurers {
-		c(&d)
+func New(
+	target string,
+	auth auth.TokenManager,
+	configurers ...Configurer,
+) (Driver, error) {
+	cfg := &Config{
+		Config: *defaultConfig(),
 	}
-	return &d
+	
+	for _, c := range configurers {
+		c(cfg)
+	}
+	
+	neo4j, err := neo4j.NewDriverWithContext(
+		target,
+		auth,
+		func(c *config.Config) { *c = cfg.Config },
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Neo4J driver: %w", err)
+	}
+	
+	d := driver{
+		db:                   neo4j,
+		causalConsistencyKey: cfg.CausalConsistencyKey,
+	}
+	
+	// Register types from config
+	if len(cfg.Types) > 0 {
+		d.registerTypes(cfg.Types...)
+	}
+	
+	return &d, nil
 }
 
 type (
@@ -73,8 +103,6 @@ type (
 		Close(ctx context.Context, joinedErrors ...error) error
 	}
 
-	Config func(*driver)
-
 	readSession interface {
 		// Session returns the underlying Neo4J session.
 		Session() neo4j.SessionWithContext
@@ -91,10 +119,6 @@ type (
 		// ExecuteWrite executes the given unit of work in a AccessModeWrite transaction with retry logic in place.
 		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
 		WriteTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error
-	}
-	execConfig struct {
-		*neo4j.SessionConfig
-		*neo4j.TransactionConfig
 	}
 )
 
@@ -118,39 +142,6 @@ type (
 	}
 )
 
-var causalConsistencyCache map[string]neo4j.Bookmarks = map[string]neo4j.Bookmarks{}
-
-func WithCausalConsistency(when func(ctx context.Context) string) Config {
-	return func(d *driver) {
-		d.causalConsistencyKey = when
-	}
-}
-
-// WithTxConfig configures the transaction used by Exec().
-func WithTxConfig(configurers ...func(*neo4j.TransactionConfig)) func(ec *execConfig) {
-	return func(ec *execConfig) {
-		for _, c := range configurers {
-			c(ec.TransactionConfig)
-		}
-	}
-}
-
-// WithSessionConfig configures the session used by Exec().
-func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execConfig) {
-	return func(ec *execConfig) {
-		for _, c := range configurers {
-			c(ec.SessionConfig)
-		}
-	}
-}
-
-// WithTypes is an option for [New] that allows you to register instances of
-// [IAbstract], [INode] and [IRelationship] to be used with [neogo].
-func WithTypes(types ...any) func(*driver) {
-	return func(d *driver) {
-		d.registry.registerTypes(types...)
-	}
-}
 
 func (d *driver) DB() neo4j.DriverWithContext { return d.db }
 

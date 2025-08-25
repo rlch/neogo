@@ -17,7 +17,7 @@ import (
 
 func TestUnmarshalRecord(t *testing.T) {
 	s := &session{}
-	s.registerTypes(&tests.Human{})
+	s.registerTypes(&tests.Human{}, &tests.Dog{})
 	t.Run("err on non-existent key", func(t *testing.T) {
 		n := tests.Person{}
 		cy := &internal.CompiledCypher{
@@ -258,6 +258,7 @@ func TestUnmarshalRecord(t *testing.T) {
 
 func TestUnmarshalRecords(t *testing.T) {
 	s := &session{}
+	s.registerTypes(&tests.Human{}, &tests.Dog{})
 
 	t.Run("err on non-existent key", func(t *testing.T) {
 		n1 := tests.Person{}
@@ -434,14 +435,8 @@ func TestUnmarshalRecords(t *testing.T) {
 	})
 
 	t.Run("binds to abstract nodes", func(t *testing.T) {
-		s := &session{
-			registry: registry{
-				abstractNodes: []any{
-					&tests.BaseOrganism{},
-					&tests.BasePet{},
-				},
-			},
-		}
+		s := &session{}
+		s.registerTypes(&tests.Dog{}, &tests.Human{})
 		var n []tests.Organism
 		cy := &internal.CompiledCypher{
 			Bindings: map[string]reflect.Value{
@@ -508,14 +503,8 @@ func TestUnmarshalRecords(t *testing.T) {
 	})
 
 	t.Run("binds to [][]Abstract", func(t *testing.T) {
-		s := &session{
-			registry: registry{
-				abstractNodes: []any{
-					&tests.BaseOrganism{},
-					&tests.BasePet{},
-				},
-			},
-		}
+		s := &session{}
+		s.registerTypes(&tests.BasePet{}, &tests.Human{})
 		var n [][]tests.Organism
 		cy := &internal.CompiledCypher{
 			Bindings: map[string]reflect.Value{
@@ -579,14 +568,8 @@ func TestUnmarshalRecords(t *testing.T) {
 	})
 
 	t.Run("binds to [][]Concrete where Concrete is an implementation of Abstract", func(t *testing.T) {
-		s := &session{
-			registry: registry{
-				abstractNodes: []any{
-					&tests.BaseOrganism{},
-					&tests.BasePet{},
-				},
-			},
-		}
+		s := &session{}
+		s.registerTypes(&tests.BasePet{})
 		var n [][]tests.BasePet
 		cy := &internal.CompiledCypher{
 			Bindings: map[string]reflect.Value{
@@ -726,8 +709,11 @@ func TestStream(t *testing.T) {
 
 func TestRun(t *testing.T) {
 	ctx := context.Background()
-	neo4jDriver, cancel := startNeo4J(ctx)
-	d := New(neo4jDriver)
+	uri, cancel := startNeo4J(ctx)
+	d, err := New(uri, neo4j.BasicAuth("neo4j", "password", ""))
+	if err != nil {
+		t.Fatalf("failed to create driver: %v", err)
+	}
 	t.Cleanup(func() {
 		if err := cancel(ctx); err != nil {
 			t.Fatal(err)
@@ -778,8 +764,11 @@ func TestRunSummary(t *testing.T) {
 		return
 	}
 	ctx := context.Background()
-	neo4jDriver, cancel := startNeo4J(ctx)
-	d := New(neo4jDriver)
+	uri, cancel := startNeo4J(ctx)
+	d, err := New(uri, neo4j.BasicAuth("neo4j", "password", ""))
+	if err != nil {
+		t.Fatalf("failed to create driver: %v", err)
+	}
 	t.Cleanup(func() {
 		if err := cancel(ctx); err != nil {
 			t.Fatal(err)
@@ -807,8 +796,11 @@ func TestResultImpl(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	neo4jDriver, cancel := startNeo4J(ctx)
-	d := New(neo4jDriver)
+	uri, cancel := startNeo4J(ctx)
+	d, err := New(uri, neo4j.BasicAuth("neo4j", "password", ""))
+	if err != nil {
+		t.Fatalf("failed to create driver: %v", err)
+	}
 	readSession := d.ReadSession(ctx)
 	session := &session{session: readSession.Session()}
 

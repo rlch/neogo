@@ -87,10 +87,7 @@ func TestExtractNodeLabel(t *testing.T) {
 	})
 
 	t.Run("extracts from structs embedding Label, ordered by DFS", func(t *testing.T) {
-		var swedishRobot struct {
-			swedishPerson
-			robot
-		} = struct {
+		var swedishRobot = struct {
 			swedishPerson
 			robot
 		}{}
