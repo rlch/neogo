@@ -23,11 +23,11 @@ func New(
 	cfg := &Config{
 		Config: *defaultConfig(),
 	}
-	
+
 	for _, c := range configurers {
 		c(cfg)
 	}
-	
+
 	neo4j, err := neo4j.NewDriverWithContext(
 		target,
 		auth,
@@ -36,17 +36,17 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Neo4J driver: %w", err)
 	}
-	
+
 	d := driver{
 		db:                   neo4j,
 		causalConsistencyKey: cfg.CausalConsistencyKey,
 	}
-	
+
 	// Register types from config
 	if len(cfg.Types) > 0 {
 		d.registerTypes(cfg.Types...)
 	}
-	
+
 	return &d, nil
 }
 
@@ -141,7 +141,6 @@ type (
 		tx      neo4j.ExplicitTransaction
 	}
 )
-
 
 func (d *driver) DB() neo4j.DriverWithContext { return d.db }
 

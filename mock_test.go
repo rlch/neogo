@@ -35,7 +35,7 @@ func TestMockDriver(t *testing.T) {
 	t.Run("must provide bindings for all transactions", func(t *testing.T) {
 		d, m := newHybridDriver(t, ctx)
 		m.Bind(nil)
-		
+
 		// Should work without error when bindings are provided
 		err := d.Exec().
 			Cypher("RETURN 1").
@@ -48,7 +48,7 @@ func TestMockDriver(t *testing.T) {
 		m.Bind(map[string]any{
 			"test": "value",
 		})
-		
+
 		var result string
 		err := d.Exec().
 			Return(db.Qual(&result, "test")).
