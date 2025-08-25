@@ -485,27 +485,30 @@ func (c *runnerImpl) executeTransaction(
 			} else {
 				sessConfig.AccessMode = neo4j.AccessModeRead
 			}
+			if err := c.sessionSemaphore.Acquire(ctx, 1); err != nil {
+				return nil, err
+			}
 			sess = c.db.NewSession(ctx, sessConfig)
 			defer func() {
 				if sessConfig.AccessMode == neo4j.AccessModeWrite {
 					bookmarks := sess.LastBookmarks()
-					if bookmarks == nil || c.causalConsistencyKey == nil {
-						return
-					}
-					key := c.causalConsistencyKey(ctx)
-					if cur, ok := causalConsistencyCache[key]; ok {
-						causalConsistencyCache[key] = neo4j.CombineBookmarks(cur, bookmarks)
-					} else {
-						causalConsistencyCache[key] = bookmarks
-						go func(key string) {
-							<-ctx.Done()
-							causalConsistencyCache[key] = nil
-						}(key)
+					if bookmarks != nil && c.causalConsistencyKey != nil {
+						key := c.causalConsistencyKey(ctx)
+						if cur, ok := causalConsistencyCache[key]; ok {
+							causalConsistencyCache[key] = neo4j.CombineBookmarks(cur, bookmarks)
+						} else {
+							causalConsistencyCache[key] = bookmarks
+							go func(key string) {
+								<-ctx.Done()
+								causalConsistencyCache[key] = nil
+							}(key)
+						}
 					}
 				}
 				if closeErr := sess.Close(ctx); closeErr != nil {
 					err = errors.Join(err, closeErr)
 				}
+				c.sessionSemaphore.Release(1)
 			}()
 		}
 		config := func(tc *neo4j.TransactionConfig) {

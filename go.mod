@@ -10,6 +10,7 @@ require (
 	github.com/spf13/cast v1.5.1
 	github.com/stretchr/testify v1.8.4
 	github.com/testcontainers/testcontainers-go v0.23.0
+	golang.org/x/sync v0.1.0
 )
 
 require (
