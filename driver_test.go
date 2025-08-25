@@ -10,13 +10,15 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 	"github.com/rlch/neogo/query"
 )
 
-func startNeo4J(ctx context.Context) (neo4j.DriverWithContext, func(context.Context) error) {
+func startNeo4J(ctx context.Context) (string, func(context.Context) error) {
 	request := testcontainers.ContainerRequest{
 		Name:         "neo4j",
 		Image:        "neo4j:5.7-enterprise",
@@ -43,14 +45,7 @@ func startNeo4J(ctx context.Context) (neo4j.DriverWithContext, func(context.Cont
 		panic(err)
 	}
 	uri := fmt.Sprintf("bolt://localhost:%d", port.Int())
-	driver, err := neo4j.NewDriverWithContext(
-		uri,
-		neo4j.BasicAuth("neo4j", "password", ""),
-	)
-	if err != nil {
-		panic(err)
-	}
-	return driver, container.Terminate
+	return uri, container.Terminate
 }
 
 type Person struct {
@@ -63,14 +58,19 @@ type Person struct {
 
 func TestDriver(t *testing.T) {
 	ctx := context.Background()
-	neo4j, cancel := startNeo4J(ctx)
+	uri, cancel := startNeo4J(ctx)
 	t.Cleanup(func() {
-		cancel(ctx)
+		if err := cancel(ctx); err != nil {
+			t.Logf("error canceling container: %v", err)
+		}
 	})
-	d := New(neo4j)
+	d, err := New(uri, neo4j.BasicAuth("neo4j", "password", ""))
+	if err != nil {
+		t.Fatalf("failed to create driver: %v", err)
+	}
 
 	// First create a test entity
-	err := d.Exec().
+	err = d.Exec().
 		Cypher(`
 		CREATE (n:TestNode {id: "test-123"})
 		CREATE (c:TestChild {id: "child-123"})
@@ -112,8 +112,12 @@ func ExampleDriver() {
 		})
 		d = m
 	} else {
-		neo4j, cancel := startNeo4J(ctx)
-		d = New(neo4j)
+		uri, cancel := startNeo4J(ctx)
+		var err error
+		d, err = New(uri, neo4j.BasicAuth("neo4j", "password", ""))
+		if err != nil {
+			panic(err)
+		}
 		defer func() {
 			if err := cancel(ctx); err != nil {
 				panic(err)
@@ -160,8 +164,12 @@ func ExampleDriver_readSession() {
 		m.BindRecords(records2x)
 		d = m
 	} else {
-		neo4j, cancel := startNeo4J(ctx)
-		d = New(neo4j)
+		uri, cancel := startNeo4J(ctx)
+		var err error
+		d, err = New(uri, neo4j.BasicAuth("neo4j", "password", ""))
+		if err != nil {
+			panic(err)
+		}
 		defer func() {
 			if err := cancel(ctx); err != nil {
 				panic(err)
@@ -215,8 +223,12 @@ func ExampleDriver_writeSession() {
 		m.BindRecords(records)
 		d = m
 	} else {
-		neo4j, cancel := startNeo4J(ctx)
-		d = New(neo4j)
+		uri, cancel := startNeo4J(ctx)
+		var err error
+		d, err = New(uri, neo4j.BasicAuth("neo4j", "password", ""))
+		if err != nil {
+			panic(err)
+		}
 		defer func() {
 			if err := cancel(ctx); err != nil {
 				panic(err)
@@ -276,8 +288,12 @@ func ExampleDriver_runWithParams() {
 		})
 		d = m
 	} else {
-		neo4j, cancel := startNeo4J(ctx)
-		d = New(neo4j)
+		uri, cancel := startNeo4J(ctx)
+		var err error
+		d, err = New(uri, neo4j.BasicAuth("neo4j", "password", ""))
+		if err != nil {
+			panic(err)
+		}
 		defer func() {
 			if err := cancel(ctx); err != nil {
 				panic(err)
@@ -313,8 +329,12 @@ func ExampleDriver_streamWithParams() {
 		m.BindRecords(records)
 		d = m
 	} else {
-		neo4j, cancel := startNeo4J(ctx)
-		d = New(neo4j)
+		uri, cancel := startNeo4J(ctx)
+		var err error
+		d, err = New(uri, neo4j.BasicAuth("neo4j", "password", ""))
+		if err != nil {
+			panic(err)
+		}
 		defer func() {
 			if err := cancel(ctx); err != nil {
 				panic(err)
@@ -352,4 +372,84 @@ func ExampleDriver_streamWithParams() {
 	fmt.Printf("ns: %v\n", ns)
 	// Output: err: <nil>
 	// ns: [0 1 2 3]
+}
+
+func TestConfigOverride(t *testing.T) {
+	ctx := context.Background()
+	uri, cancel := startNeo4J(ctx)
+	t.Cleanup(func() {
+		if err := cancel(ctx); err != nil {
+			t.Logf("error canceling container: %v", err)
+		}
+	})
+
+	t.Run("default config values", func(t *testing.T) {
+		d, err := New(uri, neo4j.BasicAuth("neo4j", "password", ""))
+		require.NoError(t, err)
+		
+		// Access the underlying neo4j driver to verify default config
+		neo4jDriver := d.DB()
+		require.NotNil(t, neo4jDriver)
+		
+		// We can't directly access the config from the driver, but we can test 
+		// that the driver was created successfully with defaults
+		assert.NotNil(t, neo4jDriver)
+	})
+
+	t.Run("custom config values", func(t *testing.T) {
+		customTimeout := 10 * time.Second
+		customPoolSize := 50
+		
+		d, err := New(uri, neo4j.BasicAuth("neo4j", "password", ""), func(cfg *Config) {
+			cfg.MaxTransactionRetryTime = customTimeout
+			cfg.MaxConnectionPoolSize = customPoolSize
+		})
+		require.NoError(t, err)
+		
+		// Access the underlying neo4j driver
+		neo4jDriver := d.DB()
+		require.NotNil(t, neo4jDriver)
+		
+		// Test that the driver works with custom config
+		err = d.Exec().
+			Cypher("RETURN 1 as test").
+			Run(ctx)
+		assert.NoError(t, err)
+	})
+
+	t.Run("causal consistency config", func(t *testing.T) {
+		keyFunc := func(ctx context.Context) string {
+			return "test-key"
+		}
+		
+		d, err := New(uri, neo4j.BasicAuth("neo4j", "password", ""), WithCausalConsistency(keyFunc))
+		require.NoError(t, err)
+		
+		// Test that the driver works with causal consistency
+		err = d.Exec().
+			Cypher("RETURN 1 as test").
+			Run(ctx)
+		assert.NoError(t, err)
+	})
+
+	t.Run("multiple configurers", func(t *testing.T) {
+		d, err := New(uri, neo4j.BasicAuth("neo4j", "password", ""), 
+			func(cfg *Config) {
+				cfg.MaxConnectionPoolSize = 25
+			},
+			func(cfg *Config) {
+				cfg.MaxTransactionRetryTime = 15 * time.Second
+			},
+			WithCausalConsistency(func(ctx context.Context) string {
+				return "multi-config-key"
+			}),
+		)
+		require.NoError(t, err)
+		
+		// Test that the driver works with multiple configs
+		err = d.Exec().
+			Cypher("RETURN 1 as test").
+			Run(ctx)
+		assert.NoError(t, err)
+	})
 }

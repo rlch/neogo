@@ -1,13 +1,3 @@
+version: "2"
 linters:
-  enable:
-    # Defaults
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - typecheck
-    - unused
-    # Extras
-    - containedctx
-    - wastedassign
+  default: standard

@@ -71,7 +71,7 @@ func (cy *cypher) newline() { cy.WriteByte('\n') }
 func (cy *cypher) writeNode(m *member) {
 	if m != nil {
 		if !m.isNew {
-			fmt.Fprintf(cy, "(%s)", m.expr)
+			_, _ = fmt.Fprintf(cy, "(%s)", m.expr)
 		} else {
 			nodeLabels := ExtractNodeLabels(m.identifier)
 			cy.WriteString("(")
@@ -82,10 +82,10 @@ func (cy *cypher) writeNode(m *member) {
 			}
 			if m.variable != nil && m.variable.Pattern != "" {
 				padProps = true
-				fmt.Fprintf(cy, ":%s", m.variable.Pattern)
+				_, _ = fmt.Fprintf(cy, ":%s", m.variable.Pattern)
 			} else if nodeLabels != nil {
 				padProps = true
-				fmt.Fprintf(cy, ":%s", strings.Join(nodeLabels, ":"))
+				_, _ = fmt.Fprintf(cy, ":%s", strings.Join(nodeLabels, ":"))
 			}
 			var resolvedProps int
 			if m.variable != nil {
@@ -189,11 +189,11 @@ func (cy *cypher) writeRelationship(m *member, rs *relationshipPattern) {
 		}
 
 		if rs.to != nil {
-			fmt.Fprintf(cy, "-[%s]->", inner)
+			_, _ = fmt.Fprintf(cy, "-[%s]->", inner)
 		} else if rs.from != nil {
-			fmt.Fprintf(cy, "<-[%s]-", inner)
+			_, _ = fmt.Fprintf(cy, "<-[%s]-", inner)
 		} else {
-			fmt.Fprintf(cy, "-[%s]-", inner)
+			_, _ = fmt.Fprintf(cy, "-[%s]-", inner)
 		}
 	} else {
 		if rs.to != nil {
@@ -238,7 +238,7 @@ func (cy *cypher) writeProps(props Props) {
 			cy.WriteString(", ")
 		}
 		v := cy.valueIdentifier(props[k.Prop])
-		fmt.Fprintf(cy, "%s: %s", k.Key, v)
+		_, _ = fmt.Fprintf(cy, "%s: %s", k.Key, v)
 	}
 	cy.WriteString("}")
 }
@@ -299,7 +299,7 @@ func (cy *cypher) writeCondition(c *Condition, parseKey, parseValue func(any) st
 func (cy *cypher) writePattern(pattern *nodePattern) {
 	cy.catch(func() {
 		if pattern.pathName != "" {
-			fmt.Fprintf(cy, "%s = ", pattern.pathName)
+			_, _ = fmt.Fprintf(cy, "%s = ", pattern.pathName)
 		}
 		for {
 			nodeM := cy.registerNode(pattern)
@@ -436,7 +436,7 @@ func (cy *cypher) writeWhereClause(where *Where, inline bool) {
 func (cy *cypher) writeUnwindClause(expr any, as string) {
 	cy.WriteString("UNWIND ")
 	m := cy.register(expr, false, nil)
-	fmt.Fprintf(cy, "%s AS %s", m.expr, as)
+	_, _ = fmt.Fprintf(cy, "%s AS %s", m.expr, as)
 	// Replace name with alias
 	m.alias = as
 	cy.replaceBinding(m)
@@ -450,7 +450,7 @@ func (cy *cypher) writeSubqueryClause(subquery func(c *CypherClient) *CypherRunn
 		child.mergeParentScope(child.Parent)
 		runSubquery := subquery(child)
 
-		fmt.Fprintf(cy, "CALL {\n")
+		_, _ = fmt.Fprintf(cy, "CALL {\n")
 		cy.writeIndented("  ", func(cy *cypher) {
 			compiled, err := runSubquery.Compile()
 			if err != nil {
@@ -558,7 +558,7 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 			}
 			cy.WriteString(m.expr)
 			if m.alias != "" {
-				fmt.Fprintf(cy, " AS %s", m.alias)
+				_, _ = fmt.Fprintf(cy, " AS %s", m.alias)
 			}
 		}
 		cy.newline()
@@ -590,10 +590,10 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 				}
 			}
 			if subclause.Skip != "" {
-				fmt.Fprintf(cy, "SKIP %s\n", subclause.Skip)
+				_, _ = fmt.Fprintf(cy, "SKIP %s\n", subclause.Skip)
 			}
 			if subclause.Limit != "" {
-				fmt.Fprintf(cy, "LIMIT %s\n", subclause.Limit)
+				_, _ = fmt.Fprintf(cy, "LIMIT %s\n", subclause.Limit)
 			}
 			if subclause.Where != nil {
 				if !isWith {
@@ -652,7 +652,7 @@ func (cy *cypher) writeForEachClause(identifier, elementsExpr any, do func(c *Cy
 
 		foreach := newCypher()
 		m := foreach.register(identifier, false, nil)
-		fmt.Fprintf(cy, "%s IN %s | ", m.expr, value)
+		_, _ = fmt.Fprintf(cy, "%s IN %s | ", m.expr, value)
 
 		b := &strings.Builder{}
 		foreach.Builder = b
@@ -685,7 +685,7 @@ func (cy *cypher) writeYieldClause(identifiers ...any) {
 		m := cy.register(v, false, nil)
 		cy.WriteString(m.expr)
 		if m.alias != "" {
-			fmt.Fprintf(cy, " AS %s", m.alias)
+			_, _ = fmt.Fprintf(cy, " AS %s", m.alias)
 		}
 	})
 }
