@@ -195,7 +195,7 @@ func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.Ses
 	config.AccessMode = neo4j.AccessModeRead
 	d.ensureCausalConsistency(ctx, &config)
 	if err := d.sessionSemaphore.Acquire(ctx, 1); err != nil {
-		panic(err)
+		panic(fmt.Errorf("failed to acquire session semaphore: %w", err))
 	}
 	sess := d.db.NewSession(ctx, config)
 	return &session{
@@ -214,7 +214,7 @@ func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.Se
 	config.AccessMode = neo4j.AccessModeWrite
 	d.ensureCausalConsistency(ctx, &config)
 	if err := d.sessionSemaphore.Acquire(ctx, 1); err != nil {
-		panic(err)
+		panic(fmt.Errorf("failed to acquire session semaphore: %w", err))
 	}
 	sess := d.db.NewSession(ctx, config)
 	return &session{
