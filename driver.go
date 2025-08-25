@@ -145,12 +145,6 @@ type (
 	}
 )
 
-func WithSessionSemaphore(semaphoreWeight int64) func(*driver) {
-	return func(d *driver) {
-		d.sessionSemaphore = semaphore.NewWeighted(semaphoreWeight)
-	}
-}
-
 func (d *driver) DB() neo4j.DriverWithContext { return d.db }
 
 func (d *driver) Exec(configurers ...func(*execConfig)) Query {
