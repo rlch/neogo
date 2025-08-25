@@ -486,7 +486,7 @@ func (c *runnerImpl) executeTransaction(
 				sessConfig.AccessMode = neo4j.AccessModeRead
 			}
 			if err := c.sessionSemaphore.Acquire(ctx, 1); err != nil {
-				panic(err)
+				return nil, err
 			}
 			sess = c.db.NewSession(ctx, sessConfig)
 			defer func() {
