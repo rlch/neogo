@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.1.0](https://github.com/rlch/neogo/compare/v1.0.6...v1.1.0) (2025-09-05)
+
+
+### Features
+
+* Create Neo4J driver instead of passing-through ([539148c](https://github.com/rlch/neogo/commit/539148cf64b8b5e710f45bfde7c1f898a2af9b7e))
+* Implement session pool using semaphore ([#32](https://github.com/rlch/neogo/issues/32)) ([ba54778](https://github.com/rlch/neogo/commit/ba54778ce440215abc68810f28c363703b7f6c8c))
+* Init claude ([e3209e8](https://github.com/rlch/neogo/commit/e3209e80babc979ca2e32cf19a18f43f2483e31c))
+
+
+### Bug Fixes
+
+* add test case for returning empty list instead of list with nil ([#31](https://github.com/rlch/neogo/issues/31)) ([1c630fa](https://github.com/rlch/neogo/commit/1c630fa20c89f7a7a43b386dee61cd2d62326840))
+* Handle binding to a slice of a depth 1 higher than result ([0c53b5a](https://github.com/rlch/neogo/commit/0c53b5a1a3d3c0f203da481a7efb6e3b93365f28))
+* Reproduction for unmarshalling single record to a Abstract Node Slice ([#29](https://github.com/rlch/neogo/issues/29)) ([4c2a6b9](https://github.com/rlch/neogo/commit/4c2a6b9a3f525ee3b2899ce92905dd7c70e3bf8e))
+* Resolve test failures for full test suite ([259c443](https://github.com/rlch/neogo/commit/259c443b4dc408e039986d31b94f2a0a6ca466fc))
+* Subqueries shouldn't enforce write transactions ([03626bc](https://github.com/rlch/neogo/commit/03626bc4f9dea73b83086f555d49c0a068389a67))
+* Temporarily log isWrite ([0096e93](https://github.com/rlch/neogo/commit/0096e935a5a1d440ade1ee75b030dee8fbf3bffc))
+* Update remaining tests to use hybrid driver pattern ([a02c561](https://github.com/rlch/neogo/commit/a02c561999181d607d1d8daa42d1a7f731ae3936))
+* Upgrade neo4j go driver to 5.28.3 ([#34](https://github.com/rlch/neogo/issues/34)) ([3039483](https://github.com/rlch/neogo/commit/3039483e209428a852b24d786e96adf54f9e44dd))
+
 ## [1.0.6](https://github.com/rlch/neogo/compare/v1.0.5...v1.0.6) (2025-03-28)
 
 
