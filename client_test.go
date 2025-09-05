@@ -709,16 +709,19 @@ func TestStream(t *testing.T) {
 
 func TestRun(t *testing.T) {
 	ctx := context.Background()
-	uri, cancel := startNeo4J(ctx)
-	d, err := New(uri, neo4j.BasicAuth("neo4j", "password", ""))
-	if err != nil {
-		t.Fatalf("failed to create driver: %v", err)
+	d, m := newHybridDriver(t, ctx)
+	if testing.Short() {
+		// Set up mock data for first test
+		m.BindRecords([]map[string]any{
+			{"i": 1},
+		})
+		// Set up mock data for second test (create node)
+		m.Bind(nil)
+		// Set up mock data for second test (query property)
+		m.BindRecords([]map[string]any{
+			{"t.someNonExistentProp": ""},
+		})
 	}
-	t.Cleanup(func() {
-		if err := cancel(ctx); err != nil {
-			t.Fatal(err)
-		}
-	})
 
 	t.Run("unmarshals slice of length 1", func(t *testing.T) {
 		var is []int
