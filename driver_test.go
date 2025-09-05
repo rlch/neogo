@@ -33,19 +33,16 @@ type Person struct {
 
 func TestDriver(t *testing.T) {
 	ctx := context.Background()
-	uri, cancel := startNeo4J(ctx)
-	t.Cleanup(func() {
-		if err := cancel(ctx); err != nil {
-			t.Logf("error canceling container: %v", err)
-		}
-	})
-	d, err := New(uri, neo4j.BasicAuth("neo4j", "password", ""))
-	if err != nil {
-		t.Fatalf("failed to create driver: %v", err)
+	d, m := newHybridDriver(t, ctx)
+	if testing.Short() {
+		// Mock data for create operation
+		m.Bind(nil)
+		// Mock data for delete operation with count
+		m.Bind(map[string]any{"count": 1})
 	}
 
 	// First create a test entity
-	err = d.Exec().
+	err := d.Exec().
 		Cypher(`
 		CREATE (n:TestNode {id: "test-123"})
 		CREATE (c:TestChild {id: "child-123"})
@@ -350,6 +347,10 @@ func ExampleDriver_streamWithParams() {
 }
 
 func TestConfigOverride(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Config override tests require actual Neo4J connection")
+	}
+
 	ctx := context.Background()
 	uri, cancel := startNeo4J(ctx)
 	t.Cleanup(func() {
