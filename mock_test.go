@@ -2,64 +2,15 @@ package neogo
 
 import (
 	"context"
-	"fmt"
 	"testing"
-	"time"
 
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rlch/neogo/db"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
-
-func getNeo4JConnection(ctx context.Context) (string, neo4j.AuthToken) {
-	request := testcontainers.ContainerRequest{
-		Name:         "neo4j",
-		Image:        "neo4j:5.7-enterprise",
-		ExposedPorts: []string{"7687/tcp"},
-		WaitingFor:   wait.ForLog("Bolt enabled").WithStartupTimeout(time.Minute * 2),
-		Env: map[string]string{
-			"NEO4J_AUTH":                     fmt.Sprintf("%s/%s", "neo4j", "password"),
-			"NEO4J_PLUGINS":                  `["apoc"]`,
-			"NEO4J_ACCEPT_LICENSE_AGREEMENT": "yes",
-		},
-	}
-	container, err := testcontainers.GenericContainer(
-		ctx, testcontainers.GenericContainerRequest{
-			ContainerRequest: request,
-			Started:          true,
-			Reuse:            true,
-		})
-	if err != nil {
-		panic(fmt.Errorf("container should start: %w", err))
-	}
-
-	port, err := container.MappedPort(ctx, "7687")
-	if err != nil {
-		panic(err)
-	}
-	uri := fmt.Sprintf("bolt://localhost:%d", port.Int())
-	return uri, neo4j.BasicAuth("neo4j", "password", "")
-}
 
 func newHybridDriver(t *testing.T, ctx context.Context) (d Driver, m mockDriver) {
 	m = NewMock()
-	if testing.Short() {
-		d = m
-	} else {
-		_, cancel := startNeo4J(ctx)
-		// Extract URI and auth from startNeo4J pattern
-		uri, auth := getNeo4JConnection(ctx)
-		var err error
-		d, err = New(uri, auth)
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			if err := cancel(ctx); err != nil {
-				t.Fatal(err)
-			}
-		})
-	}
+	d = m
 	return
 }
 

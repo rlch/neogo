@@ -122,12 +122,20 @@ func (c *CypherClient) UnionAll(unions ...func(c *CypherClient) *CypherRunner) *
 }
 
 func (c *CypherReader) OptionalMatch(patterns Patterns) *CypherQuerier {
-	c.writeReadingClause(patterns.nodes(c.Registry), true)
+	var nodes []*nodePatternPart
+	if patterns != nil {
+		nodes = patterns.nodes(c.Registry)
+	}
+	c.writeReadingClause(nodes, true)
 	return newCypherQuerier(c.cypher)
 }
 
 func (c *CypherReader) Match(patterns Patterns) *CypherQuerier {
-	c.writeReadingClause(patterns.nodes(c.Registry), false)
+	var nodes []*nodePatternPart
+	if patterns != nil {
+		nodes = patterns.nodes(c.Registry)
+	}
+	c.writeReadingClause(nodes, false)
 	return newCypherQuerier(c.cypher)
 }
 
@@ -197,20 +205,20 @@ func (c *CypherQuerier) Where(args ...any) *CypherQuerier {
 			}
 			return &Condition{And: conds}, nil
 		}
-		// tryParseCond := func() ICondition {
-		// 	key := args[0]
-		// 	op, ok := args[1].(string)
-		// 	if !ok {
-		// 		return nil
-		// 	}
-		// 	value := args[2]
-		// 	return &Condition{Key: key, Op: op, Value: value}
-		// }
-		// if len(args) == 3 {
-		// 	if cond := tryParseCond(); cond != nil {
-		// 		return cond, nil
-		// 	}
-		// }
+		tryParseCond := func() ICondition {
+			key := args[0]
+			op, ok := args[1].(string)
+			if !ok {
+				return nil
+			}
+			value := args[2]
+			return &Condition{Key: key, Op: op, Value: value}
+		}
+		if len(args) == 3 {
+			if cond := tryParseCond(); cond != nil {
+				return cond, nil
+			}
+		}
 		query, ok := args[0].(string)
 		if !ok {
 			return nil, errInvalidConditionArgs
@@ -316,13 +324,7 @@ Bindings:
 {{- end }}
 }
 
-
-Queries:
-{
-{{- range $key, $value := .Queries }}
-  {{ $key }}: {{ $value | printf "%v" }},
-{{- end }}
-}` + "\n")
+` + "\n")
 	if err != nil {
 		panic(err)
 	}
