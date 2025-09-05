@@ -282,7 +282,6 @@ func (c *CypherRunner) Compile() (*CompiledCypher, error) {
 		Cypher:     out,
 		Parameters: c.parameters,
 		Bindings:   c.bindings,
-		Queries:    c.queries,
 		IsWrite:    c.isWrite,
 	}
 	if c.err != nil {
@@ -331,13 +330,11 @@ Queries:
 		Cypher     string
 		Parameters map[string]any
 		Bindings   map[string]reflect.Value
-		Queries    map[string]*NodeSelection
 		IsWrite    bool
 	}{
 		Cypher:     c.String(),
 		Parameters: c.parameters,
 		Bindings:   c.bindings,
-		Queries:    c.queries,
 		IsWrite:    c.isWrite,
 	})
 	if err != nil {

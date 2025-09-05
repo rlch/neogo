@@ -45,7 +45,6 @@ type CompiledCypher struct {
 	Cypher     string
 	Parameters map[string]any
 	Bindings   map[string]reflect.Value
-	Queries    map[string]*NodeSelection
 	IsWrite    bool
 }
 

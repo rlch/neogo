@@ -3,21 +3,57 @@ package neogo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/auth"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/config"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/internal"
 )
 
 // New creates a new neogo [Driver] from a [neo4j.DriverWithContext].
-func New(neo4j neo4j.DriverWithContext, configurers ...Config) Driver {
-	d := driver{db: neo4j}
-	for _, c := range configurers {
-		c(&d)
+func New(
+	target string,
+	auth auth.TokenManager,
+	configurers ...Configurer,
+) (Driver, error) {
+	cfg := &Config{
+		Config: *defaultConfig(),
 	}
-	return &d
+
+	for _, c := range configurers {
+		c(cfg)
+	}
+
+	neo4j, err := neo4j.NewDriverWithContext(
+		target,
+		auth,
+		func(c *config.Config) { *c = cfg.Config },
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Neo4J driver: %w", err)
+	}
+
+	d := driver{
+		db:                   neo4j,
+		causalConsistencyKey: cfg.CausalConsistencyKey,
+		sessionSemaphore:     semaphore.NewWeighted(int64(cfg.Config.MaxConnectionPoolSize)),
+	}
+
+	// Initialize registry
+	d.reg = internal.NewRegistry()
+
+	// Register types from config
+	if len(cfg.Types) > 0 {
+		d.reg.RegisterTypes(cfg.Types...)
+	}
+
+	return &d, nil
 }
 
 type (
@@ -76,7 +112,16 @@ type (
 		Close(ctx context.Context, joinedErrors ...error) error
 	}
 
-	Config func(*driver)
+	// Config extends the neo4j config with additional neogo-specific options.
+	Config struct {
+		config.Config
+
+		CausalConsistencyKey func(context.Context) string
+		Types                []any
+	}
+
+	// Configurer is a function that configures a neogo Config.
+	Configurer func(*Config)
 
 	readSession interface {
 		// Session returns the underlying Neo4J session.
@@ -106,6 +151,7 @@ type (
 		reg                  *internal.Registry
 		db                   neo4j.DriverWithContext
 		causalConsistencyKey func(ctx context.Context) string
+		sessionSemaphore     *semaphore.Weighted
 	}
 	session struct {
 		*driver
@@ -120,11 +166,26 @@ type (
 	}
 )
 
+// defaultConfig returns default configuration values from the neo4j driver.
+// This configuration should be maintained and updated when the neo4j driver is updated.
+func defaultConfig() *config.Config {
+	return &config.Config{
+		MaxTransactionRetryTime:      30 * time.Second,
+		MaxConnectionPoolSize:        100,
+		MaxConnectionLifetime:        1 * time.Hour,
+		ConnectionAcquisitionTimeout: 1 * time.Minute,
+		SocketConnectTimeout:         5 * time.Second,
+		SocketKeepalive:              true,
+		UserAgent:                    neo4j.UserAgent,
+		FetchSize:                    neo4j.FetchDefault,
+	}
+}
+
 var causalConsistencyCache map[string]neo4j.Bookmarks = map[string]neo4j.Bookmarks{}
 
-func WithCausalConsistency(when func(ctx context.Context) string) Config {
-	return func(d *driver) {
-		d.causalConsistencyKey = when
+func WithCausalConsistency(when func(ctx context.Context) string) Configurer {
+	return func(c *Config) {
+		c.CausalConsistencyKey = when
 	}
 }
 
@@ -148,9 +209,9 @@ func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execC
 
 // WithTypes is an option for [New] that allows you to register instances of
 // [IAbstract], [INode] and [IRelationship] to be used with [neogo].
-func WithTypes(types ...any) func(*driver) {
-	return func(d *driver) {
-		d.reg.RegisterTypes(types...)
+func WithTypes(types ...any) Configurer {
+	return func(c *Config) {
+		c.Types = append(c.Types, types...)
 	}
 }
 
@@ -204,6 +265,9 @@ func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.Ses
 	}
 	config.AccessMode = neo4j.AccessModeRead
 	d.ensureCausalConsistency(ctx, &config)
+	if err := d.sessionSemaphore.Acquire(ctx, 1); err != nil {
+		panic(fmt.Errorf("failed to acquire session semaphore: %w", err))
+	}
 	sess := d.db.NewSession(ctx, config)
 	return &session{
 		driver:  d,
@@ -219,6 +283,9 @@ func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.Se
 	}
 	config.AccessMode = neo4j.AccessModeWrite
 	d.ensureCausalConsistency(ctx, &config)
+	if err := d.sessionSemaphore.Acquire(ctx, 1); err != nil {
+		panic(fmt.Errorf("failed to acquire session semaphore: %w", err))
+	}
 	sess := d.db.NewSession(ctx, config)
 	return &session{
 		driver:  d,
@@ -233,6 +300,7 @@ func (s *session) Session() neo4j.SessionWithContext {
 
 func (s *session) Close(ctx context.Context, errs ...error) error {
 	sessErr := s.session.Close(ctx)
+	s.sessionSemaphore.Release(1)
 	if sessErr != nil {
 		errs = append(errs, sessErr)
 		return errors.Join(errs...)

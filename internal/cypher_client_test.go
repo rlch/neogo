@@ -28,7 +28,7 @@ func TestCypherClient(t *testing.T) {
 		})
 
 		t.Run("true when using a procedure in Cypher", func(t *testing.T) {
-			cy := newCypher()
+			cy := newCypher(NewRegistry())
 			newCypherClient(cy).
 				Cypher(`
 				CALL db.myProcedure()
@@ -38,7 +38,7 @@ func TestCypherClient(t *testing.T) {
 		})
 
 		t.Run("false when using a subquery in Cypher", func(t *testing.T) {
-			cy := newCypher()
+			cy := newCypher(NewRegistry())
 			newCypherClient(cy).
 				Cypher(`
 				CALL {
@@ -51,7 +51,7 @@ func TestCypherClient(t *testing.T) {
 		})
 
 		t.Run("false when using a subquery with arguments in Cypher", func(t *testing.T) {
-			cy := newCypher()
+			cy := newCypher(NewRegistry())
 			newCypherClient(cy).
 				Cypher(`
 				CALL (whatever) {
@@ -64,7 +64,7 @@ func TestCypherClient(t *testing.T) {
 		})
 
 		t.Run("true when a procedure is called", func(t *testing.T) {
-			cy := newCypher()
+			cy := newCypher(NewRegistry())
 			newCypherClient(cy).
 				Call("myProcedure").
 				Return("n")
@@ -111,7 +111,7 @@ func TestCypherClient(t *testing.T) {
 		})
 
 		t.Run("false when using ready-only clauses in subquery", func(t *testing.T) {
-			cy := newCypher()
+			cy := newCypher(NewRegistry())
 			newCypherClient(cy).
 				Subquery(func(c *CypherClient) *CypherRunner {
 					return c.Match(nil).CypherRunner

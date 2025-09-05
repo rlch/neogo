@@ -92,7 +92,7 @@ func ExampleIdentifier_pointerToField() {
 	// RETURN older.name, younger.name
 }
 
-func ExampleQuery_Match() {
+func ExampleBuilder_Match() {
 	var m tests.Movie
 	c().
 		Match(
@@ -112,7 +112,7 @@ func ExampleQuery_Match() {
 	// RETURN movie.title
 }
 
-func ExampleQuery_OptionalMatch() {
+func ExampleBuilder_OptionalMatch() {
 	a := tests.Person{}
 	r := tests.Directed{}
 	c().
@@ -133,7 +133,7 @@ func ExampleQuery_OptionalMatch() {
 	// RETURN a.name, r
 }
 
-func ExampleQuery_Return() {
+func ExampleBuilder_Return() {
 	var p tests.Person
 	c().
 		Match(db.Node(db.Qual(&p, "p", db.Props{"name": "'Keanu Reeves'"}))).
@@ -143,7 +143,7 @@ func ExampleQuery_Return() {
 	// RETURN p.nationality AS citizenship
 }
 
-func ExampleQuery_With() {
+func ExampleBuilder_With() {
 	var names []string
 	c().
 		Match(
@@ -165,7 +165,7 @@ func ExampleQuery_With() {
 	// RETURN o.name
 }
 
-func ExampleQuery_Subquery() {
+func ExampleBuilder_Subquery() {
 	var (
 		p       tests.Person
 		numConn int
@@ -193,7 +193,7 @@ func ExampleQuery_Subquery() {
 	// RETURN p.name, numberOfConnections
 }
 
-func ExampleReader_Call() {
+func ExampleBuilder_Call() {
 	var labels []string
 	c().
 		Call("db.labels()").
@@ -207,7 +207,7 @@ func ExampleReader_Call() {
 	// RETURN label
 }
 
-func ExampleReader_Show() {
+func ExampleBuilder_Show() {
 	var (
 		name any
 		sig  string
@@ -229,7 +229,7 @@ func ExampleReader_Show() {
 	// RETURN signature
 }
 
-func ExampleReader_Unwind() {
+func ExampleBuilder_Unwind() {
 	events := map[string]any{
 		"events": []map[string]any{
 			{
@@ -280,7 +280,7 @@ func ExampleReader_Unwind() {
 	// ORDER BY x
 }
 
-func ExampleQuery_Cypher() {
+func ExampleBuilder_Cypher() {
 	var n any
 	c().
 		Match(db.Node(db.Qual(&n, "n"))).
@@ -294,7 +294,7 @@ func ExampleQuery_Cypher() {
 	// RETURN n
 }
 
-func ExampleQuery_Use() {
+func ExampleBuilder_Use() {
 	var n any
 	c().
 		Use("myDatabase").
@@ -307,7 +307,7 @@ func ExampleQuery_Use() {
 	// RETURN n
 }
 
-func ExampleQuery_Union() {
+func ExampleBuilder_Union() {
 	var name string
 	c().Union(
 		func(c *internal.CypherClient) *internal.CypherRunner {
@@ -330,7 +330,7 @@ func ExampleQuery_Union() {
 	// RETURN n.title AS name
 }
 
-func ExampleQuery_UnionAll() {
+func ExampleBuilder_UnionAll() {
 	var name string
 	c().UnionAll(
 		func(c *internal.CypherClient) *internal.CypherRunner {
@@ -367,7 +367,7 @@ func ExampleYielder_Yield() {
 	// RETURN label
 }
 
-func ExampleQuery_Create() {
+func ExampleBuilder_Create() {
 	var p any
 	c().
 		Create(db.Path(
@@ -384,7 +384,7 @@ func ExampleQuery_Create() {
 	// RETURN p
 }
 
-func ExampleQuery_Merge() {
+func ExampleBuilder_Merge() {
 	var person tests.Person
 	c().
 		Merge(
@@ -406,7 +406,7 @@ func ExampleQuery_Merge() {
 	// RETURN person.name, person.found, person.lastSeen
 }
 
-func ExampleQuery_Delete() {
+func ExampleBuilder_Delete() {
 	var (
 		n tests.Person
 		r tests.ActedIn
@@ -424,7 +424,7 @@ func ExampleQuery_Delete() {
 	// DELETE r
 }
 
-func ExampleQuery_DetachDelete() {
+func ExampleBuilder_DetachDelete() {
 	var n tests.Person
 	c().
 		Match(
@@ -442,7 +442,7 @@ func ExampleQuery_DetachDelete() {
 	// DETACH DELETE n
 }
 
-func ExampleQuery_Set() {
+func ExampleBuilder_Set() {
 	var n tests.Person
 	c().
 		Match(
@@ -461,7 +461,7 @@ func ExampleQuery_Set() {
 	//   n.surname = 'Taylor'
 }
 
-func ExampleQuery_Remove() {
+func ExampleBuilder_Remove() {
 	var n tests.Person
 	var labels []string
 	c().
@@ -476,7 +476,7 @@ func ExampleQuery_Remove() {
 	// RETURN n.name, labels(n)
 }
 
-func ExampleQuery_ForEach() {
+func ExampleBuilder_ForEach() {
 	c().
 		Match(
 			db.Path(db.Node("start").To(db.Var(nil, db.VarLength("*")), "finish"), "p"),

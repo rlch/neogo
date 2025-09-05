@@ -10,11 +10,21 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 )
+
+// newTestDriver creates a Driver from a neo4j.DriverWithContext for testing
+func newTestDriver(neo4jDriver neo4j.DriverWithContext) Driver {
+	return &driver{
+		reg:              internal.NewRegistry(),
+		db:               neo4jDriver,
+		sessionSemaphore: semaphore.NewWeighted(100),
+	}
+}
 
 func startNeo4J(ctx context.Context) (neo4j.DriverWithContext, func(context.Context) error) {
 	request := testcontainers.ContainerRequest{
@@ -67,7 +77,7 @@ func TestDriver(t *testing.T) {
 	t.Cleanup(func() {
 		cancel(ctx)
 	})
-	d := New(neo4j)
+	d := newTestDriver(neo4j)
 
 	// First create a test entity
 	err := d.Exec().
@@ -113,7 +123,7 @@ func ExampleDriver() {
 		d = m
 	} else {
 		neo4j, cancel := startNeo4J(ctx)
-		d = New(neo4j)
+		d = newTestDriver(neo4j)
 		defer func() {
 			if err := cancel(ctx); err != nil {
 				panic(err)
@@ -161,7 +171,7 @@ func ExampleDriver_readSession() {
 		d = m
 	} else {
 		neo4j, cancel := startNeo4J(ctx)
-		d = New(neo4j)
+		d = newTestDriver(neo4j)
 		defer func() {
 			if err := cancel(ctx); err != nil {
 				panic(err)
@@ -216,7 +226,7 @@ func ExampleDriver_writeSession() {
 		d = m
 	} else {
 		neo4j, cancel := startNeo4J(ctx)
-		d = New(neo4j)
+		d = newTestDriver(neo4j)
 		defer func() {
 			if err := cancel(ctx); err != nil {
 				panic(err)
@@ -277,7 +287,7 @@ func ExampleDriver_runWithParams() {
 		d = m
 	} else {
 		neo4j, cancel := startNeo4J(ctx)
-		d = New(neo4j)
+		d = newTestDriver(neo4j)
 		defer func() {
 			if err := cancel(ctx); err != nil {
 				panic(err)
@@ -314,7 +324,7 @@ func ExampleDriver_streamWithParams() {
 		d = m
 	} else {
 		neo4j, cancel := startNeo4J(ctx)
-		d = New(neo4j)
+		d = newTestDriver(neo4j)
 		defer func() {
 			if err := cancel(ctx); err != nil {
 				panic(err)

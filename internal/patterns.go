@@ -2,7 +2,6 @@ package internal
 
 import (
 	"errors"
-	"reflect"
 )
 
 type (
@@ -45,7 +44,6 @@ type (
 	nodePatternPart struct {
 		pathName string
 		// Defined for the head node of the query.
-		selection    *NodeSelection
 		data         any
 		relationship *rsPatternPart
 	}
@@ -71,64 +69,6 @@ func NewPath(path Pattern, name string) Pattern {
 			n := path.createNodePattern(r)
 			n.pathName = name
 			return n
-		},
-	}
-}
-
-func NewQueryPattern(rootIdentifier any, query string) Pattern {
-	return &CypherPattern{
-		resolver: func(r *Registry) *nodePatternPart {
-			nodeMatch := func(sel *NodeSelection) (node any) {
-				node = sel.Alloc
-				props := identifierToProps(reflect.ValueOf(sel.Payload), sel.Name)
-				if sel.Name != "" {
-					node = Variable{
-						Identifier: node,
-						Name:       sel.Name,
-						Props:      props,
-					}
-				}
-				return
-			}
-			rsMatch := func(sel *RelationshipSelection) (rs any) {
-				rs = sel.Alloc
-				props := identifierToProps(reflect.ValueOf(sel.Payload), sel.Name)
-				if sel.Name != "" {
-					rs = Variable{
-						Identifier: rs,
-						Name:       sel.Name,
-						Props:      props,
-					}
-				}
-				return
-			}
-			headSel, err := ResolveQuery(r, rootIdentifier, query)
-			var pattern Pattern = &CypherPattern{
-				resolver: func(_ *Registry) *nodePatternPart {
-					return &nodePatternPart{
-						data:      nodeMatch(headSel),
-						selection: headSel,
-					}
-				},
-			}
-			if err != nil {
-				panic(err)
-			}
-			nextSel := headSel
-			for nextSel != nil {
-				relSel := nextSel.Next
-				if relSel == nil {
-					break
-				}
-				nextSel = relSel.Next
-				if relSel.Target.Dir {
-					pattern = pattern.To(rsMatch(relSel), nodeMatch(nextSel))
-				} else {
-					pattern = pattern.From(rsMatch(relSel), nodeMatch(nextSel))
-				}
-			}
-			p := pattern.createNodePattern(r)
-			return p
 		},
 	}
 }

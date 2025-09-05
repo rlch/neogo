@@ -24,13 +24,9 @@ func Check(t *testing.T, cy *internal.CompiledCypher, err error, want internal.C
 	if want.Bindings == nil {
 		want.Bindings = map[string]reflect.Value{}
 	}
-	if want.Queries == nil {
-		want.Queries = map[string]*internal.NodeSelection{}
-	}
 	require.Equal(t, want.Cypher, cy.Cypher)
 	require.Equal(t, want.Parameters, cy.Parameters)
 	require.Equal(t, want.Bindings, cy.Bindings)
-	require.Equal(t, want.Queries, cy.Queries)
 }
 
 func CheckCypher(t *testing.T, cy *internal.CompiledCypher, err error, want string) {

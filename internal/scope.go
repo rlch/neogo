@@ -18,7 +18,6 @@ func newScope(registry *Registry) *Scope {
 	return &Scope{
 		Registry:       registry,
 		bindings:       make(map[string]reflect.Value),
-		queries:        make(map[string]*NodeSelection),
 		names:          make(map[reflect.Value]string),
 		generatedNames: map[string]struct{}{},
 		fields:         make(map[uintptr]field),
@@ -34,7 +33,6 @@ type (
 
 		isWrite        bool
 		bindings       map[string]reflect.Value
-		queries        map[string]*NodeSelection
 		generatedNames map[string]struct{}
 		names          map[reflect.Value]string
 		fields         map[uintptr]field
@@ -107,11 +105,9 @@ Queries:
 	err = t.Execute(os.Stdout, struct {
 		Parameters map[string]any
 		Bindings   map[string]reflect.Value
-		Queries    map[string]*NodeSelection
 	}{
 		Parameters: s.parameters,
 		Bindings:   s.bindings,
-		Queries:    s.queries,
 	})
 	if err != nil {
 		panic(err)
@@ -143,8 +139,6 @@ func (m *member) Print() {
 func (s *Scope) clone() *Scope {
 	bindings := make(map[string]reflect.Value, len(s.bindings))
 	maps.Copy(bindings, s.bindings)
-	queries := make(map[string]*NodeSelection, len(s.queries))
-	maps.Copy(queries, s.queries)
 	generatedNames := make(map[string]struct{}, len(s.generatedNames))
 	maps.Copy(generatedNames, s.generatedNames)
 	names := make(map[reflect.Value]string, len(s.names))
@@ -159,7 +153,6 @@ func (s *Scope) clone() *Scope {
 	return &Scope{
 		Registry:       s.Registry,
 		bindings:       bindings,
-		queries:        queries,
 		generatedNames: generatedNames,
 		names:          names,
 		fields:         fields,
@@ -186,7 +179,6 @@ func (child *Scope) mergeParentScope(parent *Scope) {
 
 func (s *Scope) clear() {
 	s.bindings = map[string]reflect.Value{}
-	s.queries = map[string]*NodeSelection{}
 	s.names = map[reflect.Value]string{}
 	s.generatedNames = map[string]struct{}{}
 	s.fields = map[uintptr]field{}
@@ -196,7 +188,6 @@ func (s *Scope) clear() {
 
 func (s *Scope) MergeChildScope(child *Scope) {
 	maps.Copy(s.bindings, child.bindings)
-	maps.Copy(s.queries, child.queries)
 	maps.Copy(s.names, child.names)
 	maps.Copy(s.generatedNames, child.generatedNames)
 	maps.Copy(s.fields, child.fields)
@@ -524,9 +515,6 @@ func (s *Scope) add(
 func (s *Scope) addNode(n *nodePatternPart) *member {
 	t := true
 	member := s.add(n.data, false, &t)
-	if n.selection != nil && member.expr != "" {
-		s.queries[member.name()] = n.selection
-	}
 	return member
 }
 

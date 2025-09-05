@@ -8,6 +8,7 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/db"
@@ -18,7 +19,7 @@ import (
 func TestUnmarshalRecord(t *testing.T) {
 	s := &session{driver: &driver{}}
 	s.reg = internal.NewRegistry()
-	s.registerTypes(&tests.Human{})
+	s.reg.RegisterTypes(&tests.BaseOrganism{}, &tests.BasePet{}, &tests.Human{}, &tests.Dog{})
 	t.Run("err on non-existent key", func(t *testing.T) {
 		n := tests.Person{}
 		cy := &internal.CompiledCypher{
@@ -295,7 +296,9 @@ func TestUnmarshalRecord(t *testing.T) {
 }
 
 func TestUnmarshalRecords(t *testing.T) {
-	s := &session{}
+	s := &session{driver: &driver{}}
+	s.reg = internal.NewRegistry()
+	s.reg.RegisterTypes(&tests.BaseOrganism{}, &tests.BasePet{}, &tests.Human{}, &tests.Dog{})
 
 	t.Run("err on non-existent key", func(t *testing.T) {
 		n1 := tests.Person{}
@@ -755,7 +758,11 @@ func TestStream(t *testing.T) {
 func TestRun(t *testing.T) {
 	ctx := context.Background()
 	neo4jDriver, cancel := startNeo4J(ctx)
-	d := New(neo4jDriver)
+	d := &driver{
+		reg:              internal.NewRegistry(),
+		db:               neo4jDriver,
+		sessionSemaphore: semaphore.NewWeighted(100),
+	}
 	t.Cleanup(func() {
 		if err := cancel(ctx); err != nil {
 			t.Fatal(err)
@@ -807,7 +814,11 @@ func TestRunSummary(t *testing.T) {
 	}
 	ctx := context.Background()
 	neo4jDriver, cancel := startNeo4J(ctx)
-	d := New(neo4jDriver)
+	d := &driver{
+		reg:              internal.NewRegistry(),
+		db:               neo4jDriver,
+		sessionSemaphore: semaphore.NewWeighted(100),
+	}
 	t.Cleanup(func() {
 		if err := cancel(ctx); err != nil {
 			t.Fatal(err)
@@ -836,7 +847,11 @@ func TestResultImpl(t *testing.T) {
 
 	ctx := context.Background()
 	neo4jDriver, cancel := startNeo4J(ctx)
-	d := New(neo4jDriver)
+	d := &driver{
+		reg:              internal.NewRegistry(),
+		db:               neo4jDriver,
+		sessionSemaphore: semaphore.NewWeighted(100),
+	}
 	readSession := d.ReadSession(ctx)
 	session := &session{session: readSession.Session()}
 
