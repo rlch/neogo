@@ -7,6 +7,7 @@ import (
 
 	"github.com/goccy/go-json"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/rlch/neogo/internal"
 )
@@ -16,9 +17,12 @@ func NewMock() mockDriver {
 	m := &mockBindings{}
 	return &mockDriverImpl{
 		mockBindings: m,
-		driver: &driver{db: &mockNeo4jDriver{
-			mockBindings: m,
-		}},
+		driver: &driver{
+			db: &mockNeo4jDriver{
+				mockBindings: m,
+			},
+			sessionSemaphore: semaphore.NewWeighted(100), // Default semaphore for testing
+		},
 	}
 }
 

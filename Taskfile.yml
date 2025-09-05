@@ -1,0 +1,156 @@
+version: "3"
+
+vars:
+  NEO4J_CONTAINER_NAME: neogo-neo4j
+  NEO4J_PORT: 7687
+  NEO4J_USER: neo4j
+  NEO4J_PASSWORD: password
+
+tasks:
+  check:
+    desc: Check prerequisites (Docker, gotestsum)
+    cmds:
+      - |
+        echo "Checking prerequisites..."
+
+        # Check Docker
+        if ! command -v docker &> /dev/null; then
+          echo "❌ Docker is not installed"
+          echo "   Please install Docker: https://docs.docker.com/get-docker/"
+          exit 1
+        else
+          echo "✅ Docker is installed"
+        fi
+
+        if ! docker ps &> /dev/null; then
+          echo "⚠️  Docker daemon is not running"
+          echo "   Please start Docker first"
+        else
+          echo "✅ Docker daemon is running"
+        fi
+
+        # Check gotestsum
+        if ! command -v gotestsum &> /dev/null; then
+          echo "❌ gotestsum is not installed"
+          echo "   Install with: go install gotest.tools/gotestsum@latest"
+          exit 1
+        else
+          echo "✅ gotestsum is installed"
+        fi
+
+        echo ""
+        echo "All prerequisites are ready! 🎉"
+    silent: false
+  neo4j:start:
+    desc: Start Neo4J Docker container for testing
+    cmds:
+      - |
+        if ! command -v docker &> /dev/null; then
+          echo "Error: Docker is not installed or not in PATH"
+          exit 1
+        fi
+        if ! docker ps &> /dev/null; then
+          echo "Error: Docker daemon is not running. Please start Docker first."
+          exit 1
+        fi
+        if ! docker ps -q -f name={{.NEO4J_CONTAINER_NAME}} | grep -q .; then
+          echo "Starting Neo4J container..."
+          docker run -d \
+            --name {{.NEO4J_CONTAINER_NAME}} \
+            -p {{.NEO4J_PORT}}:7687 \
+            -p 7474:7474 \
+            -e NEO4J_AUTH={{.NEO4J_USER}}/{{.NEO4J_PASSWORD}} \
+            -e NEO4J_PLUGINS='["apoc"]' \
+            -e NEO4J_ACCEPT_LICENSE_AGREEMENT=yes \
+            --rm \
+            neo4j:5.7-community
+          echo "Neo4J container started successfully"
+        else
+          echo "Neo4J container is already running"
+        fi
+    silent: false
+
+  neo4j:wait:
+    desc: Wait for Neo4J to be ready
+    deps: [neo4j:start]
+    cmds:
+      - |
+        echo "Waiting for Neo4J to be ready..."
+        timeout=60
+        elapsed=0
+        while [ $elapsed -lt $timeout ]; do
+          if docker logs {{.NEO4J_CONTAINER_NAME}} 2>&1 | grep -q "Bolt enabled"; then
+            echo "Neo4J is ready!"
+            exit 0
+          fi
+          echo "Waiting for Neo4J to start... ($elapsed/$timeout seconds)"
+          sleep 2
+          elapsed=$((elapsed + 2))
+        done
+        echo "Timeout waiting for Neo4J to start"
+        exit 1
+    silent: false
+
+  neo4j:stop:
+    desc: Stop and remove Neo4J Docker container
+    cmds:
+      - |
+        if docker ps -q -f name={{.NEO4J_CONTAINER_NAME}} | grep -q .; then
+          echo "Stopping Neo4J container..."
+          docker stop {{.NEO4J_CONTAINER_NAME}}
+          echo "Neo4J container stopped"
+        else
+          echo "Neo4J container is not running"
+        fi
+    silent: false
+
+  neo4j:logs:
+    desc: Show Neo4J container logs
+    cmds:
+      - docker logs {{.NEO4J_CONTAINER_NAME}}
+
+  install:
+    desc: Install project dependencies
+    cmds:
+      - go mod download
+      - go mod verify
+
+  test:unit:
+    desc: Run unit tests (no Neo4J required)
+    cmds:
+      - gotestsum -- -short ./...
+
+  test:integration:
+    desc: Run integration tests with Neo4J
+    deps: [neo4j:wait]
+    cmds:
+      - gotestsum ./...
+
+  test:
+    desc: Run all tests (starts Neo4J, runs tests, stops Neo4J)
+    deps: [neo4j:wait]
+    cmds:
+      - gotestsum ./...
+      - task: neo4j:stop
+
+  test:watch:
+    desc: Run tests in watch mode with Neo4J
+    deps: [neo4j:wait]
+    cmds:
+      - gotestsum --watch ./...
+
+  clean:
+    desc: Clean up containers and build artifacts
+    cmds:
+      - task: neo4j:stop
+      - go clean -cache
+      - go clean -testcache
+
+  dev:setup:
+    desc: Set up development environment
+    cmds:
+      - task: install
+      - task: neo4j:start
+      - task: neo4j:wait
+      - echo "Development environment ready!"
+
