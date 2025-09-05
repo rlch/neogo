@@ -715,12 +715,16 @@ func TestRun(t *testing.T) {
 		m.BindRecords([]map[string]any{
 			{"i": 1},
 		})
+		// Set up mock data for second test (cleanup)
+		m.Bind(nil)
 		// Set up mock data for second test (create node)
 		m.Bind(nil)
 		// Set up mock data for second test (query property)
 		m.BindRecords([]map[string]any{
 			{"t.someNonExistentProp": ""},
 		})
+		// Set up mock data for second test (final cleanup)
+		m.Bind(nil)
 	}
 
 	t.Run("unmarshals slice of length 1", func(t *testing.T) {
@@ -734,8 +738,14 @@ func TestRun(t *testing.T) {
 	})
 
 	t.Run("non-existent nil property nil pointer", func(t *testing.T) {
-		// Create a test node first
+		// Clean up any existing TestNode records first
 		err := d.Exec().
+			Cypher(`MATCH (t:TestNode) DETACH DELETE t`).
+			Run(ctx)
+		assert.NoError(t, err)
+
+		// Create a test node first
+		err = d.Exec().
 			Create(
 				db.Node(
 					db.Var(
@@ -758,6 +768,12 @@ func TestRun(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, listOfVal, 1, "Expected list with one element when querying non-existent property")
 		assert.Equal(t, "", listOfVal[0], "Expected empty string for non-existent property")
+
+		// Clean up after the test
+		err = d.Exec().
+			Cypher(`MATCH (t:TestNode) DETACH DELETE t`).
+			Run(ctx)
+		assert.NoError(t, err)
 	})
 }
 

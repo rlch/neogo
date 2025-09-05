@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 vars:
   NEO4J_CONTAINER_NAME: neogo-neo4j
@@ -12,7 +12,7 @@ tasks:
     cmds:
       - |
         echo "Checking prerequisites..."
-        
+
         # Check Docker
         if ! command -v docker &> /dev/null; then
           echo "❌ Docker is not installed"
@@ -21,14 +21,14 @@ tasks:
         else
           echo "✅ Docker is installed"
         fi
-        
+
         if ! docker ps &> /dev/null; then
           echo "⚠️  Docker daemon is not running"
           echo "   Please start Docker first"
         else
           echo "✅ Docker daemon is running"
         fi
-        
+
         # Check gotestsum
         if ! command -v gotestsum &> /dev/null; then
           echo "❌ gotestsum is not installed"
@@ -37,7 +37,7 @@ tasks:
         else
           echo "✅ gotestsum is installed"
         fi
-        
+
         echo ""
         echo "All prerequisites are ready! 🎉"
     silent: false
@@ -154,7 +154,3 @@ tasks:
       - task: neo4j:wait
       - echo "Development environment ready!"
 
-  default:
-    desc: Run the default task (tests)
-    cmds:
-      - task: test
