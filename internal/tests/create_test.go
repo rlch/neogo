@@ -142,7 +142,7 @@ func TestCreate(t *testing.T) {
 			type Reltype struct {
 				internal.Relationship `neo4j:"RELTYPE"`
 
-				Name string `json:"name"`
+				Name string `db:"name"`
 			}
 			var (
 				a     Person

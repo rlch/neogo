@@ -62,40 +62,40 @@ type (
 	Movie struct {
 		internal.Node `neo4j:"Movie"`
 
-		Title    string `json:"title"`
-		Released int    `json:"released"`
-		Tagline  string `json:"tagline"`
+		Title    string `db:"title"`
+		Released int    `db:"released"`
+		Tagline  string `db:"tagline"`
 
-		ActedIn internal.Many[*ActedIn] `neo4j:"<-" json:"-"`
+		ActedIn internal.Many[*ActedIn] `neo4j:"<-" db:"-"`
 	}
 	Person struct {
 		internal.Node `neo4j:"Person"`
 
-		Name          string  `json:"name"`
-		Surname       string  `json:"surname"`
-		Position      string  `json:"position"`
-		Email         string  `json:"email"`
-		Belt          *string `json:"belt"`
-		Nationality   string  `json:"nationality"`
-		Age           int     `json:"age"`
-		BornIn        int     `json:"bornIn"`
-		Created       int     `json:"created"`
-		LastSeen      int     `json:"lastSeen"`
-		Found         bool    `json:"found"`
-		ChauffeurName string  `json:"chauffeurName"`
+		Name          string  `db:"name"`
+		Surname       string  `db:"surname"`
+		Position      string  `db:"position"`
+		Email         string  `db:"email"`
+		Belt          *string `db:"belt"`
+		Nationality   string  `db:"nationality"`
+		Age           int     `db:"age"`
+		BornIn        int     `db:"bornIn"`
+		Created       int     `db:"created"`
+		LastSeen      int     `db:"lastSeen"`
+		Found         bool    `db:"found"`
+		ChauffeurName string  `db:"chauffeurName"`
 
-		ActedIn internal.Many[*ActedIn] `neo4j:"->" json:"-"`
+		ActedIn internal.Many[*ActedIn] `neo4j:"->" db:"-"`
 	}
 
 	Company struct {
 		internal.Node `neo4j:"Company"`
 
-		Name string `json:"name"`
+		Name string `db:"name"`
 	}
 	Location struct {
 		internal.Node `neo4j:"Location"`
 
-		Name string `json:"name"`
+		Name string `db:"name"`
 	}
 )
 
@@ -103,10 +103,10 @@ type (
 	ActedIn struct {
 		internal.Relationship `neo4j:"ACTED_IN"`
 
-		Role string `json:"role"`
+		Role string `db:"role"`
 
-		Actor *Person `neo4j:"startNode" json:"-"`
-		Movie *Movie  `neo4j:"endNode" json:"-"`
+		Actor *Person `neo4j:"startNode" db:"-"`
+		Movie *Movie  `neo4j:"endNode" db:"-"`
 	}
 	Directed struct {
 		internal.Relationship `neo4j:"DIRECTED"`
@@ -120,12 +120,12 @@ type (
 	Reviewed struct {
 		internal.Relationship `neo4j:"REVIEWED"`
 
-		Rating float64 `json:"rating"`
+		Rating float64 `db:"rating"`
 	}
 	Knows struct {
 		internal.Relationship `neo4j:"KNOWS"`
 
-		Since int `json:"since"`
+		Since int `db:"since"`
 	}
 	BornIn struct {
 		internal.Relationship `neo4j:"BORN_IN"`
@@ -148,14 +148,14 @@ type Pet interface {
 type BaseOrganism struct {
 	internal.Abstract `neo4j:"Organism"`
 	internal.Node
-	Alive bool `json:"alive"`
+	Alive bool `db:"alive"`
 }
 
 type BasePet struct {
 	internal.Abstract `neo4j:"Pet"`
 	BaseOrganism
 
-	Cute bool `json:"cute"`
+	Cute bool `db:"cute"`
 }
 
 func (b BasePet) IsCute() bool {
@@ -177,10 +177,10 @@ func (b BaseOrganism) Implementers() []internal.IAbstract {
 
 type Human struct {
 	BaseOrganism `neo4j:"Human"`
-	Name         string `json:"name"`
+	Name         string `db:"name"`
 }
 
 type Dog struct {
 	BasePet `neo4j:"Dog"`
-	Borfs   bool `json:"borfs"`
+	Borfs   bool `db:"borfs"`
 }

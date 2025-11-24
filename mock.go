@@ -5,9 +5,9 @@ import (
 	"errors"
 	"net/url"
 
-	"github.com/goccy/go-json"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/rlch/neogo/internal"
+	"golang.org/x/sync/semaphore"
 )
 
 // NewMock creates a mock neogo [Driver] for testing.
@@ -21,7 +21,8 @@ func NewMock() mockDriver {
 				mockBindings: m,
 				Registry:     reg,
 			},
-			reg: reg,
+			reg:              reg,
+			sessionSemaphore: semaphore.NewWeighted(100),
 		},
 	}
 }
@@ -158,33 +159,29 @@ func (s *mockNeo4jSessionWithContext) Run(ctx context.Context, cypher string, pa
 		for k, v := range m {
 			rec.Keys[i] = k
 			if _, ok := v.(INode); ok {
-				labels := s.ExtractNodeLabels(v)
-				var props map[string]any
-				bytes, err := json.Marshal(v)
+				meta, err := s.Codecs().ExtractNeo4jNodeMeta(v)
 				if err != nil {
 					return nil, err
 				}
-				err = json.Unmarshal(bytes, &props)
+				props, err := s.Codecs().Encode(v)
 				if err != nil {
 					return nil, err
 				}
 				rec.Values[i] = neo4j.Node{
-					Labels: labels,
+					Labels: meta.Labels,
 					Props:  props,
 				}
 			} else if _, ok := v.(IRelationship); ok {
-				typ := s.ExtractRelationshipType(v)
-				var props map[string]any
-				bytes, err := json.Marshal(v)
+				meta, err := s.Codecs().ExtractRelationshipMeta(v)
 				if err != nil {
 					return nil, err
 				}
-				err = json.Unmarshal(bytes, &props)
+				props, err := s.Codecs().Encode(v)
 				if err != nil {
 					return nil, err
 				}
 				rec.Values[i] = neo4j.Relationship{
-					Type:  typ,
+					Type:  meta.Type,
 					Props: props,
 				}
 			} else {

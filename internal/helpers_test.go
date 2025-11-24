@@ -4,6 +4,8 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/rlch/neogo/internal/codec"
 )
 
 // Helper function to assert visited fields
@@ -129,13 +131,13 @@ func TestUnwindValue(t *testing.T) {
 	ptr := &i
 	ptrToPtr := &ptr
 
-	got := UnwindValue(reflect.ValueOf(ptrToPtr))
+	got := codec.UnwindValue(reflect.ValueOf(ptrToPtr))
 	if got.Kind() != reflect.Int || got.Int() != int64(i) {
 		t.Errorf("UnwindValue failed, expected %d got %d", i, got.Int())
 	}
 
 	// Testing with non-pointer type
-	got = UnwindValue(reflect.ValueOf(i))
+	got = codec.UnwindValue(reflect.ValueOf(i))
 	if got.Kind() != reflect.Int || got.Int() != int64(i) {
 		t.Errorf("UnwindValue failed, expected %d for non-pointer type", i)
 	}
@@ -147,13 +149,13 @@ func TestUnwindType(t *testing.T) {
 	pi := &i
 	ptrToPtr := reflect.TypeOf(&pi)
 
-	got := UnwindType(ptrToPtr)
+	got := codec.UnwindType(ptrToPtr)
 	if got.Kind() != reflect.Int {
 		t.Errorf("UnwindType failed, expected int got %s", got.Kind())
 	}
 
 	// Testing with non-pointer type
-	got = UnwindType(reflect.TypeOf(i))
+	got = codec.UnwindType(reflect.TypeOf(i))
 	if got.Kind() != reflect.Int {
 		t.Errorf("UnwindType failed, expected int for non-pointer type")
 	}

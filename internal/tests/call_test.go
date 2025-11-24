@@ -37,7 +37,7 @@ func TestCallSubquery(t *testing.T) {
 		type Counter struct {
 			internal.Node `neo4j:"Counter"`
 
-			Count int `json:"count"`
+			Count int `db:"count"`
 		}
 		var (
 			n          Counter
@@ -206,7 +206,7 @@ func TestCallSubquery(t *testing.T) {
 					CALL {
 					  MATCH (p:Person)
 					  RETURN p
-					t ORDER BY p.age
+					  ORDER BY p.age
 					  LIMIT 1
 					UNION
 					  MATCH (p:Person)

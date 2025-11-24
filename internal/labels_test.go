@@ -25,7 +25,7 @@ type foreignPerson struct {
 
 type personWithNonStructLabels struct {
 	swedishPerson
-	Name string `json:"name"`
+	Name string `db:"name"`
 }
 
 type personWithAnonymousStructLabels struct {

@@ -18,7 +18,7 @@ type Organism interface {
 type BaseOrganism struct {
 	Node
 	Abstract `neo4j:"Organism"`
-	Alive    bool `json:"alive"`
+	Alive    bool `db:"alive"`
 }
 
 func (b BaseOrganism) Implementers() []IAbstract {
@@ -30,22 +30,22 @@ func (b BaseOrganism) Implementers() []IAbstract {
 
 type Person struct {
 	Node `neo4j:"Person"`
-	Name string `json:"name"`
+	Name string `db:"name"`
 }
 
 type ActedIn struct {
 	Relationship `neo4j:"ACTED_IN"`
-	Role         string `json:"role"`
+	Role         string `db:"role"`
 }
 
 type Human struct {
 	BaseOrganism `neo4j:"Human"`
-	Name         string `json:"name"`
+	Name         string `db:"name"`
 }
 
 type Dog struct {
 	BaseOrganism `neo4j:"Dog"`
-	Borfs        bool `json:"borfs"`
+	Borfs        bool `db:"borfs"`
 }
 
 type (
