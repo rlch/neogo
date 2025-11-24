@@ -582,3 +582,272 @@ func TestLazyRegistration(t *testing.T) {
 
 	assert.Equal(t, val, decoded)
 }
+
+// Test type coercion - converting between int types
+func TestTypeCoercion(t *testing.T) {
+	registry := codec.NewCodecRegistry()
+
+	type IntTypes struct {
+		Int    int    `db:"int"`
+		Int64  int64  `db:"int64"`
+		Uint   uint   `db:"uint"`
+		Uint32 uint32 `db:"uint32"`
+	}
+	registry.RegisterTypes(IntTypes{})
+
+	// Encode with some values
+	original := IntTypes{
+		Int:    -100,
+		Int64:  9223372036854775807, // max int64
+		Uint:   100,
+		Uint32: 4294967295, // max uint32
+	}
+
+	encoded, err := registry.Encode(&original)
+	require.NoError(t, err)
+
+	// Decode - should handle int64 -> various int types
+	var decoded IntTypes
+	err = registry.Decode(encoded, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.Int, decoded.Int)
+	assert.Equal(t, original.Int64, decoded.Int64)
+	assert.Equal(t, original.Uint, decoded.Uint)
+	assert.Equal(t, original.Uint32, decoded.Uint32)
+}
+
+// Test EncodeValue with zero values
+func TestEncodeValueZeros(t *testing.T) {
+	registry := codec.NewCodecRegistry()
+
+	// String zero value
+	val, err := registry.EncodeValue("")
+	require.NoError(t, err)
+	assert.Equal(t, "", val)
+
+	// Int zero value
+	val, err = registry.EncodeValue(0)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), val)
+}
+
+// Test EncodeValue with slices
+func TestEncodeValueSlices(t *testing.T) {
+	registry := codec.NewCodecRegistry()
+
+	// Slice of ints
+	val, err := registry.EncodeValue([]int{1, 2, 3})
+	require.NoError(t, err)
+	assert.Equal(t, []any{int64(1), int64(2), int64(3)}, val)
+
+	// Slice of strings
+	val, err = registry.EncodeValue([]string{"a", "b"})
+	require.NoError(t, err)
+	assert.Equal(t, []any{"a", "b"}, val)
+}
+
+// Test pointer to struct encoding
+func TestPointerToStruct(t *testing.T) {
+	registry := codec.NewCodecRegistry()
+	registry.RegisterTypes(NestedStruct{})
+
+	type Wrapper struct {
+		Nested *NestedStruct `db:"nested"`
+	}
+	registry.RegisterTypes(Wrapper{})
+
+	inner := &NestedStruct{Val: "inner"}
+	original := Wrapper{Nested: inner}
+
+	encoded, err := registry.Encode(&original)
+	require.NoError(t, err)
+
+	nested := encoded["nested"].(map[string]any)
+	assert.Equal(t, "inner", nested["val"])
+
+	var decoded Wrapper
+	err = registry.Decode(encoded, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.Nested.Val, decoded.Nested.Val)
+}
+
+// Test slice of pointers
+func TestSliceOfPointers(t *testing.T) {
+	registry := codec.NewCodecRegistry()
+	registry.RegisterTypes(NestedStruct{})
+
+	type Container struct {
+		Items []*NestedStruct `db:"items"`
+	}
+	registry.RegisterTypes(Container{})
+
+	original := Container{
+		Items: []*NestedStruct{
+			{Val: "first"},
+			{Val: "second"},
+		},
+	}
+
+	encoded, err := registry.Encode(&original)
+	require.NoError(t, err)
+
+	items := encoded["items"].([]any)
+	assert.Len(t, items, 2)
+	assert.Equal(t, "first", items[0].(map[string]any)["val"])
+
+	var decoded Container
+	err = registry.Decode(encoded, &decoded)
+	require.NoError(t, err)
+
+	assert.Len(t, decoded.Items, 2)
+	assert.Equal(t, original.Items[0].Val, decoded.Items[0].Val)
+}
+
+// Test different Neo4j types
+func TestNeo4jTypes(t *testing.T) {
+	registry := codec.NewCodecRegistry()
+
+	type AllNeo4jTypes struct {
+		Point neo4j.Point2D `db:"point"`
+	}
+	registry.RegisterTypes(AllNeo4jTypes{})
+
+	original := AllNeo4jTypes{
+		Point: neo4j.Point2D{X: 1.5, Y: 2.5, SpatialRefId: 4326},
+	}
+
+	encoded, err := registry.Encode(&original)
+	require.NoError(t, err)
+
+	// Point should be encoded as a nested struct
+	point := encoded["point"].(map[string]any)
+	assert.InDelta(t, 1.5, point["x"], 0.01)
+	assert.InDelta(t, 2.5, point["y"], 0.01)
+	assert.Equal(t, int64(4326), point["spatial_ref_id"])
+
+	var decoded AllNeo4jTypes
+	err = registry.Decode(encoded, &decoded)
+	require.NoError(t, err)
+
+	assert.InDelta(t, original.Point.X, decoded.Point.X, 0.01)
+	assert.InDelta(t, original.Point.Y, decoded.Point.Y, 0.01)
+	assert.Equal(t, original.Point.SpatialRefId, decoded.Point.SpatialRefId)
+}
+
+// Test interface{} fields
+func TestInterfaceField(t *testing.T) {
+	registry := codec.NewCodecRegistry()
+
+	type WithInterface struct {
+		Data any `db:"data"`
+	}
+	registry.RegisterTypes(WithInterface{})
+
+	// Encode with various types as interface{}
+	original := WithInterface{
+		Data: "test string",
+	}
+
+	encoded, err := registry.Encode(&original)
+	require.NoError(t, err)
+	assert.Equal(t, "test string", encoded["data"])
+
+	var decoded WithInterface
+	err = registry.Decode(encoded, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.Data, decoded.Data)
+}
+
+// Test bool field encoding
+func TestBoolFields(t *testing.T) {
+	registry := codec.NewCodecRegistry()
+
+	type WithBools struct {
+		True  bool `db:"true"`
+		False bool `db:"false"`
+	}
+	registry.RegisterTypes(WithBools{})
+
+	original := WithBools{True: true, False: false}
+
+	encoded, err := registry.Encode(&original)
+	require.NoError(t, err)
+
+	assert.Equal(t, true, encoded["true"])
+	assert.Equal(t, false, encoded["false"])
+
+	var decoded WithBools
+	err = registry.Decode(encoded, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.True, decoded.True)
+	assert.Equal(t, original.False, decoded.False)
+}
+
+// Test max/min values for numeric types
+func TestNumericBoundaries(t *testing.T) {
+	registry := codec.NewCodecRegistry()
+
+	type Boundaries struct {
+		MaxInt64   int64   `db:"max_int64"`
+		MinInt64   int64   `db:"min_int64"`
+		MaxFloat64 float64 `db:"max_float64"`
+		MinFloat64 float64 `db:"min_float64"`
+	}
+	registry.RegisterTypes(Boundaries{})
+
+	original := Boundaries{
+		MaxInt64:   9223372036854775807,
+		MinInt64:   -9223372036854775808,
+		MaxFloat64: 1.7976931348623157e+308,
+		MinFloat64: -1.7976931348623157e+308,
+	}
+
+	encoded, err := registry.Encode(&original)
+	require.NoError(t, err)
+
+	var decoded Boundaries
+	err = registry.Decode(encoded, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.MaxInt64, decoded.MaxInt64)
+	assert.Equal(t, original.MinInt64, decoded.MinInt64)
+	assert.InDelta(t, original.MaxFloat64, decoded.MaxFloat64, 1e+300)
+	assert.InDelta(t, original.MinFloat64, decoded.MinFloat64, 1e+300)
+}
+
+// Test field skip with db:"-"
+func TestFieldSkip(t *testing.T) {
+	registry := codec.NewCodecRegistry()
+
+	type WithSkip struct {
+		Name     string `db:"name"`
+		Internal string `db:"-"`
+		Other    string `db:"other"`
+	}
+	registry.RegisterTypes(WithSkip{})
+
+	original := WithSkip{
+		Name:     "test",
+		Internal: "should not encode",
+		Other:    "other",
+	}
+
+	encoded, err := registry.Encode(&original)
+	require.NoError(t, err)
+
+	assert.Equal(t, "test", encoded["name"])
+	assert.Equal(t, "other", encoded["other"])
+	assert.Nil(t, encoded["internal"])
+
+	var decoded WithSkip
+	err = registry.Decode(encoded, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.Name, decoded.Name)
+	assert.Equal(t, original.Other, decoded.Other)
+	assert.Equal(t, "", decoded.Internal) // Zero value since it was skipped
+}
