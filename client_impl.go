@@ -11,6 +11,7 @@ import (
 
 	"github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/internal"
+	"github.com/rlch/neogo/internal/codec"
 )
 
 type (
@@ -266,7 +267,7 @@ func (c *runnerImpl) run(
 	if err != nil {
 		return nil, fmt.Errorf("cannot compile cypher: %w", err)
 	}
-	canonicalizedParams, err := canonicalizeParams(cy.Parameters)
+	canonicalizedParams, err := canonicalizeParams(c.Registry().Codecs(), cy.Parameters)
 	if err != nil {
 		return nil, fmt.Errorf("cannot serialize parameters: %w", err)
 	}
@@ -321,7 +322,7 @@ func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any
 	if err != nil {
 		return fmt.Errorf("cannot compile cypher: %w", err)
 	}
-	canonicalizedParams, err := canonicalizeParams(cy.Parameters)
+	canonicalizedParams, err := canonicalizeParams(c.Registry().Codecs(), cy.Parameters)
 	if err != nil {
 		return fmt.Errorf("cannot serialize parameters: %w", err)
 	}
@@ -560,7 +561,21 @@ func (c *runnerImpl) executeTransaction(
 	return
 }
 
-func canonicalizeParams(params map[string]any) (map[string]any, error) {
-	// TODO: Replace with zero-reflection encoder
-	return params, nil
+func canonicalizeParams(codecs *codec.CodecRegistry, params map[string]any) (map[string]any, error) {
+	canon := make(map[string]any, len(params))
+	if len(params) == 0 {
+		return canon, nil
+	}
+	for k, v := range params {
+		if v == nil {
+			canon[k] = nil
+			continue
+		}
+		val, err := codecs.EncodeValue(v)
+		if err != nil {
+			return nil, fmt.Errorf("cannot encode param %q: %w", k, err)
+		}
+		canon[k] = val
+	}
+	return canon, nil
 }

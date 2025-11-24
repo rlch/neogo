@@ -655,7 +655,7 @@ func TestUnmarshalRecords(t *testing.T) {
 		s := newTestSession()
 
 		type Person struct {
-			ID int `json:"id"`
+			ID int `db:"id"`
 		}
 
 		// UNWIND [1, 2, 3] AS id
@@ -686,7 +686,7 @@ func TestUnmarshalRecords(t *testing.T) {
 		s := newTestSession()
 
 		type Person struct {
-			ID int `json:"id"`
+			ID int `db:"id"`
 		}
 
 		var persons []*Person
@@ -876,7 +876,7 @@ func TestResultImpl(t *testing.T) {
 				Return(n).
 				Compile()
 			assert.NoError(t, err)
-			params, err := canonicalizeParams(cy.Parameters)
+			params, err := canonicalizeParams(internal.NewRegistry().Codecs(), cy.Parameters)
 			assert.NoError(t, err)
 
 			r := runnerImpl{session: session}

@@ -5,6 +5,13 @@ import (
 	"unsafe"
 )
 
+// sliceHeader represents the runtime structure of a slice
+type sliceHeader struct {
+	Data unsafe.Pointer
+	Len  int
+	Cap  int
+}
+
 // emptyInterface represents the internal structure of interface{}
 type emptyInterface struct {
 	typ unsafe.Pointer

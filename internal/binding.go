@@ -257,9 +257,14 @@ func (r *Registry) BindValue(from any, to reflect.Value) (err error) {
 		}
 	}
 
-	// PERF: Obviously huge performance hit here. Consider alternative ways of
-	// coercing between types. Might just need to be imperative and verbose
-	return fmt.Errorf("cannot bind type %T to %T: not implemented", from, to.Interface())
+	// PERF: Zero-reflection decode
+	if to.Kind() == reflect.Ptr {
+		return r.codecs.Decode(from, to.Interface())
+	}
+	if to.CanAddr() {
+		return r.codecs.Decode(from, to.Addr().Interface())
+	}
+	return fmt.Errorf("cannot bind to non-pointer/unaddressable value %T", to.Interface())
 }
 
 func (r *Registry) BindAbstractNode(node neo4j.Node, to reflect.Value) error {

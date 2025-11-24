@@ -156,7 +156,7 @@ func encodeStructToMap(head *Opcode, structPtr unsafe.Pointer, result map[string
 				
 				// Simplified: assume SubOpcodes handles the inner type encoding.
 				// We need a helper "encodeValue" that returns 'any'.
-				val, err := encodeValue(current.SubOpcodes, p)
+				val, err := EncodeAny(current.SubOpcodes, p)
 				if err != nil {
 					return err
 				}
@@ -175,7 +175,7 @@ func encodeStructToMap(head *Opcode, structPtr unsafe.Pointer, result map[string
 
 				for i := 0; i < header.Len; i++ {
 					elemPtr := unsafe.Pointer(base + uintptr(i)*elemSize)
-					val, err := encodeValue(current.SubOpcodes, elemPtr)
+					val, err := EncodeAny(current.SubOpcodes, elemPtr)
 					if err != nil {
 						return err
 					}
@@ -187,7 +187,7 @@ func encodeStructToMap(head *Opcode, structPtr unsafe.Pointer, result map[string
 		case OpFieldStruct:
 			// Nested struct
 			// We need to encode it into a map
-			val, err := encodeValue(current.SubOpcodes, ptr)
+			val, err := EncodeAny(current.SubOpcodes, ptr)
 			if err != nil {
 				return err
 			}
@@ -218,8 +218,8 @@ func encodeStructToMap(head *Opcode, structPtr unsafe.Pointer, result map[string
 	return nil
 }
 
-// encodeValue encodes a single value based on the opcode (used for slice elements, pointers, etc)
-func encodeValue(op *Opcode, ptr unsafe.Pointer) (any, error) {
+// EncodeAny encodes a single value based on the opcode
+func EncodeAny(op *Opcode, ptr unsafe.Pointer) (any, error) {
 	if op == nil {
 		return nil, nil
 	}
@@ -282,7 +282,7 @@ func encodeValue(op *Opcode, ptr unsafe.Pointer) (any, error) {
 		if p == nil {
 			return nil, nil
 		}
-		return encodeValue(op.SubOpcodes, p)
+		return EncodeAny(op.SubOpcodes, p)
 		
 	case OpFieldSlice:
 		header := (*sliceHeader)(ptr)
@@ -295,21 +295,21 @@ func encodeValue(op *Opcode, ptr unsafe.Pointer) (any, error) {
 
 		for i := 0; i < header.Len; i++ {
 			elemPtr := unsafe.Pointer(base + uintptr(i)*elemSize)
-			val, err := encodeValue(op.SubOpcodes, elemPtr)
+			val, err := EncodeAny(op.SubOpcodes, elemPtr)
 			if err != nil {
 				return nil, err
 			}
 			sliceOut[i] = val
 		}
 		return sliceOut, nil
-
+		
 	case OpFieldStruct:
 		// Nested struct not at top level (e.g. slice element)
 		// OpFieldStruct usually points to OpStructStart in SubOpcodes?
 		// Or it IS the opcode.
 		// If op.Op is OpFieldStruct, it likely wraps the struct definition.
 		// If SubOpcodes is OpStructStart, we recurse.
-		return encodeValue(op.SubOpcodes, ptr)
+		return EncodeAny(op.SubOpcodes, ptr)
 
 	case OpFieldInterface:
 		v := reflect.NewAt(op.Meta.Type, ptr).Elem().Interface()
