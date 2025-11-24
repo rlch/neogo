@@ -1,13 +1,13 @@
 package internal
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/rlch/neogo/internal/codec"
 	"github.com/spf13/cast"
 )
 
@@ -67,7 +67,7 @@ func (r *Registry) BindValue(from any, to reflect.Value) (err error) {
 		switch fromVal := from.(type) {
 		case neo4j.Node:
 			// Handle 1 record of an expected slice of nodes
-			if UnwindType(toT).Kind() == reflect.Slice {
+			if codec.UnwindType(toT).Kind() == reflect.Slice {
 				return handleSingleRecordToSlice(fromVal)
 			}
 			ok, err := bindValuer(fromVal, to)
@@ -91,7 +91,7 @@ func (r *Registry) BindValue(from any, to reflect.Value) (err error) {
 			return r.BindValue(fromVal.Props, to)
 		case neo4j.Relationship:
 			// Handle 1 record of an expected slice of relationships
-			if UnwindType(toT).Kind() == reflect.Slice {
+			if codec.UnwindType(toT).Kind() == reflect.Slice {
 				return handleSingleRecordToSlice(fromVal)
 			}
 			ok, err := bindValuer(fromVal, to)
@@ -192,7 +192,7 @@ func (r *Registry) BindValue(from any, to reflect.Value) (err error) {
 		}
 
 		// Primitive coercion.
-		value := UnwindValue(to)
+		value := codec.UnwindValue(to)
 		ok, err = func() (bool, error) {
 			if !to.CanSet() || !value.IsValid() || !value.CanInterface() {
 				return false, nil
@@ -259,15 +259,7 @@ func (r *Registry) BindValue(from any, to reflect.Value) (err error) {
 
 	// PERF: Obviously huge performance hit here. Consider alternative ways of
 	// coercing between types. Might just need to be imperative and verbose
-	bytes, err := json.Marshal(from)
-	if err != nil {
-		return err
-	}
-	err = json.Unmarshal(bytes, to.Interface())
-	if err != nil {
-		return err
-	}
-	return nil
+	return fmt.Errorf("cannot bind type %T to %T: not implemented", from, to.Interface())
 }
 
 func (r *Registry) BindAbstractNode(node neo4j.Node, to reflect.Value) error {
@@ -303,5 +295,5 @@ func computeDepth(t reflect.Type) (depth int) {
 		depth++
 		t = t.Elem()
 	}
-	return
+	return depth
 }
