@@ -160,11 +160,6 @@ func (r *CodecRegistry) extractFieldName(field reflect.StructField) (string, boo
 	return "", false
 }
 
-// extractJSONFieldName extracts JSON field name from struct field (deprecated - use extractFieldName)
-func (r *CodecRegistry) extractJSONFieldName(field reflect.StructField) (string, bool) {
-	return r.extractFieldName(field)
-}
-
 // handleAnonymousField handles embedded/anonymous struct fields
 func (r *CodecRegistry) handleAnonymousField(field reflect.StructField, meta *Neo4jNodeMetadata, postpendLabels *[]string) bool {
 	fieldType := field.Type

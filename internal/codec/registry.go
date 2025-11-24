@@ -108,8 +108,12 @@ func (r *CodecRegistry) GetEncoder(v any) *Encoder {
 		return enc
 	}
 
-	// Lazy compilation
+	// Lazy compilation (Slow path)
 	typ := reflect.TypeOf(v)
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
 	op, err := r.compiler.Compile(typ)
 	if err != nil {
 		return nil
@@ -126,8 +130,12 @@ func (r *CodecRegistry) GetDecoder(v any) Decoder {
 		return dec
 	}
 
-	// Lazy compilation
+	// Lazy compilation (Slow path)
 	typ := reflect.TypeOf(v)
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
 	dec, err := r.compiler.CompileDecoder(typ)
 	if err != nil {
 		return nil

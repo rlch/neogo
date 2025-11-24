@@ -143,7 +143,12 @@ func (c *Compiler) compileStruct(typ reflect.Type) (*Opcode, error) {
 			IsSkip:     info.IsSkip,
 		}
 
-		if isComplexOp(typeOp.Op) {
+		if typeOp.Op == OpStructStart {
+			op.Op = OpFieldStruct
+			op.SubOpcodes = typeOp
+		} else if typeOp.Op == OpFieldSlice {
+			op.Meta.Size = typeOp.Meta.Size
+		} else if isComplexOp(typeOp.Op) {
 			op.SubOpcodes = typeOp.SubOpcodes
 		}
 
@@ -220,6 +225,10 @@ func (c *Compiler) CompileDecoder(typ reflect.Type) (Decoder, error) {
 	case reflect.Ptr:
 		return c.compilePtrDecoder(typ)
 	case reflect.Slice:
+		// Special case: []byte is treated as a primitive (bytes decoder)
+		if typ.Elem().Kind() == reflect.Uint8 {
+			return c.compilePrimitiveDecoder(typ)
+		}
 		return c.compileSliceDecoder(typ)
 	case reflect.Map:
 		return c.compileMapDecoder(typ)
@@ -239,6 +248,12 @@ func (c *Compiler) compilePrimitiveDecoder(typ reflect.Type) (Decoder, error) {
 	switch typ.Kind() {
 	case reflect.Int:
 		return DecoderFunc(intDecoder), nil
+	case reflect.Int8:
+		return DecoderFunc(int8Decoder), nil
+	case reflect.Int16:
+		return DecoderFunc(int16Decoder), nil
+	case reflect.Int32:
+		return DecoderFunc(int32Decoder), nil
 	case reflect.Int64:
 		return DecoderFunc(int64Decoder), nil
 	case reflect.String:
@@ -249,10 +264,21 @@ func (c *Compiler) compilePrimitiveDecoder(typ reflect.Type) (Decoder, error) {
 		return DecoderFunc(float64Decoder), nil
 	case reflect.Uint:
 		return DecoderFunc(uintDecoder), nil
+	case reflect.Uint8:
+		return DecoderFunc(uint8Decoder), nil
+	case reflect.Uint16:
+		return DecoderFunc(uint16Decoder), nil
+	case reflect.Uint32:
+		return DecoderFunc(uint32Decoder), nil
 	case reflect.Uint64:
 		return DecoderFunc(uint64Decoder), nil
 	case reflect.Float32:
 		return DecoderFunc(float32Decoder), nil
+	case reflect.Slice:
+		// Special case for []byte
+		if typ.Elem().Kind() == reflect.Uint8 {
+			return DecoderFunc(bytesDecoder), nil
+		}
 	}
 	// Fallback
 	return DecoderFunc(func(data any, ptr unsafe.Pointer) error {
@@ -271,6 +297,33 @@ func (c *Compiler) compileStructDecoder(typ reflect.Type) (Decoder, error) {
 		info := parseFieldInfo(field)
 
 		if info.IsSkip {
+			continue
+		}
+
+		// Handle embedded structs: flatten their fields into parent
+		if info.IsEmbed {
+			embeddedType := field.Type
+			// If it's a pointer, get the element type
+			if embeddedType.Kind() == reflect.Ptr {
+				embeddedType = embeddedType.Elem()
+			}
+
+			// Recursively compile the embedded struct's decoder
+			embeddedDec, err := c.CompileDecoder(embeddedType)
+			if err != nil {
+				return nil, err
+			}
+
+			// Extract the struct decoder's fields and merge them
+			if structDec, ok := embeddedDec.(*structDecoder); ok {
+				for dbName, fieldDec := range structDec.fields {
+					// Adjust offset to account for embedding
+					dec.fields[dbName] = &fieldDecoder{
+						offset:  field.Offset + fieldDec.offset,
+						decoder: fieldDec.decoder,
+					}
+				}
+			}
 			continue
 		}
 

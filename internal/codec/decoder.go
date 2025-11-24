@@ -148,9 +148,9 @@ func (d *sliceDecoder) Decode(data any, ptr unsafe.Pointer) error {
 	header.Cap = count
 
 	// Iterate and decode elements directly into memory
-	base := uintptr(valPtr)
 	for i := 0; i < count; i++ {
-		elemPtr := unsafe.Pointer(base + uintptr(i)*d.elemSize)
+		// Proper pointer arithmetic: convert to uintptr, add, convert back
+		elemPtr := unsafe.Pointer(uintptr(valPtr) + uintptr(i)*d.elemSize)
 		if err := d.elemDecoder.Decode(src[i], elemPtr); err != nil {
 			return fmt.Errorf("index %d: %w", i, err)
 		}
@@ -272,6 +272,73 @@ func float32Decoder(data any, ptr unsafe.Pointer) error {
 		return fmt.Errorf("expected float32, got %T", data)
 	}
 	*(*float32)(ptr) = v
+	return nil
+}
+
+func bytesDecoder(data any, ptr unsafe.Pointer) error {
+	switch v := data.(type) {
+	case []byte:
+		*(*[]byte)(ptr) = v
+		return nil
+	case string:
+		*(*[]byte)(ptr) = []byte(v)
+		return nil
+	default:
+		return fmt.Errorf("expected []byte or string, got %T", data)
+	}
+}
+
+func int8Decoder(data any, ptr unsafe.Pointer) error {
+	v, ok := convertToInt8(data)
+	if !ok {
+		return fmt.Errorf("expected int8, got %T", data)
+	}
+	*(*int8)(ptr) = v
+	return nil
+}
+
+func int16Decoder(data any, ptr unsafe.Pointer) error {
+	v, ok := convertToInt16(data)
+	if !ok {
+		return fmt.Errorf("expected int16, got %T", data)
+	}
+	*(*int16)(ptr) = v
+	return nil
+}
+
+func int32Decoder(data any, ptr unsafe.Pointer) error {
+	v, ok := convertToInt32(data)
+	if !ok {
+		return fmt.Errorf("expected int32, got %T", data)
+	}
+	*(*int32)(ptr) = v
+	return nil
+}
+
+func uint8Decoder(data any, ptr unsafe.Pointer) error {
+	v, ok := convertToUint8(data)
+	if !ok {
+		return fmt.Errorf("expected uint8, got %T", data)
+	}
+	*(*uint8)(ptr) = v
+	return nil
+}
+
+func uint16Decoder(data any, ptr unsafe.Pointer) error {
+	v, ok := convertToUint16(data)
+	if !ok {
+		return fmt.Errorf("expected uint16, got %T", data)
+	}
+	*(*uint16)(ptr) = v
+	return nil
+}
+
+func uint32Decoder(data any, ptr unsafe.Pointer) error {
+	v, ok := convertToUint32(data)
+	if !ok {
+		return fmt.Errorf("expected uint32, got %T", data)
+	}
+	*(*uint32)(ptr) = v
 	return nil
 }
 

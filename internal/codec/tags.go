@@ -100,24 +100,3 @@ func toSnakeCase(s string) string {
 
 	return result.String()
 }
-
-// hasOption checks if a field has a specific option
-func (fi *FieldInfo) hasOption(option string) bool {
-	for _, opt := range fi.Options {
-		if strings.HasPrefix(opt, option) {
-			return true
-		}
-	}
-	return false
-}
-
-// getOptionValue returns the value of an option (e.g., "size:100" returns "100")
-func (fi *FieldInfo) getOptionValue(option string) string {
-	prefix := option + ":"
-	for _, opt := range fi.Options {
-		if strings.HasPrefix(opt, prefix) {
-			return strings.TrimPrefix(opt, prefix)
-		}
-	}
-	return ""
-}

@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 	"unsafe"
@@ -88,6 +89,7 @@ func encodeStructToMap(head *Opcode, structPtr unsafe.Pointer, result map[string
 	current := head
 
 	for current != nil {
+		fmt.Printf("Op: %d, DBName: %s, Offset: %d\n", current.Op, current.DBName, current.Meta.Offset)
 		ptr := unsafe.Pointer(uintptr(structPtr) + current.Meta.Offset)
 
 		switch current.Op {
@@ -171,10 +173,10 @@ func encodeStructToMap(head *Opcode, structPtr unsafe.Pointer, result map[string
 			} else {
 				sliceOut := make([]any, header.Len)
 				elemSize := current.Meta.Size
-				base := uintptr(header.Data)
 
 				for i := 0; i < header.Len; i++ {
-					elemPtr := unsafe.Pointer(base + uintptr(i)*elemSize)
+					// Proper pointer arithmetic: convert to uintptr, add, convert back
+					elemPtr := unsafe.Pointer(uintptr(header.Data) + uintptr(i)*elemSize)
 					val, err := EncodeAny(current.SubOpcodes, elemPtr)
 					if err != nil {
 						return err
@@ -291,10 +293,10 @@ func EncodeAny(op *Opcode, ptr unsafe.Pointer) (any, error) {
 		}
 		sliceOut := make([]any, header.Len)
 		elemSize := op.Meta.Size
-		base := uintptr(header.Data)
 
 		for i := 0; i < header.Len; i++ {
-			elemPtr := unsafe.Pointer(base + uintptr(i)*elemSize)
+			// Proper pointer arithmetic: convert to uintptr, add, convert back
+			elemPtr := unsafe.Pointer(uintptr(header.Data) + uintptr(i)*elemSize)
 			val, err := EncodeAny(op.SubOpcodes, elemPtr)
 			if err != nil {
 				return nil, err

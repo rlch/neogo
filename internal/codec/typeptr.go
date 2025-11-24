@@ -131,61 +131,7 @@ func extractFieldMeta(field reflect.StructField) FieldMeta {
 	}
 }
 
-// readFieldValue reads a field value using unsafe pointer arithmetic (ZERO reflection)
-func (fm FieldMeta) readFieldValue(structPtr unsafe.Pointer) any {
-	fieldPtr := unsafe.Pointer(uintptr(structPtr) + fm.Offset)
 
-	switch fm.Kind {
-	case KindBool:
-		return *(*bool)(fieldPtr)
-	case KindInt:
-		return *(*int)(fieldPtr)
-	case KindInt8:
-		return *(*int8)(fieldPtr)
-	case KindInt16:
-		return *(*int16)(fieldPtr)
-	case KindInt32:
-		return *(*int32)(fieldPtr)
-	case KindInt64:
-		return *(*int64)(fieldPtr)
-	case KindUint:
-		return *(*uint)(fieldPtr)
-	case KindUint8:
-		return *(*uint8)(fieldPtr)
-	case KindUint16:
-		return *(*uint16)(fieldPtr)
-	case KindUint32:
-		return *(*uint32)(fieldPtr)
-	case KindUint64:
-		return *(*uint64)(fieldPtr)
-	case KindFloat32:
-		return *(*float32)(fieldPtr)
-	case KindFloat64:
-		return *(*float64)(fieldPtr)
-	case KindString:
-		return *(*string)(fieldPtr)
-	case KindBytes:
-		return *(*[]byte)(fieldPtr)
-	case KindSlice:
-		// Return slice header as-is - complex decoding handled by opcodes
-		return *(*any)(fieldPtr)
-	case KindMap:
-		// Return map as-is - complex decoding handled by opcodes
-		return *(*any)(fieldPtr)
-	case KindStruct:
-		// Return struct as-is - complex decoding handled by opcodes
-		return *(*any)(fieldPtr)
-	case KindPtr:
-		// Return pointer as-is - complex decoding handled by opcodes
-		return *(*any)(fieldPtr)
-	case KindInterface:
-		// Return interface as-is
-		return *(*any)(fieldPtr)
-	default:
-		// Unknown type - return as interface{}
-		return *(*any)(fieldPtr)
-	}
-}
 
 // TypeInfo contains pre-computed type information extracted at registration time
 type TypeInfo struct {
@@ -206,81 +152,6 @@ type Neo4jRelation struct {
 	Direction string // "in", "out", or ""
 	IsMany    bool   // true for slice relationships
 	NodeType  string // target node type name
-}
-
-// writeFieldValue writes a value to a field using unsafe pointer arithmetic (ZERO reflection)
-func (fm FieldMeta) writeFieldValue(structPtr unsafe.Pointer, value any) {
-	fieldPtr := unsafe.Pointer(uintptr(structPtr) + fm.Offset)
-
-	switch fm.Kind {
-	case KindBool:
-		if v, ok := value.(bool); ok {
-			*(*bool)(fieldPtr) = v
-		}
-	case KindInt:
-		if v, ok := convertToInt(value); ok {
-			*(*int)(fieldPtr) = v
-		}
-	case KindInt8:
-		if v, ok := convertToInt8(value); ok {
-			*(*int8)(fieldPtr) = v
-		}
-	case KindInt16:
-		if v, ok := convertToInt16(value); ok {
-			*(*int16)(fieldPtr) = v
-		}
-	case KindInt32:
-		if v, ok := convertToInt32(value); ok {
-			*(*int32)(fieldPtr) = v
-		}
-	case KindInt64:
-		if v, ok := convertToInt64(value); ok {
-			*(*int64)(fieldPtr) = v
-		}
-	case KindUint:
-		if v, ok := convertToUint(value); ok {
-			*(*uint)(fieldPtr) = v
-		}
-	case KindUint8:
-		if v, ok := convertToUint8(value); ok {
-			*(*uint8)(fieldPtr) = v
-		}
-	case KindUint16:
-		if v, ok := convertToUint16(value); ok {
-			*(*uint16)(fieldPtr) = v
-		}
-	case KindUint32:
-		if v, ok := convertToUint32(value); ok {
-			*(*uint32)(fieldPtr) = v
-		}
-	case KindUint64:
-		if v, ok := convertToUint64(value); ok {
-			*(*uint64)(fieldPtr) = v
-		}
-	case KindFloat32:
-		if v, ok := convertToFloat32(value); ok {
-			*(*float32)(fieldPtr) = v
-		}
-	case KindFloat64:
-		if v, ok := convertToFloat64(value); ok {
-			*(*float64)(fieldPtr) = v
-		}
-	case KindString:
-		if v, ok := value.(string); ok {
-			*(*string)(fieldPtr) = v
-		}
-	case KindBytes:
-		if v, ok := value.([]byte); ok {
-			*(*[]byte)(fieldPtr) = v
-		}
-	case KindSlice, KindMap, KindStruct, KindPtr, KindInterface:
-		// For complex types, direct assignment (no reflection!)
-		// Complex decoding should be handled by dedicated opcodes
-		*(*any)(fieldPtr) = value
-	default:
-		// Unknown type - direct assignment as interface{}
-		*(*any)(fieldPtr) = value
-	}
 }
 
 // Type conversion helpers (ZERO reflection)
