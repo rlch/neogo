@@ -513,9 +513,9 @@ func TestMultipleEmbedded(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, original.Name, decoded.Name)
-	assert.Equal(t, original.Status.Active, decoded.Status.Active)
-	assert.Equal(t, original.Metadata.CreatedAt, decoded.Metadata.CreatedAt)
-	assert.Equal(t, original.Metadata.UpdatedAt, decoded.Metadata.UpdatedAt)
+	assert.Equal(t, original.Active, decoded.Active)
+	assert.Equal(t, original.CreatedAt, decoded.CreatedAt)
+	assert.Equal(t, original.UpdatedAt, decoded.UpdatedAt)
 }
 
 // Test EncodeValue with various types
