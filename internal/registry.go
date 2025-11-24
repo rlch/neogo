@@ -2,9 +2,10 @@ package internal
 
 import (
 	"fmt"
-	"maps"
 	"reflect"
 	"strings"
+
+	"github.com/rlch/neogo/internal/codec"
 )
 
 type (
@@ -13,6 +14,7 @@ type (
 		Nodes           []*RegisteredNode
 		Relationships   []*RegisteredRelationship
 		registeredTypes map[string]RegisteredEntity
+		codecs          *codec.CodecRegistry
 	}
 	RegisteredEntity interface {
 		Name() string
@@ -32,9 +34,8 @@ type (
 		Relationships map[string]*RelationshipTarget
 	}
 	RegisteredRelationship struct {
-		name          string
-		rType         reflect.Type
-		fieldsToProps map[string]string
+		name     string
+		typeName string // Store type name instead of reflect.Type
 
 		Reltype   string
 		StartNode NodeTarget
@@ -74,11 +75,15 @@ func (r *RegisteredRelationship) Name() string {
 }
 
 func (r *RegisteredRelationship) Type() reflect.Type {
-	return r.rType
+	// This method is deprecated and should not be used
+	// Use codec registry instead for type information
+	panic("RegisteredRelationship.Type() is deprecated - use codec registry")
 }
 
 func (r *RegisteredRelationship) FieldsToProps() map[string]string {
-	return r.fieldsToProps
+	// This method is deprecated and should not be used
+	// Use codec registry instead for field mapping
+	panic("RegisteredRelationship.FieldsToProps() is deprecated - use codec registry")
 }
 
 func (r RelationshipTarget) Target() *NodeTarget {
@@ -102,13 +107,24 @@ func NewRegistry() *Registry {
 		Nodes:           []*RegisteredNode{},
 		Relationships:   []*RegisteredRelationship{},
 		registeredTypes: make(map[string]RegisteredEntity),
+		codecs:          codec.NewCodecRegistry(),
 	}
 }
 
 func (r *Registry) RegisterTypes(types ...any) {
+	// IMPORTANT: Register types with codec registry FIRST
+	// This must happen before individual RegisterType calls
+	r.codecs.RegisterTypes(types...)
+
+	// Then register with legacy registry
 	for _, t := range types {
 		r.RegisterType(t)
 	}
+}
+
+// Codecs returns the codec registry for high-performance serialization
+func (r *Registry) Codecs() *codec.CodecRegistry {
+	return r.codecs
 }
 
 func (r *Registry) RegisterType(typ any) (registered any) {
@@ -123,7 +139,7 @@ func (r *Registry) RegisterType(typ any) (registered any) {
 }
 
 func (r *Registry) RegisterNode(v INode) *RegisteredNode {
-	vv := UnwindValue(reflect.ValueOf(v))
+	vv := codec.UnwindValue(reflect.ValueOf(v))
 	vvt := vv.Type()
 	name := vvt.Name()
 	if n, ok := r.registeredTypes[name]; ok {
@@ -133,138 +149,111 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 			return n.(*RegisteredAbstractNode).RegisteredNode
 		}
 	}
+
+	// Extract metadata using zero-reflection codec system
+	nodeMeta, err := r.codecs.ExtractNeo4jNodeMeta(v)
+	if err != nil {
+		panic(fmt.Errorf("failed to extract Neo4j metadata for %s: %w", name, err))
+	}
+
 	registered := &RegisteredNode{
 		rType:         vvt,
 		name:          name,
-		Labels:        []string{},
-		fieldsToProps: make(map[string]string),
+		Labels:        nodeMeta.Labels,
+		fieldsToProps: nodeMeta.FieldsToProps,
 		Relationships: make(map[string]*RelationshipTarget),
 	}
 
 	r.Nodes = append(r.Nodes, registered)
 	r.registeredTypes[name] = registered
-	// These are the labels to register after walking the node. We want to preference
-	// labels from anonymous nodes as they're lower in the inheritance hierarchy.
-	postpendLabels := []string{}
-	err := WalkStruct(
-		vv,
-		func(i int, typ reflect.StructField, val reflect.Value) (bool, error) {
-			jsonName, ok := extractJSONFieldName(typ)
-			if ok {
-				registered.fieldsToProps[typ.Name] = jsonName
-			}
-			// If a field with a neo4j tag is anonymous, we need to register it as a node.
-			// Special case for neogo.Node given it shouldn't be registered.
-			var shouldRecurse bool
-			if typ.Type == rNode {
-				shouldRecurse = true
-			} else if typ.Anonymous {
-				isNode := typ.Type.Implements(rINode)
-				if isNode {
-					nested := r.RegisterNode(reflect.New(typ.Type).Interface().(INode))
-					registered.Labels = append(registered.Labels, nested.Labels...)
-					maps.Copy(registered.fieldsToProps, nested.fieldsToProps)
-					maps.Copy(registered.Relationships, nested.Relationships)
-				} else {
-					shouldRecurse = true
-				}
-			}
-			neo4jTag, ok := typ.Tag.Lookup(Neo4jTag)
-			if !ok || neo4jTag == "" {
-				return shouldRecurse, nil
+
+	// Convert Neo4j relationship targets to registry relationship targets
+	for fieldName, neoRel := range nodeMeta.Relationships {
+		var relReg *RegisteredRelationship
+
+		// Create target instance and check its type
+		targetInstance, err := r.codecs.CreateNodeInstance(neoRel.NodeType)
+		if err != nil {
+			panic(fmt.Errorf("failed to create target instance: %w", err))
+		}
+
+		// Check if it's actually a relationship type (not a node)
+		if _, isRel := targetInstance.(IRelationship); isRel {
+			// This is a relationship - analyze its struct to find StartNode/EndNode
+			relTypeName := neoRel.NodeType.Elem().Name()
+			relReg = &RegisteredRelationship{
+				name:     relTypeName,
+				typeName: relTypeName,
+				Reltype:  neoRel.RelType,
 			}
 
-			parts := strings.Split(neo4jTag, ",")
-			if len(parts) == 0 {
-				return false, fmt.Errorf("invalid tag format for field %s.%s: %s", vvt.Name(), typ.Name, neo4jTag)
+			// Analyze the relationship struct to find StartNode/EndNode fields
+			relStruct := neoRel.NodeType.Elem()
+			for i := 0; i < relStruct.NumField(); i++ {
+				relField := relStruct.Field(i)
+				// Support both db and neo4j tags
+				var tag string
+				if tag = relField.Tag.Get("db"); tag == "" {
+					tag = relField.Tag.Get("neo4j")
+				}
+
+				if tag == "startNode" {
+					// This field represents the start node
+					relReg.StartNode = NodeTarget{
+						Field:          relField.Name,
+						RegisteredNode: registered, // The current node being processed
+					}
+				} else if tag == "endNode" {
+					// This field represents the end node
+					relReg.EndNode = NodeTarget{
+						Field:          relField.Name,
+						RegisteredNode: registered, // The current node being processed
+					}
+				}
 			}
-			registerRelationshipField := func(dir bool, shorthand string) error {
-				relType := typ.Type
-				isMany := false
-				if relType.Kind() == reflect.Struct {
-					relField, ok := relType.FieldByName("S")
-					if !ok {
-						return fmt.Errorf("expected Many[T] for field %s.%s, where T is some node or relationship", vvt.Name(), typ.Name)
-					}
-					relType = relField.Type.Elem()
-					isMany = true
-				}
-				if relType.Kind() != reflect.Ptr {
-					return fmt.Errorf("invalid relationship for field %s.%s. Got %s", vvt.Name(), typ.Name, relType)
-				}
-				var relReg *RegisteredRelationship
-				if shorthand != "" {
-					node, ok := reflect.New(relType.Elem()).Interface().(INode)
-					if !ok {
-						return fmt.Errorf("expected a pointer to a struct, implementing INode for field %s.%s", vvt.Name(), typ.Name)
-					}
-					target := r.RegisterNode(node)
-					relReg = &RegisteredRelationship{Reltype: shorthand}
-					if dir {
-						relReg.StartNode = NodeTarget{RegisteredNode: target}
-						relReg.EndNode = NodeTarget{RegisteredNode: registered}
-					} else {
-						relReg.StartNode = NodeTarget{RegisteredNode: registered}
-						relReg.EndNode = NodeTarget{RegisteredNode: target}
-					}
-					r.registeredTypes[shorthand] = relReg
-				} else {
-					rel, ok := reflect.New(relType.Elem()).Interface().(IRelationship)
-					if !ok {
-						return fmt.Errorf("expected a pointer to a struct, implementing IRelationship for field %s.%s", vvt.Name(), typ.Name)
-					}
-					relReg = r.RegisterRelationship(rel)
-				}
-				registered.Relationships[typ.Name] = &RelationshipTarget{
-					Dir:  dir,
-					Rel:  relReg,
-					Many: isMany,
-				}
-				return nil
-			}
-			ident := parts[0]
-			switch ident {
-			case "<-", "->":
-				if err := registerRelationshipField(ident == "->", ""); err != nil {
-					return false, err
-				}
-			case "":
-				return false, fmt.Errorf("field has empty neo4j label / direction: %s.%s", vvt.Name(), typ.Name)
-			default:
-				// TODO: There should be labels that aren't bindable (created with neogo.Label)
-				if typ.Anonymous {
-					postpendLabels = append(postpendLabels, ident)
-				} else {
-					var err error
-					if ident[0] == '<' {
-						err = registerRelationshipField(false, ident[1:])
-					} else if ident[len(ident)-1] == '>' {
-						err = registerRelationshipField(true, ident[:len(ident)-1])
-					}
-					if err != nil {
-						return false, err
-					}
-				}
+		} else {
+			// It's a node - this is a shorthand relationship (no relationship struct)
+			targetNode, ok := targetInstance.(INode)
+			if !ok {
+				panic(fmt.Errorf("target %s does not implement INode or IRelationship", neoRel.NodeType))
 			}
 
-			return shouldRecurse, nil
-		},
-	)
-	if err != nil {
-		panic(err)
+			targetReg := r.RegisterNode(targetNode)
+
+			// Create relationship registration with empty name/typeName for shorthand
+			relReg = &RegisteredRelationship{
+				name:     "", // Empty for shorthand relationships
+				typeName: "", // Empty for shorthand relationships
+				Reltype:  neoRel.RelType,
+			}
+			if neoRel.Dir {
+				relReg.StartNode = NodeTarget{RegisteredNode: targetReg}
+				relReg.EndNode = NodeTarget{RegisteredNode: registered}
+			} else {
+				relReg.StartNode = NodeTarget{RegisteredNode: registered}
+				relReg.EndNode = NodeTarget{RegisteredNode: targetReg}
+			}
+		}
+
+		// Note: Don't store relationships in registeredTypes map to avoid conflicts with node names
+		// Relationships are stored separately in r.Relationships slice
+
+		registered.Relationships[fieldName] = &RelationshipTarget{
+			Dir:  neoRel.Dir,
+			Rel:  relReg,
+			Many: neoRel.Many,
+		}
 	}
-	registered.Labels = append(registered.Labels, postpendLabels...)
-	if len(registered.Labels) == 0 {
-		panic(fmt.Errorf("node %s has no labels", name))
-	}
+
 	if len(registered.Relationships) == 0 {
 		registered.Relationships = nil
 	}
+
 	return registered
 }
 
 func (r *Registry) RegisterAbstractNode(typ any, typAbs IAbstract) *RegisteredAbstractNode {
-	vv := UnwindValue(reflect.ValueOf(typ))
+	vv := codec.UnwindValue(reflect.ValueOf(typ))
 	name := vv.Type().Name()
 	// There's a chance that the abstract node is registered as a concrete node, in which case we re-register
 	var node *RegisteredNode
@@ -291,77 +280,58 @@ func (r *Registry) RegisterAbstractNode(typ any, typAbs IAbstract) *RegisteredAb
 }
 
 func (r *Registry) RegisterRelationship(v IRelationship) *RegisteredRelationship {
-	vv := UnwindValue(reflect.ValueOf(v))
-	vvt := vv.Type()
-	name := vvt.Name()
-	if v, ok := r.registeredTypes[name]; ok {
-		return v.(*RegisteredRelationship)
-	}
-	registered := &RegisteredRelationship{
-		name:          name,
-		rType:         vvt,
-		fieldsToProps: make(map[string]string),
-	}
-	r.Relationships = append(r.Relationships, registered)
-	r.registeredTypes[name] = registered
-	err := WalkStruct(
-		vv,
-		func(i int, typ reflect.StructField, val reflect.Value) (bool, error) {
-			jsonName, ok := extractJSONFieldName(typ)
-			if ok {
-				registered.fieldsToProps[typ.Name] = jsonName
-			}
-			neo4jTag, ok := typ.Tag.Lookup(Neo4jTag)
-			if !ok {
-				return false, nil
-			}
-			parts := strings.Split(neo4jTag, ",")
-			if len(parts) == 0 {
-				return false, fmt.Errorf("invalid tag format for field %s.%s: %s", vvt.Name(), typ.Name, neo4jTag)
-			}
-			switch parts[0] {
-			case "startNode", "endNode":
-				isStart := parts[0] == "startNode"
-				nodeType := typ.Type
-				if nodeType.Kind() != reflect.Ptr {
-					return false, fmt.Errorf("expected a pointer to a struct, implementing INode for field %s.%s", vvt.Name(), typ.Name)
-				}
-				node, ok := reflect.New(nodeType.Elem()).Interface().(INode)
-				if !ok {
-					return false, fmt.Errorf("expected a pointer to a struct, implementing INode for field %s.%s", vvt.Name(), typ.Name)
-				}
-				nodeReg := r.RegisterNode(node)
-				if isStart {
-					registered.StartNode = NodeTarget{
-						Field:          typ.Name,
-						RegisteredNode: nodeReg,
-					}
-				} else {
-					registered.EndNode = NodeTarget{
-						Field:          typ.Name,
-						RegisteredNode: nodeReg,
-					}
-				}
-			case "":
-				return false, fmt.Errorf("field has empty neo4j label: %s.%s", vvt.Name(), typ.Name)
-			default:
-				if registered.Reltype != "" {
-					return false, fmt.Errorf("relationship has multiple neo4j labels: %s.%s", vvt.Name(), typ.Name)
-				}
-				registered.Reltype = parts[0]
-			}
-			return false, nil
-		},
-	)
+	// Extract metadata using codec registry (zero-reflection approach)
+	relMeta, err := r.codecs.ExtractRelationshipMeta(v)
 	if err != nil {
 		panic(err)
 	}
-	if registered.Reltype == "" {
-		panic(fmt.Errorf("relationship %s has no type", name))
+
+	name := relMeta.Name
+	if existing, ok := r.registeredTypes[name]; ok {
+		return existing.(*RegisteredRelationship)
 	}
-	if len(registered.fieldsToProps) == 0 {
-		registered.fieldsToProps = nil
+
+	registered := &RegisteredRelationship{
+		name:     name,
+		typeName: name, // Use name instead of reflection
+		Reltype:  relMeta.Type,
 	}
+	r.Relationships = append(r.Relationships, registered)
+	r.registeredTypes[name] = registered
+
+	// Register start and end nodes (optional)
+	if relMeta.StartNode != nil {
+		startNodeInstance, err := r.codecs.CreateNodeInstance(relMeta.StartNode.NodeType)
+		if err != nil {
+			panic(fmt.Errorf("failed to create start node instance: %w", err))
+		}
+		node, ok := startNodeInstance.(INode)
+		if !ok {
+			panic(fmt.Errorf("start node %s does not implement INode", relMeta.StartNode.NodeType))
+		}
+		nodeReg := r.RegisterNode(node)
+		registered.StartNode = NodeTarget{
+			Field:          relMeta.StartNode.FieldName,
+			RegisteredNode: nodeReg,
+		}
+	}
+
+	if relMeta.EndNode != nil {
+		endNodeInstance, err := r.codecs.CreateNodeInstance(relMeta.EndNode.NodeType)
+		if err != nil {
+			panic(fmt.Errorf("failed to create end node instance: %w", err))
+		}
+		node, ok := endNodeInstance.(INode)
+		if !ok {
+			panic(fmt.Errorf("end node %s does not implement INode", relMeta.EndNode.NodeType))
+		}
+		nodeReg := r.RegisterNode(node)
+		registered.EndNode = NodeTarget{
+			Field:          relMeta.EndNode.FieldName,
+			RegisteredNode: nodeReg,
+		}
+	}
+
 	return registered
 }
 
@@ -369,7 +339,7 @@ func (r *Registry) Get(typ reflect.Type) (entity RegisteredEntity) {
 	if typ == nil {
 		return nil
 	}
-	name := UnwindType(typ).Name()
+	name := codec.UnwindType(typ).Name()
 	if v, ok := r.registeredTypes[name]; ok {
 		return v
 	}

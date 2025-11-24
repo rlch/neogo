@@ -23,7 +23,7 @@ type (
 		GenerateID()
 	}
 	Node struct {
-		ID string `json:"id"`
+		ID string `db:"id"`
 	}
 
 	IAbstract interface {

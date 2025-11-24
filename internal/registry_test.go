@@ -19,43 +19,46 @@ func panicToErr[T any](f func() T) (out T, err error) {
 }
 
 type (
-	simpleNode struct {
-		Node `neo4j:"Simple"`
-	}
 	nestedLabelsNode struct {
-		simpleNode `neo4j:"Nested"`
+		simpleNode `db:"Nested"`
 	}
 	labelNode struct {
-		Label `neo4j:"Label"`
+		Label `db:"Label"`
 	}
 	nestedLabelsUsingLabelNode struct {
-		simpleNode `neo4j:"Nested"`
+		simpleNode `db:"Nested"`
 		labelNode
 	}
 	nodeWithProperties struct {
 		simpleNode
-		Name   string `json:"name"`
-		Ignore string `json:"-"`
+		Name   string `db:"name"`
+		Ignore string `db:"-"`
+	}
+
+	simpleNode struct {
+		Node `db:"Simple"`
 	}
 	nodeWithRelationship struct {
-		simpleNode
-		Forward   *simpleRelationship       `json:"-" neo4j:"->"`
-		Backward  *simpleRelationship       `json:"-" neo4j:"<-"`
-		Forwards  Many[*simpleRelationship] `json:"-" neo4j:"->"`
-		Backwards Many[*simpleRelationship] `json:"-" neo4j:"<-"`
+		Node `db:"Simple"`
+
+		Forward   *simpleRelationship   `db:"->"`
+		Backward  *simpleRelationship   `db:"<-"`
+		Forwards  []*simpleRelationship `db:"->"`
+		Backwards []*simpleRelationship `db:"<-"`
 	}
 	simpleRelationship struct {
-		Relationship `neo4j:"SIMPLE"`
-		Field        string                `json:"field"`
-		StartNode    *nodeWithRelationship `json:"-" neo4j:"startNode"`
-		EndNode      *nodeWithRelationship `json:"-" neo4j:"endNode"`
+		Relationship `db:"SIMPLE"`
+
+		Field     string                `db:"field"`
+		StartNode *nodeWithRelationship `db:"startNode"`
+		EndNode   *nodeWithRelationship `db:"endNode"`
 	}
 	shorthandRelationshipNode struct {
 		simpleNode
-		Forward   *simpleNode       `json:"-" neo4j:"SHORTHAND>"`
-		Backward  *simpleNode       `json:"-" neo4j:"<SHORTHAND"`
-		Forwards  Many[*simpleNode] `json:"-" neo4j:"SHORTHAND>"`
-		Backwards Many[*simpleNode] `json:"-" neo4j:"<SHORTHAND"`
+		Forward   *simpleNode       `db:"->"`
+		Backward  *simpleNode       `db:"<-"`
+		Forwards  Many[*simpleNode] `db:"->"`
+		Backwards Many[*simpleNode] `db:"<-"`
 	}
 )
 
@@ -85,10 +88,9 @@ var (
 		fieldsToProps: map[string]string{"ID": "id", "Name": "name"},
 	}
 	simpleRelationshipReg = &RegisteredRelationship{
-		rType:         reflect.TypeOf(simpleRelationship{}),
-		name:          "simpleRelationship",
-		Reltype:       "SIMPLE",
-		fieldsToProps: map[string]string{"Field": "field"},
+		typeName: "simpleRelationship",
+		name:     "simpleRelationship",
+		Reltype:  "SIMPLE",
 	}
 	nodeWithRelationshipReg = &RegisteredNode{
 		rType:         reflect.TypeOf(nodeWithRelationship{}),

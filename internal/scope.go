@@ -12,6 +12,7 @@ import (
 
 	"github.com/dlclark/regexp2"
 	"github.com/iancoleman/strcase"
+	"github.com/rlch/neogo/internal/codec"
 )
 
 func newScope(registry *Registry) *Scope {
@@ -93,11 +94,6 @@ Bindings:
 {{- end }}
 }
 
-Queries:
-{
-{{- range $key, $value := .Queries }}
-  {{ $key }}: {{ $value | printf "%v" }},
-{{- end }}
 }` + "\n")
 	if err != nil {
 		panic(err)
@@ -303,7 +299,7 @@ func (s *Scope) replaceBinding(m *member) {
 }
 
 func (s *Scope) bindFields(strct reflect.Value, memberName string) {
-	if err := WalkStruct(
+	if err := codec.WalkStruct(
 		strct,
 		func(i int, typ reflect.StructField, val reflect.Value) (bool, error) {
 			accessor, ok := extractJSONFieldName(typ)
@@ -373,7 +369,8 @@ func (s *Scope) add(
 		// Find the name of the identifier
 	if m.expr != "" {
 		if exst, ok := s.bindings[m.expr]; ok && exst != v {
-			panic(fmt.Errorf("%w (%s): want: %v, have: %v", ErrExpressionAlreadyBound, m.expr, v, exst))
+			s.AddError(fmt.Errorf("%w (%s): want: %v, have: %v", ErrExpressionAlreadyBound, m.expr, v, exst))
+			return nil
 		} else if ok {
 			m.isNew = false
 			currentName := s.names[exst]

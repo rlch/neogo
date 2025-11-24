@@ -26,7 +26,9 @@ func (r *Registry) instatiateInnerType(outer reflect.Type, to reflect.Type) any 
 		inner = reflect.Zero(outer).Interface()
 	}
 	if inner == nil {
-		inner = r.Get(outer).Type()
+		if registered := r.Get(outer); registered != nil {
+			inner = reflect.New(registered.Type()).Interface()
+		}
 	}
 	return inner
 }
@@ -76,13 +78,22 @@ func (r *Registry) ExtractRelationshipType(rel any) string {
 }
 
 func extractJSONFieldName(field reflect.StructField) (string, bool) {
-	jsTag, ok := field.Tag.Lookup("json")
-	if !ok {
-		return "", false
+	// Try db tag first (primary for Neo4j properties)
+	if dbTag, ok := field.Tag.Lookup("db"); ok && dbTag != "" && dbTag != "-" {
+		tag := strings.Split(dbTag, ",")[0]
+		// Skip relationship direction markers and other special values
+		if tag != "->" && tag != "<-" && tag != "startNode" && tag != "endNode" {
+			return tag, true
+		}
 	}
-	tag := strings.Split(jsTag, ",")[0]
-	if tag == "" || tag == "-" {
-		return "", false
+
+	// Fallback to json tag
+	if jsTag, ok := field.Tag.Lookup("json"); ok && jsTag != "" && jsTag != "-" {
+		tag := strings.Split(jsTag, ",")[0]
+		if tag != "" {
+			return tag, true
+		}
 	}
-	return tag, true
+
+	return "", false
 }

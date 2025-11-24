@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"runtime/debug"
 	"slices"
 	"sort"
 	"strings"
@@ -77,10 +76,8 @@ func (s *cypher) catch(op func()) {
 			} else {
 				s.AddError(fmt.Errorf("unexpected panic: %v", r))
 			}
-			fmt.Printf("Panicked while building the following query:\n%s", s.String())
-			s.Print()
-			debug.PrintStack()
-			panic(s.err.Error())
+			// Debug output only in development/debug mode
+			// fmt.Printf("Caught error while building query:\n%s", s.String())
 		}
 	}()
 	op()

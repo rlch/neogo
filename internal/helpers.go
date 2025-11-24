@@ -37,17 +37,3 @@ func WalkStruct(
 	}
 	return nil
 }
-
-func UnwindValue(ptrTo reflect.Value) reflect.Value {
-	for ptrTo.Kind() == reflect.Ptr {
-		ptrTo = ptrTo.Elem()
-	}
-	return ptrTo
-}
-
-func UnwindType(ptrTo reflect.Type) reflect.Type {
-	for ptrTo.Kind() == reflect.Ptr {
-		ptrTo = ptrTo.Elem()
-	}
-	return ptrTo
-}
