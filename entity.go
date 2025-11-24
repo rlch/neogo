@@ -49,8 +49,8 @@ type (
 	//  type Person struct {
 	//   neogo.Node `neo4j:"Person"`
 	//
-	//   Name string `json:"name"`
-	//   Age  int    `json:"age"`
+	//   Name string `db:"name"`
+	//   Age  int    `db:"age"`
 	//  }
 	Node = internal.Node
 
@@ -70,7 +70,7 @@ type (
 	//  	internal.Abstract `neo4j:"Organism"`
 	//  	internal.Node
 	//
-	//  	Alive bool `json:"alive"`
+	//  	Alive bool `db:"alive"`
 	//  }
 	//
 	//  func (b BaseOrganism) Implementers() []internal.IAbstract {
@@ -82,12 +82,12 @@ type (
 	//
 	//  type Human struct {
 	//  	BaseOrganism `neo4j:"Human"`
-	//  	Name         string `json:"name"`
+	//  	Name         string `db:"name"`
 	//  }
 	//
 	//  type Dog struct {
 	//  	BaseOrganism `neo4j:"Dog"`
-	//  	Borfs        bool `json:"borfs"`
+	//  	Borfs        bool `db:"borfs"`
 	//  }
 	Abstract = internal.Abstract
 
@@ -98,7 +98,7 @@ type (
 	//  type ActedIn struct {
 	//  	neogo.Relationship `neo4j:"ACTED_IN"`
 	//
-	//  	Role string `json:"role"`
+	//  	Role string `db:"role"`
 	//  }
 	Relationship = internal.Relationship
 
