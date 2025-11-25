@@ -49,9 +49,9 @@ func connectNeo4J(ctx context.Context) (neo4j.DriverWithContext, func(context.Co
 type Person struct {
 	Node `neo4j:"Person"`
 
-	Name    string `db:"name"`
-	Surname string `db:"surname"`
-	Age     int    `db:"age"`
+	Name    string `neo4j:"name"`
+	Surname string `neo4j:"surname"`
+	Age     int    `neo4j:"age"`
 }
 
 func TestDriver(t *testing.T) {

@@ -2,14 +2,14 @@ package codec
 
 import (
 	"fmt"
-	"reflect"
 	"time"
 	"unsafe"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
-// Decoder is the interface for all decoders
+// Decoder is the interface for all decoders.
+// HOT PATH: All Decode implementations use zero reflection - only unsafe pointer arithmetic.
 type Decoder interface {
 	Decode(data any, ptr unsafe.Pointer) error
 }
@@ -110,8 +110,8 @@ func (d *structDecoder) Decode(data any, ptr unsafe.Pointer) error {
 
 type sliceDecoder struct {
 	elemDecoder Decoder
-	elemType    reflect.Type
 	elemSize    uintptr
+	allocate    sliceAllocator // Pre-computed allocator (no runtime reflection)
 }
 
 func (d *sliceDecoder) Decode(data any, ptr unsafe.Pointer) error {
@@ -134,18 +134,15 @@ func (d *sliceDecoder) Decode(data any, ptr unsafe.Pointer) error {
 		return nil
 	}
 
-	// Allocate slice underlying array
-	// We use reflect.MakeSlice to safely allocate the backing array of correct type
-	sliceVal := reflect.MakeSlice(reflect.SliceOf(d.elemType), count, count)
+	// Allocate slice backing array using pre-computed allocator (ZERO reflection)
+	valPtr, _, capacity := d.allocate(count)
 	
 	// Copy header to destination struct field
 	// This sets Data, Len, Cap on the struct field
-	valPtr := unsafe.Pointer(sliceVal.Pointer()) // Pointer to first element
-	
 	header := (*sliceHeader)(ptr)
 	header.Data = valPtr
 	header.Len = count
-	header.Cap = count
+	header.Cap = capacity
 
 	// Iterate and decode elements directly into memory
 	for i := 0; i < count; i++ {
@@ -159,63 +156,11 @@ func (d *sliceDecoder) Decode(data any, ptr unsafe.Pointer) error {
 	return nil
 }
 
-// --- Map Decoder ---
-
-type mapDecoder struct {
-	elemDecoder Decoder
-	mapType     reflect.Type
-	elemType    reflect.Type
-}
-
-func (d *mapDecoder) Decode(data any, ptr unsafe.Pointer) error {
-	if data == nil {
-		*(*unsafe.Pointer)(ptr) = nil
-		return nil
-	}
-
-	src, ok := data.(map[string]any)
-	if !ok {
-		return fmt.Errorf("expected map[string]any, got %T", data)
-	}
-
-	// Create map
-	m := reflect.MakeMapWithSize(d.mapType, len(src))
-	
-	// Temporary value for decoding elements
-	// We allocate a new one each time or reuse? Reuse is tricky with reflection.
-	// For zero-reflection map writing, we'd need direct runtime map access.
-	// Fallback: Decode into new value, then MapIndex.Set
-	
-	// Optimization: Goccy avoids this by using runtime map functions.
-	// For now, we use "Fast Reflection" pattern.
-	
-	for k, v := range src {
-		// Create new element
-		elemVal := reflect.New(d.elemType).Elem()
-		
-		// Decode into it using unsafe (safe because we own the memory)
-		elemPtr := unsafe.Pointer(elemVal.UnsafeAddr())
-		if err := d.elemDecoder.Decode(v, elemPtr); err != nil {
-			return fmt.Errorf("map key %q: %w", k, err)
-		}
-		
-		m.SetMapIndex(reflect.ValueOf(k), elemVal)
-	}
-
-	// Set map to struct field
-	// ptr points to the map field in the struct (which is a pointer)
-	// We need to set the pointer value
-	dst := reflect.NewAt(d.mapType, ptr).Elem()
-	dst.Set(m)
-
-	return nil
-}
-
 // --- Pointer Decoder ---
 
 type ptrDecoder struct {
 	elemDecoder Decoder
-	elemType    reflect.Type
+	allocate    ptrAllocator // Pre-computed allocator (ZERO reflection at decode time)
 }
 
 func (d *ptrDecoder) Decode(data any, ptr unsafe.Pointer) error {
@@ -224,9 +169,8 @@ func (d *ptrDecoder) Decode(data any, ptr unsafe.Pointer) error {
 		return nil
 	}
 
-	// Allocate memory
-	val := reflect.New(d.elemType) // Returns *T wrapped in Value
-	mem := unsafe.Pointer(val.Pointer())
+	// Allocate memory using pre-computed allocator (ZERO reflection)
+	mem := d.allocate()
 	
 	// Decode into allocated memory
 	if err := d.elemDecoder.Decode(data, mem); err != nil {

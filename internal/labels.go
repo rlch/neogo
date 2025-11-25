@@ -78,19 +78,16 @@ func (r *Registry) ExtractRelationshipType(rel any) string {
 }
 
 func extractJSONFieldName(field reflect.StructField) (string, bool) {
-	// Try db tag first (primary for Neo4j properties)
-	if dbTag, ok := field.Tag.Lookup("db"); ok && dbTag != "" && dbTag != "-" {
-		tag := strings.Split(dbTag, ",")[0]
-		// Skip relationship direction markers and other special values
-		if tag != "->" && tag != "<-" && tag != "startNode" && tag != "endNode" {
-			return tag, true
-		}
+	// Anonymous (embedded) fields are for labels/inheritance, not properties
+	if field.Anonymous {
+		return "", false
 	}
 
-	// Fallback to json tag
-	if jsTag, ok := field.Tag.Lookup("json"); ok && jsTag != "" && jsTag != "-" {
-		tag := strings.Split(jsTag, ",")[0]
-		if tag != "" {
+	// Use neo4j tag for property names
+	if neo4jTag, ok := field.Tag.Lookup("neo4j"); ok && neo4jTag != "" && neo4jTag != "-" {
+		tag := strings.Split(neo4jTag, ",")[0]
+		// Skip relationship direction markers and other special values
+		if tag != "->" && tag != "<-" && tag != "startNode" && tag != "endNode" {
 			return tag, true
 		}
 	}

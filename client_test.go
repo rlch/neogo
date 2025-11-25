@@ -655,7 +655,7 @@ func TestUnmarshalRecords(t *testing.T) {
 		s := newTestSession()
 
 		type Person struct {
-			ID int `db:"id"`
+			ID int `neo4j:"id"`
 		}
 
 		// UNWIND [1, 2, 3] AS id
@@ -686,7 +686,7 @@ func TestUnmarshalRecords(t *testing.T) {
 		s := newTestSession()
 
 		type Person struct {
-			ID int `db:"id"`
+			ID int `neo4j:"id"`
 		}
 
 		var persons []*Person

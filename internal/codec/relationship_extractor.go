@@ -20,8 +20,8 @@ type NodeFieldMeta struct {
 	NodeType  reflect.Type
 }
 
-// ExtractRelationshipMeta extracts relationship metadata from a struct type
-// This uses reflection ONCE during registration, then caches the results
+// ExtractRelationshipMeta extracts relationship metadata from a struct type.
+// REGISTRATION PHASE: Uses heavy reflection, called only during type registration.
 func (r *CodecRegistry) ExtractRelationshipMeta(v any) (*RelationshipStructMeta, error) {
 	typ := reflect.TypeOf(v)
 	if typ.Kind() == reflect.Ptr {
@@ -39,13 +39,13 @@ func (r *CodecRegistry) ExtractRelationshipMeta(v any) (*RelationshipStructMeta,
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 
-		// Parse neo4j tag (will be changed to db later)
-		dbTag := field.Tag.Get("neo4j")
-		if dbTag == "" {
+		// Parse neo4j tag
+		neo4jTag := field.Tag.Get("neo4j")
+		if neo4jTag == "" {
 			continue
 		}
 
-		parts := strings.Split(dbTag, ",")
+		parts := strings.Split(neo4jTag, ",")
 		if len(parts) == 0 {
 			continue
 		}
@@ -79,11 +79,15 @@ func (r *CodecRegistry) ExtractRelationshipMeta(v any) (*RelationshipStructMeta,
 			}
 
 		default:
-			// This should be the relationship type
-			if meta.Type != "" {
-				return nil, fmt.Errorf("relationship %s has multiple type definitions", meta.Name)
+			// Only embedded Relationship struct's tag defines the relationship type
+			// Other fields with neo4j tags are property fields
+			if field.Anonymous && field.Type.Name() == "Relationship" {
+				if meta.Type != "" {
+					return nil, fmt.Errorf("relationship %s has multiple type definitions", meta.Name)
+				}
+				meta.Type = tagValue
 			}
-			meta.Type = tagValue
+			// Non-anonymous fields are just property mappings, ignore them here
 		}
 	}
 

@@ -37,7 +37,7 @@ func TestCallSubquery(t *testing.T) {
 		type Counter struct {
 			internal.Node `neo4j:"Counter"`
 
-			Count int `db:"count"`
+			Count int `neo4j:"count"`
 		}
 		var (
 			n          Counter

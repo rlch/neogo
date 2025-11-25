@@ -25,7 +25,7 @@ type foreignPerson struct {
 
 type personWithNonStructLabels struct {
 	swedishPerson
-	Name string `db:"name"`
+	Name string `neo4j:"name"`
 }
 
 type personWithAnonymousStructLabels struct {

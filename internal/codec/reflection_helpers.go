@@ -115,7 +115,7 @@ type IRelationship interface {
 
 // Node struct (this matches what's in internal/entity.go)
 type Node struct {
-	ID string `db:"id"`
+	ID string `neo4j:"id"`
 }
 
 // ImplementsAbstract checks if a type implements IAbstract

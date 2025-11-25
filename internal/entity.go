@@ -23,7 +23,7 @@ type (
 		GenerateID()
 	}
 	Node struct {
-		ID string `db:"id"`
+		ID string `neo4j:"id"`
 	}
 
 	IAbstract interface {

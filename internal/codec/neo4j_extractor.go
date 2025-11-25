@@ -23,8 +23,8 @@ type Neo4jRelationshipTarget struct {
 	NodeType  reflect.Type // Target node type
 }
 
-// ExtractNeo4jNodeMeta extracts Neo4j node metadata from a struct
-// This uses reflection ONCE during registration
+// ExtractNeo4jNodeMeta extracts Neo4j node metadata from a struct.
+// REGISTRATION PHASE: Uses heavy reflection, called only during type registration.
 func (r *CodecRegistry) ExtractNeo4jNodeMeta(v any) (*Neo4jNodeMetadata, error) {
 	typ := reflect.TypeOf(v)
 	val := reflect.ValueOf(v)
@@ -132,28 +132,19 @@ func (r *CodecRegistry) walkStructFields(typ reflect.Type, val reflect.Value, me
 	return nil
 }
 
-// extractFieldName extracts field name from db, json, or neo4j tags
+// extractFieldName extracts field name from neo4j tag
 func (r *CodecRegistry) extractFieldName(field reflect.StructField) (string, bool) {
-	// Try db tag first (primary for Neo4j properties)
-	if dbTag := field.Tag.Get("db"); dbTag != "" && dbTag != "-" {
-		parts := strings.Split(dbTag, ",")
-		if len(parts) > 0 {
-			fieldName := strings.TrimSpace(parts[0])
-			// Skip relationship direction markers and other special values
-			if fieldName != "" && fieldName != "->" && fieldName != "<-" && fieldName != "startNode" && fieldName != "endNode" {
-				return fieldName, true
-			}
-		}
+	neo4jTag := field.Tag.Get("neo4j")
+	if neo4jTag == "" || neo4jTag == "-" {
+		return "", false
 	}
 
-	// Fallback to json tag
-	if jsonTag := field.Tag.Get("json"); jsonTag != "" && jsonTag != "-" {
-		parts := strings.Split(jsonTag, ",")
-		if len(parts) > 0 {
-			fieldName := strings.TrimSpace(parts[0])
-			if fieldName != "" {
-				return fieldName, true
-			}
+	parts := strings.Split(neo4jTag, ",")
+	if len(parts) > 0 {
+		fieldName := strings.TrimSpace(parts[0])
+		// Skip relationship direction markers and other special values
+		if fieldName != "" && fieldName != "->" && fieldName != "<-" && fieldName != "startNode" && fieldName != "endNode" {
+			return fieldName, true
 		}
 	}
 
@@ -256,15 +247,12 @@ func (r *CodecRegistry) registerRelationshipField(field reflect.StructField, dir
 		// Extract relationship type from db/neo4j tag on the relationship struct
 		relStructType := relType.Elem()
 		if r.implementsIRelationship(relType) {
-			// Look for db or neo4j tag on the relationship struct itself
+			// Look for neo4j tag on the relationship struct itself
 			if relStructType.Kind() == reflect.Struct {
 				for i := 0; i < relStructType.NumField(); i++ {
 					field := relStructType.Field(i)
 					if field.Anonymous && field.Type.Name() == "Relationship" {
-						if tagVal := field.Tag.Get("db"); tagVal != "" {
-							relTypeName = tagVal
-							break
-						} else if tagVal := field.Tag.Get("neo4j"); tagVal != "" {
+						if tagVal := field.Tag.Get("neo4j"); tagVal != "" {
 							relTypeName = tagVal
 							break
 						}

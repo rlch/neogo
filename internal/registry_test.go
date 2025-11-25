@@ -20,45 +20,45 @@ func panicToErr[T any](f func() T) (out T, err error) {
 
 type (
 	nestedLabelsNode struct {
-		simpleNode `db:"Nested"`
+		simpleNode `neo4j:"Nested"`
 	}
 	labelNode struct {
-		Label `db:"Label"`
+		Label `neo4j:"Label"`
 	}
 	nestedLabelsUsingLabelNode struct {
-		simpleNode `db:"Nested"`
+		simpleNode `neo4j:"Nested"`
 		labelNode
 	}
 	nodeWithProperties struct {
 		simpleNode
-		Name   string `db:"name"`
-		Ignore string `db:"-"`
+		Name   string `neo4j:"name"`
+		Ignore string `neo4j:"-"`
 	}
 
 	simpleNode struct {
-		Node `db:"Simple"`
+		Node `neo4j:"Simple"`
 	}
 	nodeWithRelationship struct {
-		Node `db:"Simple"`
+		Node `neo4j:"Simple"`
 
-		Forward   *simpleRelationship   `db:"->"`
-		Backward  *simpleRelationship   `db:"<-"`
-		Forwards  []*simpleRelationship `db:"->"`
-		Backwards []*simpleRelationship `db:"<-"`
+		Forward   *simpleRelationship   `neo4j:"->"`
+		Backward  *simpleRelationship   `neo4j:"<-"`
+		Forwards  []*simpleRelationship `neo4j:"->"`
+		Backwards []*simpleRelationship `neo4j:"<-"`
 	}
 	simpleRelationship struct {
-		Relationship `db:"SIMPLE"`
+		Relationship `neo4j:"SIMPLE"`
 
-		Field     string                `db:"field"`
-		StartNode *nodeWithRelationship `db:"startNode"`
-		EndNode   *nodeWithRelationship `db:"endNode"`
+		Field     string                `neo4j:"field"`
+		StartNode *nodeWithRelationship `neo4j:"startNode"`
+		EndNode   *nodeWithRelationship `neo4j:"endNode"`
 	}
 	shorthandRelationshipNode struct {
 		simpleNode
-		Forward   *simpleNode       `db:"->"`
-		Backward  *simpleNode       `db:"<-"`
-		Forwards  Many[*simpleNode] `db:"->"`
-		Backwards Many[*simpleNode] `db:"<-"`
+		Forward   *simpleNode       `neo4j:"->"`
+		Backward  *simpleNode       `neo4j:"<-"`
+		Forwards  Many[*simpleNode] `neo4j:"->"`
+		Backwards Many[*simpleNode] `neo4j:"<-"`
 	}
 )
 

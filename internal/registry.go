@@ -191,11 +191,7 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 			relStruct := neoRel.NodeType.Elem()
 			for i := 0; i < relStruct.NumField(); i++ {
 				relField := relStruct.Field(i)
-				// Support both db and neo4j tags
-				var tag string
-				if tag = relField.Tag.Get("db"); tag == "" {
-					tag = relField.Tag.Get("neo4j")
-				}
+				tag := relField.Tag.Get("neo4j")
 
 				if tag == "startNode" {
 					// This field represents the start node

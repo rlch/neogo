@@ -245,13 +245,13 @@ func ExampleBuilder_Unwind() {
 	type Year struct {
 		internal.Node `neo4j:"Year"`
 
-		Year int `db:"year"`
+		Year int `neo4j:"year"`
 	}
 	type Event struct {
 		internal.Node `neo4j:"Event"`
 
-		ID   int `db:"id"`
-		Year int `db:"year"`
+		ID   int `neo4j:"id"`
+		Year int `neo4j:"year"`
 	}
 	type In struct {
 		internal.Relationship `neo4j:"IN"`

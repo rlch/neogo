@@ -26,16 +26,32 @@ func getTypePtr(t reflect.Type) TypePtr {
 	return TypePtr(uintptr((*emptyInterface)(unsafe.Pointer(&t)).ptr))
 }
 
-// getTypePtrFromValue extracts the type pointer directly from a value
+// getTypePtrFromValue extracts the type pointer directly from a value by computing
+// the reflect.Type and using getTypePtr for consistency.
+// This ensures that RegisterTypes(T{}) and GetTypeMetadata(&T{}) use the same key.
+//
+// BUG FIX: Previously this used iface.typ directly, which is the pointer type when
+// v is *T (e.g., &Company{}). Now we use reflect.TypeOf to get the actual type,
+// then normalize via getTypePtr to match RegisterTypes behavior.
 func getTypePtrFromValue(v any) TypePtr {
-	iface := (*emptyInterface)(unsafe.Pointer(&v))
-	return TypePtr(uintptr(iface.typ))
+	typ := reflect.TypeOf(v)
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	return getTypePtr(typ)
 }
 
 // getValuePtr extracts the value pointer from interface{}
 func getValuePtr(v any) unsafe.Pointer {
 	iface := (*emptyInterface)(unsafe.Pointer(&v))
 	return iface.ptr
+}
+
+// getInterfaceValue extracts the interface{} value directly from memory
+// without using reflect.NewAt (zero reflection).
+// This is used for OpFieldInterface encoding to avoid reflect overhead.
+func getInterfaceValue(ptr unsafe.Pointer) any {
+	return *(*any)(ptr)
 }
 
 // FieldMeta contains pre-computed field metadata (no reflect.Type needed)
@@ -104,9 +120,8 @@ func getKind(rk reflect.Kind) Kind {
 	case reflect.String:
 		return KindString
 	case reflect.Slice:
-		if rk == reflect.Slice {
-			return KindBytes // Special case for []byte
-		}
+		// Note: Special case for []byte is handled during compilation (compileSlice in compiler.go)
+		// For Kind extraction, we just return KindSlice - the element type check happens elsewhere
 		return KindSlice
 	case reflect.Map:
 		return KindMap
@@ -129,6 +144,79 @@ func extractFieldMeta(field reflect.StructField) FieldMeta {
 		Kind:   getKind(field.Type.Kind()),
 		Type:   field.Type,
 	}
+}
+
+// Exported versions for testing
+func GetTypePtr(t reflect.Type) TypePtr {
+	return getTypePtr(t)
+}
+
+func GetTypePtrFromValue(v any) TypePtr {
+	return getTypePtrFromValue(v)
+}
+
+func GetValuePtr(v any) unsafe.Pointer {
+	return getValuePtr(v)
+}
+
+func GetInterfaceValue(ptr unsafe.Pointer) any {
+	return getInterfaceValue(ptr)
+}
+
+func GetKind(rk reflect.Kind) Kind {
+	return getKind(rk)
+}
+
+func ConvertToInt(value any) (int, bool) {
+	return convertToInt(value)
+}
+
+func ConvertToInt8(value any) (int8, bool) {
+	return convertToInt8(value)
+}
+
+func ConvertToInt16(value any) (int16, bool) {
+	return convertToInt16(value)
+}
+
+func ConvertToInt32(value any) (int32, bool) {
+	return convertToInt32(value)
+}
+
+func ConvertToInt64(value any) (int64, bool) {
+	return convertToInt64(value)
+}
+
+func ConvertToUint(value any) (uint, bool) {
+	return convertToUint(value)
+}
+
+func ConvertToUint8(value any) (uint8, bool) {
+	return convertToUint8(value)
+}
+
+func ConvertToUint16(value any) (uint16, bool) {
+	return convertToUint16(value)
+}
+
+func ConvertToUint32(value any) (uint32, bool) {
+	return convertToUint32(value)
+}
+
+func ConvertToUint64(value any) (uint64, bool) {
+	return convertToUint64(value)
+}
+
+func ConvertToFloat32(value any) (float32, bool) {
+	return convertToFloat32(value)
+}
+
+func ConvertToFloat64(value any) (float64, bool) {
+	return convertToFloat64(value)
+}
+
+func ExtractFieldMeta(field reflect.StructField) FieldMeta {
+	return extractFieldMeta(field)
 }
 
 

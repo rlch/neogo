@@ -9,6 +9,9 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
+// Compiler builds opcode sequences for encoding/decoding structs.
+// REGISTRATION PHASE: All Compile methods use heavy reflection and should
+// only be called during type registration at startup.
 type Compiler struct {
 	encCache map[TypePtr]*Opcode
 	decCache map[TypePtr]Decoder
@@ -231,7 +234,7 @@ func (c *Compiler) CompileDecoder(typ reflect.Type) (Decoder, error) {
 		}
 		return c.compileSliceDecoder(typ)
 	case reflect.Map:
-		return c.compileMapDecoder(typ)
+		return nil, fmt.Errorf("maps are not supported for Neo4j codec - Neo4j data model only supports scalar properties")
 	case reflect.Interface:
 		return DecoderFunc(interfaceDecoder), nil
 	default:
@@ -347,7 +350,7 @@ func (c *Compiler) compilePtrDecoder(typ reflect.Type) (Decoder, error) {
 	}
 	return &ptrDecoder{
 		elemDecoder: elemDec,
-		elemType:    typ.Elem(),
+		allocate:    makePtrAllocator(typ.Elem()), // Compile-time allocation strategy
 	}, nil
 }
 
@@ -358,19 +361,8 @@ func (c *Compiler) compileSliceDecoder(typ reflect.Type) (Decoder, error) {
 	}
 	return &sliceDecoder{
 		elemDecoder: elemDec,
-		elemType:    typ.Elem(),
 		elemSize:    typ.Elem().Size(),
+		allocate:    makeSliceAllocator(typ.Elem()), // Compile-time allocation strategy
 	}, nil
 }
 
-func (c *Compiler) compileMapDecoder(typ reflect.Type) (Decoder, error) {
-	elemDec, err := c.CompileDecoder(typ.Elem())
-	if err != nil {
-		return nil, err
-	}
-	return &mapDecoder{
-		elemDecoder: elemDec,
-		mapType:     typ,
-		elemType:    typ.Elem(),
-	}, nil
-}
