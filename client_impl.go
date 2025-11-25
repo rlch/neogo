@@ -433,11 +433,17 @@ func (s *session) unmarshalRecords(
 				return fmt.Errorf("no value associated with key %q", key)
 			}
 			to := binding.Index(i)
-			if to.Kind() == reflect.Ptr {
-				to.Set(reflect.New(to.Type().Elem()))
-			} else {
-				to.Set(reflect.New(to.Type()).Elem())
+
+			// Don't pre-allocate if value is nil - let BindValue handle it
+			// This preserves nil pointers in results
+			if value != nil {
+				if to.Kind() == reflect.Ptr {
+					to.Set(reflect.New(to.Type().Elem()))
+				} else {
+					to.Set(reflect.New(to.Type()).Elem())
+				}
 			}
+
 			if to.CanAddr() {
 				to = to.Addr()
 			}

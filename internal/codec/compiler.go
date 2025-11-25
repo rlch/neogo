@@ -368,4 +368,3 @@ func (c *Compiler) compileSliceDecoder(typ reflect.Type) (Decoder, error) {
 		allocate:    makeSliceAllocator(typ.Elem()), // Compile-time allocation strategy
 	}, nil
 }
-
