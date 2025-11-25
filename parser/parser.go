@@ -1,3 +1,5 @@
+// Package parser provides utilities for parsing Cypher query strings using
+// an ANTLR-generated grammar. It includes error handling and parse tree metadata.
 package parser
 
 import (

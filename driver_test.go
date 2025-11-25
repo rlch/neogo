@@ -3,7 +3,6 @@ package neogo
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"testing"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -168,69 +167,9 @@ func ExampleDriver_readSession() {
 	// nsTimes2: [0 2 4 6 8 10 12 14 16 18 20]
 }
 
-func ExampleDriver_writeSession() {
-	// Skip this example - requires complex Neo4j transaction behavior that's hard to mock
-	return
-	//nolint:govet // unreachable code is intentional - this is example code that's skipped
-	ctx := context.Background()
-	// Always use mock for examples to avoid connection dependencies
-	m := NewMock()
-	// First operation (MERGE) returns nothing
-	m.Bind(nil)
-	// Second operation (MATCH) returns records
-	records := make([]map[string]any, 10)
-	for i := range records {
-		records[i] = map[string]any{"p": &Person{
-			Node: internal.Node{
-				ID: strconv.Itoa(i + 1),
-			},
-		}}
-	}
-	m.BindRecords(records)
-	d := m
-
-	var people []*Person
-	session := d.WriteSession(ctx)
-	defer func() {
-		if err := session.Close(ctx); err != nil {
-			panic(err)
-		}
-	}()
-	err := session.WriteTransaction(ctx, func(begin func() Query) error {
-		if err := begin().
-			Unwind("range(1, 10)", "i").
-			Merge(db.Node(
-				db.Qual(
-					Person{},
-					"p",
-					db.Props{"id": "toString(i)"},
-				),
-			)).
-			Run(ctx); err != nil {
-			return err
-		}
-		if err := begin().
-			Unwind("range(1, 10)", "i").
-			Match(db.Node(db.Qual(&people, "p"))).
-			Where(db.And(
-				db.Cond("p.id", "=", "toString(i)"),
-			)).
-			Return(&people).
-			Run(ctx); err != nil {
-			return err
-		}
-		return nil
-	})
-	ids := make([]string, len(people))
-	for i, p := range people {
-		ids[i] = p.ID
-	}
-	fmt.Printf("err: %v\n", err)
-	fmt.Printf("ids: %v\n", ids)
-	// Skip Output: requires complex Neo4j transaction behavior
-	// Output: err: <nil>
-	// ids: [1 2 3 4 5 6 7 8 9 10]
-}
+// Note: ExampleDriver_writeSession was removed because it requires complex
+// Neo4j transaction behavior that's difficult to mock properly.
+// See TestWriteSession for actual write session testing.
 
 func ExampleDriver_runWithParams() {
 	ctx := context.Background()

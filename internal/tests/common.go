@@ -1,3 +1,5 @@
+// Package tests provides shared test utilities, fixtures, and helper functions
+// for testing neogo's Cypher query generation and struct mapping.
 package tests
 
 import (

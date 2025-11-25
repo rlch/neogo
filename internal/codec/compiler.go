@@ -1,3 +1,6 @@
+// Package codec provides encoding and decoding of Go structs to and from Neo4j
+// property maps. It uses compiled opcodes for efficient struct traversal and
+// supports Neo4j-specific types like dates, times, points, and durations.
 package codec
 
 import (

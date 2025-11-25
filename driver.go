@@ -1,3 +1,6 @@
+// Package neogo provides a Neo4j ORM and query builder for Go.
+// It wraps the official Neo4j Go driver with type-safe query construction,
+// automatic struct mapping, and support for nodes, relationships, and Cypher queries.
 package neogo
 
 import (

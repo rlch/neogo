@@ -1,3 +1,6 @@
+// Package internal provides core implementation types and utilities for neogo.
+// This package contains the foundational types for nodes, relationships, and
+// the Cypher query client used internally by the public API.
 package internal
 
 import (
