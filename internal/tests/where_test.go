@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -27,8 +26,8 @@ func TestWhere(t *testing.T) {
 					MATCH (a:Person WHERE a.name = 'Andy')-[:KNOWS]->(b:Person WHERE b.age > minAge)
 					RETURN b.name
 					`,
-				Bindings: map[string]reflect.Value{
-					"b.name": reflect.ValueOf(&b.Name),
+				Bindings: map[string]any{
+					"b.name": &b.Name,
 				},
 			})
 
@@ -45,8 +44,8 @@ func TestWhere(t *testing.T) {
 					MATCH (a:Person {name: 'Andy'})
 					RETURN [(a)-->(b WHERE b:Person) | b.name] AS friends
 					`,
-				Bindings: map[string]reflect.Value{
-					"friends": reflect.ValueOf(&names),
+				Bindings: map[string]any{
+					"friends": &names,
 				},
 			})
 		})
@@ -83,9 +82,9 @@ func TestWhere(t *testing.T) {
 					RETURN n.name AS name, n.age AS age
 					ORDER BY name
 					`,
-				Bindings: map[string]reflect.Value{
-					"name": reflect.ValueOf(&n.Name),
-					"age":  reflect.ValueOf(&n.Age),
+				Bindings: map[string]any{
+					"name": &n.Name,
+					"age":  &n.Age,
 				},
 			})
 		})
@@ -110,9 +109,9 @@ func TestWhere(t *testing.T) {
 					WHERE n:Swedish
 					RETURN n.name, n.age
 					`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&name),
-					"n.age":  reflect.ValueOf(&age),
+				Bindings: map[string]any{
+					"n.name": &name,
+					"n.age":  &age,
 				},
 			})
 		})
@@ -137,9 +136,9 @@ func TestWhere(t *testing.T) {
 					WHERE n:Swedish
 					RETURN n.name, n.age
 					`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&name),
-					"n.age":  reflect.ValueOf(&age),
+				Bindings: map[string]any{
+					"n.name": &name,
+					"n.age":  &age,
 				},
 			})
 		})
@@ -161,9 +160,9 @@ func TestWhere(t *testing.T) {
 					WHERE n.age < 30
 					RETURN n.name, n.age
 					`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.age":  reflect.ValueOf(&n.Age),
+				Bindings: map[string]any{
+					"n.name": &n.Name,
+					"n.age":  &n.Age,
 				},
 			})
 		})
@@ -193,10 +192,10 @@ func TestWhere(t *testing.T) {
 					WHERE k.since < 2000
 					RETURN f.name, f.age, f.email
 					`,
-				Bindings: map[string]reflect.Value{
-					"f.name":  reflect.ValueOf(&name),
-					"f.age":   reflect.ValueOf(&age),
-					"f.email": reflect.ValueOf(&email),
+				Bindings: map[string]any{
+					"f.name":  &name,
+					"f.age":   &age,
+					"f.email": &email,
 				},
 			})
 		})
@@ -222,9 +221,9 @@ func TestWhere(t *testing.T) {
 					WHERE n[toLower(propname)] < 30
 					RETURN n.name, n.age
 					`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.age":  reflect.ValueOf(&n.Age),
+				Bindings: map[string]any{
+					"n.name": &n.Name,
+					"n.age":  &n.Age,
 				},
 			})
 		})
@@ -248,9 +247,9 @@ func TestWhere(t *testing.T) {
 					WHERE n.belt IS NOT NULL
 					RETURN n.name, n.belt
 					`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.belt": reflect.ValueOf(&n.Belt),
+				Bindings: map[string]any{
+					"n.name": &n.Name,
+					"n.belt": &n.Belt,
 				},
 			})
 		})
@@ -275,8 +274,8 @@ func TestWhere(t *testing.T) {
 					WHERE n.age = 25
 					RETURN name
 					`,
-				Bindings: map[string]reflect.Value{
-					"name": reflect.ValueOf(&n.Name),
+				Bindings: map[string]any{
+					"name": &n.Name,
 				},
 			})
 		})
@@ -297,9 +296,9 @@ func TestWhere(t *testing.T) {
 					WHERE n.name STARTS WITH 'Pet'
 					RETURN n.name, n.age
 					`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.age":  reflect.ValueOf(&n.Age),
+				Bindings: map[string]any{
+					"n.name": &n.Name,
+					"n.age":  &n.Age,
 				},
 			})
 		})
@@ -318,9 +317,9 @@ func TestWhere(t *testing.T) {
 					WHERE n.name ENDS WITH 'ter'
 					RETURN n.name, n.age
 					`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.age":  reflect.ValueOf(&n.Age),
+				Bindings: map[string]any{
+					"n.name": &n.Name,
+					"n.age":  &n.Age,
 				},
 			})
 		})
@@ -339,9 +338,9 @@ func TestWhere(t *testing.T) {
 					WHERE n.name CONTAINS 'ete'
 					RETURN n.name, n.age
 					`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.age":  reflect.ValueOf(&n.Age),
+				Bindings: map[string]any{
+					"n.name": &n.Name,
+					"n.age":  &n.Age,
 				},
 			})
 		})
@@ -360,9 +359,9 @@ func TestWhere(t *testing.T) {
 					WHERE NOT n.name ENDS WITH 'y'
 					RETURN n.name, n.age
 					`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.age":  reflect.ValueOf(&n.Age),
+				Bindings: map[string]any{
+					"n.name": &n.Name,
+					"n.age":  &n.Age,
 				},
 			})
 		})
@@ -383,9 +382,9 @@ func TestWhere(t *testing.T) {
 					WHERE n.name =~ 'Tim.*'
 					RETURN n.name, n.age
 					`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.age":  reflect.ValueOf(&n.Age),
+				Bindings: map[string]any{
+					"n.name": &n.Name,
+					"n.age":  &n.Age,
 				},
 			})
 		})
@@ -404,10 +403,10 @@ func TestWhere(t *testing.T) {
 					WHERE n.email =~ '.*\\.com'
 					RETURN n.name, n.age, n.email
 					`,
-				Bindings: map[string]reflect.Value{
-					"n.name":  reflect.ValueOf(&n.Name),
-					"n.age":   reflect.ValueOf(&n.Age),
-					"n.email": reflect.ValueOf(&n.Email),
+				Bindings: map[string]any{
+					"n.name":  &n.Name,
+					"n.age":   &n.Age,
+					"n.email": &n.Email,
 				},
 			})
 		})
@@ -426,9 +425,9 @@ func TestWhere(t *testing.T) {
 				WHERE n.name =~ '(?i)AND.*'
 				RETURN n.name, n.age
 				`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.age":  reflect.ValueOf(&n.Age),
+				Bindings: map[string]any{
+					"n.name": &n.Name,
+					"n.age":  &n.Age,
 				},
 			})
 		})
@@ -462,9 +461,9 @@ func TestWhere(t *testing.T) {
 				WHERE other.name IN ['Andy', 'Peter'] AND (other)-->(timothy)
 				RETURN other.name, other.age
 				`,
-				Bindings: map[string]reflect.Value{
-					"other.name": reflect.ValueOf(&other.Name),
-					"other.age":  reflect.ValueOf(&other.Age),
+				Bindings: map[string]any{
+					"other.name": &other.Name,
+					"other.age":  &other.Age,
 				},
 			})
 		})
@@ -495,9 +494,9 @@ func TestWhere(t *testing.T) {
 				WHERE NOT (person)-->(peter)
 				RETURN person.name, person.age
 				`,
-				Bindings: map[string]reflect.Value{
-					"person.name": reflect.ValueOf(&person.Name),
-					"person.age":  reflect.ValueOf(&person.Age),
+				Bindings: map[string]any{
+					"person.name": &person.Name,
+					"person.age":  &person.Age,
 				},
 			})
 		})
@@ -521,9 +520,9 @@ func TestWhere(t *testing.T) {
 				WHERE (n)-[:KNOWS]-({name: 'Timothy'})
 				RETURN n.name, n.age
 				`,
-				Bindings: map[string]reflect.Value{
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.age":  reflect.ValueOf(&n.Age),
+				Bindings: map[string]any{
+					"n.name": &n.Name,
+					"n.age":  &n.Age,
 				},
 			})
 		})
@@ -557,9 +556,9 @@ func TestWhere(t *testing.T) {
 				WHERE n.name = 'Andy' AND type(r) =~ 'K.*'
 				RETURN type(r), r.since
 				`,
-				Bindings: map[string]reflect.Value{
-					"type(r)": reflect.ValueOf(&typeR),
-					"r.since": reflect.ValueOf(&since),
+				Bindings: map[string]any{
+					"type(r)": &typeR,
+					"r.since": &since,
 				},
 			})
 		})
@@ -582,9 +581,9 @@ func TestWhere(t *testing.T) {
 				WHERE a.name IN ['Peter', 'Timothy']
 				RETURN a.name, a.age
 				`,
-				Bindings: map[string]reflect.Value{
-					"a.age":  reflect.ValueOf(&a.Age),
-					"a.name": reflect.ValueOf(&a.Name),
+				Bindings: map[string]any{
+					"a.age":  &a.Age,
+					"a.name": &a.Name,
 				},
 			})
 		})
@@ -607,10 +606,10 @@ func TestWhere(t *testing.T) {
 				WHERE n.belt = 'white'
 				RETURN n.name, n.age, n.belt
 				`,
-				Bindings: map[string]reflect.Value{
-					"n.age":  reflect.ValueOf(&n.Age),
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.belt": reflect.ValueOf(&n.Belt),
+				Bindings: map[string]any{
+					"n.age":  &n.Age,
+					"n.name": &n.Name,
+					"n.belt": &n.Belt,
 				},
 			})
 		})
@@ -638,10 +637,10 @@ func TestWhere(t *testing.T) {
 				RETURN n.name, n.age, n.belt
 				ORDER BY n.name
 				`,
-				Bindings: map[string]reflect.Value{
-					"n.age":  reflect.ValueOf(&n.Age),
-					"n.name": reflect.ValueOf(&n.Name),
-					"n.belt": reflect.ValueOf(&n.Belt),
+				Bindings: map[string]any{
+					"n.age":  &n.Age,
+					"n.name": &n.Name,
+					"n.belt": &n.Belt,
 				},
 			})
 		})
@@ -665,10 +664,10 @@ func TestWhere(t *testing.T) {
 				WHERE person.name = 'Peter' AND person.belt IS NULL
 				RETURN person.name, person.age, person.belt
 				`,
-				Bindings: map[string]reflect.Value{
-					"person.age":  reflect.ValueOf(&person.Age),
-					"person.name": reflect.ValueOf(&person.Name),
-					"person.belt": reflect.ValueOf(&person.Belt),
+				Bindings: map[string]any{
+					"person.age":  &person.Age,
+					"person.name": &person.Name,
+					"person.belt": &person.Belt,
 				},
 			})
 		})
@@ -691,9 +690,9 @@ func TestWhere(t *testing.T) {
 				WHERE a.name >= 'Peter'
 				RETURN a.name, a.age
 				`,
-				Bindings: map[string]reflect.Value{
-					"a.age":  reflect.ValueOf(&a.Age),
-					"a.name": reflect.ValueOf(&a.Name),
+				Bindings: map[string]any{
+					"a.age":  &a.Age,
+					"a.name": &a.Name,
 				},
 			})
 		})
@@ -717,9 +716,9 @@ func TestWhere(t *testing.T) {
 				WHERE a.name > 'Andy' AND a.name < 'Timothy'
 				RETURN a.name, a.age
 				`,
-				Bindings: map[string]reflect.Value{
-					"a.age":  reflect.ValueOf(&a.Age),
-					"a.name": reflect.ValueOf(&a.Name),
+				Bindings: map[string]any{
+					"a.age":  &a.Age,
+					"a.name": &a.Name,
 				},
 			})
 		})
@@ -749,8 +748,8 @@ func TestWhere(t *testing.T) {
 				MATCH (a:Person)-[r:KNOWS WHERE r.since < minYear]->(b:Person)
 				RETURN r.since
 				`,
-				Bindings: map[string]reflect.Value{
-					"r.since": reflect.ValueOf(&knows.Since),
+				Bindings: map[string]any{
+					"r.since": &knows.Since,
 				},
 			})
 		})

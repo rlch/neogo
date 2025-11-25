@@ -18,8 +18,8 @@ import (
 func newScope(registry *Registry) *Scope {
 	return &Scope{
 		Registry:       registry,
-		bindings:       make(map[string]reflect.Value),
-		names:          make(map[reflect.Value]string),
+		bindings:       make(map[string]any),
+		names:          make(map[uintptr]string),
 		generatedNames: map[string]struct{}{},
 		fields:         make(map[uintptr]field),
 		parameters:     map[string]any{},
@@ -33,9 +33,9 @@ type (
 		err error
 
 		isWrite        bool
-		bindings       map[string]reflect.Value
+		bindings       map[string]any     // name -> pointer to user's binding target
 		generatedNames map[string]struct{}
-		names          map[reflect.Value]string
+		names          map[uintptr]string // pointer address -> name (for reverse lookup)
 		fields         map[uintptr]field
 
 		paramCounter int
@@ -100,7 +100,7 @@ Bindings:
 	}
 	err = t.Execute(os.Stdout, struct {
 		Parameters map[string]any
-		Bindings   map[string]reflect.Value
+		Bindings   map[string]any
 	}{
 		Parameters: s.parameters,
 		Bindings:   s.bindings,
@@ -133,11 +133,11 @@ func (m *member) Print() {
 }
 
 func (s *Scope) clone() *Scope {
-	bindings := make(map[string]reflect.Value, len(s.bindings))
+	bindings := make(map[string]any, len(s.bindings))
 	maps.Copy(bindings, s.bindings)
 	generatedNames := make(map[string]struct{}, len(s.generatedNames))
 	maps.Copy(generatedNames, s.generatedNames)
-	names := make(map[reflect.Value]string, len(s.names))
+	names := make(map[uintptr]string, len(s.names))
 	maps.Copy(names, s.names)
 	fields := make(map[uintptr]field, len(s.fields))
 	maps.Copy(fields, s.fields)
@@ -167,19 +167,25 @@ func (child *Scope) mergeParentScope(parent *Scope) {
 	for generatedName := range parent.generatedNames {
 		v := parent.bindings[generatedName]
 		child.bindings[generatedName] = v
-		child.names[v] = generatedName
+		child.names[ptrAddr(v)] = generatedName
 	}
 	maps.Copy(child.fields, parent.fields)
 	child.Registry = parent.Registry
 }
 
 func (s *Scope) clear() {
-	s.bindings = map[string]reflect.Value{}
-	s.names = map[reflect.Value]string{}
+	s.bindings = map[string]any{}
+	s.names = map[uintptr]string{}
 	s.generatedNames = map[string]struct{}{}
 	s.fields = map[uintptr]field{}
 	s.parameters = map[string]any{}
 	s.paramAddrs = map[uintptr]string{}
+}
+
+// ptrAddr returns the address of a pointer value for use as a map key.
+// The value must be a pointer.
+func ptrAddr(v any) uintptr {
+	return reflect.ValueOf(v).Pointer()
 }
 
 func (s *Scope) MergeChildScope(child *Scope) {
@@ -269,22 +275,36 @@ func (s *Scope) replaceBinding(m *member) {
 
 	name := m.name()
 	if m.variable != nil && m.variable.Bind != nil {
-		bind := reflect.ValueOf(m.variable.Bind)
-		if bind.Kind() != reflect.Ptr {
-			panic(fmt.Errorf("cannot bind to non-pointer value %s", bind))
+		bind := m.variable.Bind
+		bindV := reflect.ValueOf(bind)
+		if bindV.Kind() != reflect.Ptr {
+			panic(fmt.Errorf("cannot bind to non-pointer value %v", bind))
 		}
 		s.bindings[name] = bind
-		s.names[bind] = name
-	} else if m.alias != "" && m.alias != m.expr {
-		s.names[v] = m.alias
+		s.names[bindV.Pointer()] = name
+	} else if m.alias != "" && m.expr != "" && m.alias != m.expr {
+		// When we have both an expression and an alias, register with the alias
+		if v.Kind() == reflect.Ptr || v.Kind() == reflect.Slice {
+			ptr := v.Pointer()
+			s.names[ptr] = m.alias
+			// Remove field entry so that lookups use the alias instead
+			delete(s.fields, ptr)
+		}
 		delete(s.bindings, m.expr)
 		if canElem {
-			s.bindings[m.alias] = v
+			s.bindings[m.alias] = m.identifier
 		}
 	} else if m.expr != "" {
-		s.names[v] = m.expr
+		if v.Kind() == reflect.Ptr || v.Kind() == reflect.Slice {
+			s.names[v.Pointer()] = m.expr
+		}
 		if canElem {
-			s.bindings[m.expr] = v
+			s.bindings[m.expr] = m.identifier
+		}
+	} else if m.alias != "" {
+		// Only alias, no expr - register with alias for binding
+		if canElem {
+			s.bindings[m.alias] = m.identifier
 		}
 	}
 
@@ -309,9 +329,10 @@ func (s *Scope) bindFields(strct reflect.Value, memberName string) {
 			ptr := uintptr(val.Addr().UnsafePointer())
 			f := field{name: accessor, identifier: memberName}
 			s.fields[ptr] = f
-			fieldName := f.identifier + "." + f.name
-			addr := val.Addr()
-			s.names[addr] = fieldName
+			// Note: Fields can have the same address as the struct when there are
+			// zero-size embedded types. We handle this in add() by checking the
+			// element type: primitive pointers check fields first, struct pointers
+			// check names first.
 			return true, nil
 		},
 	); err != nil {
@@ -366,14 +387,38 @@ func (s *Scope) add(
 	canElem := vT.Kind() == reflect.Ptr ||
 		vT.Kind() == reflect.Slice
 
-		// Find the name of the identifier
+	// Get pointer address for map lookups (only valid for pointer/slice types)
+	var vPtr uintptr
+	if canElem {
+		vPtr = v.Pointer()
+	}
+
+	// Check if identifier is a known field - if so, the given expr becomes the alias
+	// and the field name becomes the expression.
+	// Only do this for primitive types (string, int, etc.) - struct pointers should
+	// prefer names over fields because zero-size embedded types can cause the first
+	// field to have the same address as the struct.
+	if canElem && m.expr != "" {
+		elemKind := vT.Elem().Kind()
+		isPrimitive := elemKind != reflect.Struct && elemKind != reflect.Interface
+		if isPrimitive {
+			if f, ok := s.fields[vPtr]; ok {
+				// This is a pointer to a field of a registered struct
+				m.alias = m.expr
+				m.expr = fmt.Sprintf("%s.%s", f.identifier, f.name)
+				m.isNew = false
+			}
+		}
+	}
+
+	// Find the name of the identifier
 	if m.expr != "" {
-		if exst, ok := s.bindings[m.expr]; ok && exst != v {
-			s.AddError(fmt.Errorf("%w (%s): want: %v, have: %v", ErrExpressionAlreadyBound, m.expr, v, exst))
+		if exst, ok := s.bindings[m.expr]; ok && exst != identifier {
+			s.AddError(fmt.Errorf("%w (%s): want: %v, have: %v", ErrExpressionAlreadyBound, m.expr, identifier, exst))
 			return nil
 		} else if ok {
 			m.isNew = false
-			currentName := s.names[exst]
+			currentName := s.names[ptrAddr(exst)]
 			// Check if name needs to be replaced
 			if currentName != "" && currentName != m.expr {
 				m.alias = m.expr
@@ -385,18 +430,43 @@ func (s *Scope) add(
 			}
 			if canElem {
 				// Check if name needs to be replaced
-				if oldName, ok := s.names[v]; ok {
+				if oldName, ok := s.names[vPtr]; ok {
 					m.alias = m.expr
 					m.expr = oldName
 				}
 			}
 		}
 	} else if canElem {
-		if name, ok := s.names[v]; ok {
-			m.isNew = false
-			m.expr = name
-		} else if lookup {
-			return nil
+		// Determine if this is a field pointer or a struct pointer.
+		// Zero-size embedded types (like Relationship) cause the first field
+		// to have the same address as the struct. We distinguish them by type:
+		// - If it's a pointer to a primitive type, it must be a field access
+		// - If it's a pointer to a struct type, check names first
+		elemKind := vT.Elem().Kind()
+		isPrimitive := elemKind != reflect.Struct && elemKind != reflect.Interface
+
+		if isPrimitive {
+			// Primitive type pointer - check fields first
+			if f, ok := s.fields[vPtr]; ok {
+				m.isNew = false
+				m.expr = fmt.Sprintf("%s.%s", f.identifier, f.name)
+			} else if name, ok := s.names[vPtr]; ok {
+				m.isNew = false
+				m.expr = name
+			} else if lookup {
+				return nil
+			}
+		} else {
+			// Struct/interface pointer - check names first
+			if name, ok := s.names[vPtr]; ok {
+				m.isNew = false
+				m.expr = name
+			} else if f, ok := s.fields[vPtr]; ok {
+				m.isNew = false
+				m.expr = fmt.Sprintf("%s.%s", f.identifier, f.name)
+			} else if lookup {
+				return nil
+			}
 		}
 		needsName := m.expr == "" && (projBody != nil || m.where != nil || v.Kind() == reflect.Ptr)
 		if needsName {
@@ -576,7 +646,15 @@ func (s *Scope) Error() error { return s.err }
 
 func (s *Scope) lookupName(identifier any) string {
 	identifier, _, _ = s.unravelIdentifier(identifier)
-	return s.names[reflect.ValueOf(identifier)]
+	// For string identifiers, the name is the string itself
+	if str, ok := identifier.(string); ok {
+		return str
+	}
+	v := reflect.ValueOf(identifier)
+	if v.Kind() == reflect.Ptr || v.Kind() == reflect.Slice {
+		return s.names[v.Pointer()]
+	}
+	return ""
 }
 
 var (
@@ -637,17 +715,33 @@ func (s *Scope) propertyIdentifier(identifier any) func(v any) string {
 			return str
 		} else if expr, ok := v.(Expr); ok {
 			panic(fmt.Errorf("expression %s is not supported in propertyIdentifier", expr.Value))
-		}
+			}
 		vv := reflect.ValueOf(v)
 		if vv.Kind() != reflect.Ptr {
 			panic(errors.New("the key in a condition must be addressable"))
 		}
 		ptr := vv.Pointer()
-		if name, ok := s.names[vv]; ok {
-			return name
-		}
-		if f, ok := s.fields[ptr]; ok {
-			return fmt.Sprintf("%s.%s", f.identifier, f.name)
+		// Determine if this is a field pointer or a struct pointer.
+		// Zero-size embedded types cause the first field to have the same address
+		// as the struct. We distinguish them by type:
+		// - Primitive type pointers check fields first
+		// - Struct/interface pointers check names first
+		elemKind := vv.Type().Elem().Kind()
+		isPrimitive := elemKind != reflect.Struct && elemKind != reflect.Interface
+		if isPrimitive {
+			if f, ok := s.fields[ptr]; ok {
+				return fmt.Sprintf("%s.%s", f.identifier, f.name)
+			}
+			if name, ok := s.names[ptr]; ok {
+				return name
+			}
+		} else {
+			if name, ok := s.names[ptr]; ok {
+				return name
+			}
+			if f, ok := s.fields[ptr]; ok {
+				return fmt.Sprintf("%s.%s", f.identifier, f.name)
+			}
 		}
 		panic(fmt.Errorf("could not find a property-representation for %v", v))
 	}
@@ -683,11 +777,27 @@ func (s *Scope) valueIdentifier(v any) string {
 		}
 	case reflect.Pointer:
 		ptr := vv.Pointer()
-		if name, ok := s.names[vv]; ok {
-			return name
-		}
-		if f, ok := s.fields[ptr]; ok {
-			return fmt.Sprintf("%s.%s", f.identifier, f.name)
+		// Determine if this is a field pointer or a struct pointer.
+		// Zero-size embedded types cause the first field to have the same address
+		// as the struct. We distinguish them by type:
+		// - Primitive type pointers check fields first
+		// - Struct/interface pointers check names first
+		elemKind := vv.Type().Elem().Kind()
+		isPrimitive := elemKind != reflect.Struct && elemKind != reflect.Interface
+		if isPrimitive {
+			if f, ok := s.fields[ptr]; ok {
+				return fmt.Sprintf("%s.%s", f.identifier, f.name)
+			}
+			if name, ok := s.names[ptr]; ok {
+				return name
+			}
+		} else {
+			if name, ok := s.names[ptr]; ok {
+				return name
+			}
+			if f, ok := s.fields[ptr]; ok {
+				return fmt.Sprintf("%s.%s", f.identifier, f.name)
+			}
 		}
 	default:
 		panic(fmt.Errorf("unsupported value-type %T", v))

@@ -35,6 +35,12 @@ func (c *Compiler) Compile(typ reflect.Type) (*Opcode, error) {
 		return op, nil
 	}
 
+	// Check for special types FIRST (before kind switch)
+	// These are struct types that need primitive opcodes, not struct traversal
+	if op := c.checkSpecialTypeEncoder(typ); op != nil {
+		return op, nil
+	}
+
 	switch typ.Kind() {
 	case reflect.Struct:
 		return c.compileStruct(typ)
@@ -51,9 +57,36 @@ func (c *Compiler) Compile(typ reflect.Type) (*Opcode, error) {
 	}
 }
 
+// checkSpecialTypeEncoder returns an opcode for special types that are structs
+// but should NOT use struct traversal (e.g., time.Time, neo4j.Duration).
+// Returns nil if the type is not special.
+func (c *Compiler) checkSpecialTypeEncoder(typ reflect.Type) *Opcode {
+	var op OpType
+	switch typ {
+	case reflect.TypeOf(time.Time{}):
+		op = OpFieldTime
+	case reflect.TypeOf(neo4j.Date{}):
+		op = OpFieldDate
+	case reflect.TypeOf(neo4j.LocalTime{}):
+		op = OpFieldLocalTime
+	case reflect.TypeOf(neo4j.LocalDateTime{}):
+		op = OpFieldLocalDateTime
+	case reflect.TypeOf(neo4j.Duration{}):
+		op = OpFieldDuration
+	case reflect.TypeOf(neo4j.Point2D{}):
+		op = OpFieldPoint2D
+	case reflect.TypeOf(neo4j.Point3D{}):
+		op = OpFieldPoint3D
+	default:
+		return nil
+	}
+	return &Opcode{Op: op, Meta: FieldMeta{Type: typ, Size: typ.Size()}}
+}
+
 func (c *Compiler) compilePrimitive(typ reflect.Type) (*Opcode, error) {
 	var op OpType
 
+	// Check special types (redundant check for safety, main check is in checkSpecialTypeEncoder)
 	switch typ {
 	case reflect.TypeOf(time.Time{}):
 		op = OpFieldTime
@@ -225,6 +258,12 @@ func (c *Compiler) CompileDecoder(typ reflect.Type) (Decoder, error) {
 		return dec, nil
 	}
 
+	// Check for special types FIRST (before kind switch)
+	// These are struct types that need special decoders, not structDecoder
+	if dec := c.checkSpecialTypeDecoder(typ); dec != nil {
+		return dec, nil
+	}
+
 	switch typ.Kind() {
 	case reflect.Struct:
 		return c.compileStructDecoder(typ)
@@ -245,8 +284,33 @@ func (c *Compiler) CompileDecoder(typ reflect.Type) (Decoder, error) {
 	}
 }
 
+// checkSpecialTypeDecoder returns a decoder for special types that are structs
+// but should NOT use structDecoder (e.g., time.Time, neo4j.Duration).
+// Returns nil if the type is not special.
+func (c *Compiler) checkSpecialTypeDecoder(typ reflect.Type) Decoder {
+	switch typ {
+	case reflect.TypeOf(time.Time{}):
+		return DecoderFunc(timeDecoder)
+	case reflect.TypeOf(neo4j.Date{}):
+		return DecoderFunc(dateDecoder)
+	case reflect.TypeOf(neo4j.LocalTime{}):
+		return DecoderFunc(localTimeDecoder)
+	case reflect.TypeOf(neo4j.LocalDateTime{}):
+		return DecoderFunc(localDateTimeDecoder)
+	case reflect.TypeOf(neo4j.Time{}):
+		return DecoderFunc(neo4jTimeDecoder)
+	case reflect.TypeOf(neo4j.Duration{}):
+		return DecoderFunc(durationDecoder)
+	case reflect.TypeOf(neo4j.Point2D{}):
+		return DecoderFunc(point2DDecoder)
+	case reflect.TypeOf(neo4j.Point3D{}):
+		return DecoderFunc(point3DDecoder)
+	}
+	return nil
+}
+
 func (c *Compiler) compilePrimitiveDecoder(typ reflect.Type) (Decoder, error) {
-	// Check special types
+	// Check special types (redundant check for safety, main check is in checkSpecialTypeDecoder)
 	if typ == reflect.TypeOf(time.Time{}) {
 		return DecoderFunc(timeDecoder), nil
 	}

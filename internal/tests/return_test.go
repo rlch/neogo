@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -25,8 +24,8 @@ func TestReturn(t *testing.T) {
 					MATCH (p:Person {name: 'Keanu Reeves'})
 					RETURN p
 					`,
-			Bindings: map[string]reflect.Value{
-				"p": reflect.ValueOf(&p),
+			Bindings: map[string]any{
+				"p": &p,
 			},
 		})
 	})
@@ -50,8 +49,8 @@ func TestReturn(t *testing.T) {
 					MATCH (p:Person {name: 'Keanu Reeves'})-[r:ACTED_IN]->(m)
 					RETURN type(r)
 					`,
-			Bindings: map[string]reflect.Value{
-				"type(r)": reflect.ValueOf(&rel),
+			Bindings: map[string]any{
+				"type(r)": &rel,
 			},
 		})
 	})
@@ -72,8 +71,8 @@ func TestReturn(t *testing.T) {
 					MATCH (p:Person {name: 'Keanu Reeves'})
 					RETURN p.bornIn
 					`,
-			Bindings: map[string]reflect.Value{
-				"p.bornIn": reflect.ValueOf(&p.BornIn),
+			Bindings: map[string]any{
+				"p.bornIn": &p.BornIn,
 			},
 		})
 	})
@@ -98,8 +97,8 @@ func TestReturn(t *testing.T) {
 					MATCH (p:Person {name: 'Keanu Reeves'})
 					RETURN p.nationality AS citizenship
 					`,
-			Bindings: map[string]reflect.Value{
-				"citizenship": reflect.ValueOf(&p.Nationality),
+			Bindings: map[string]any{
+				"citizenship": &p.Nationality,
 			},
 		})
 	})
@@ -115,8 +114,8 @@ func TestReturn(t *testing.T) {
 					MATCH (n)
 					RETURN n.bornIn
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.bornIn": reflect.ValueOf(&bornIn),
+			Bindings: map[string]any{
+				"n.bornIn": &bornIn,
 			},
 		})
 	})
@@ -139,8 +138,8 @@ func TestReturn(t *testing.T) {
 					MATCH (p:Person {name: 'Keanu Reeves'})-->(m)
 					RETURN DISTINCT m
 					`,
-			Bindings: map[string]reflect.Value{
-				"m": reflect.ValueOf(m),
+			Bindings: map[string]any{
+				"m": m,
 			},
 		})
 	})

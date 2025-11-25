@@ -3,6 +3,7 @@ package codec
 import (
 	"fmt"
 	"reflect"
+	"unsafe"
 )
 
 // CodecRegistry manages type codecs with zero-reflection runtime.
@@ -205,6 +206,51 @@ func (r *CodecRegistry) Decode(data any, v any) error {
 
 	structPtr := getValuePtr(v)
 	return decoder.Decode(data, structPtr)
+}
+
+// DecodeMultiple decodes n values into a slice target.
+// The slicePtr must be a pointer to a slice (e.g., *[]Person).
+// This is used for batch decoding multiple records into a slice binding.
+// HOT PATH: Uses pre-compiled decoders and allocators.
+func (r *CodecRegistry) DecodeMultiple(values []any, slicePtr any) error {
+	n := len(values)
+	if n == 0 {
+		return nil
+	}
+
+	decoder := r.GetDecoder(slicePtr)
+	if decoder == nil {
+		return ErrTypeNotRegistered
+	}
+
+	// Get the slice decoder to access its allocator and element decoder
+	sliceDec, ok := decoder.(*sliceDecoder)
+	if !ok {
+		return fmt.Errorf("DecodeMultiple requires slice type, got decoder %T", decoder)
+	}
+
+	// Allocate slice using pre-compiled allocator (ZERO reflection)
+	dataPtr, _, capacity := sliceDec.allocate(n)
+
+	// Get the slice header from the target
+	targetPtr := getValuePtr(slicePtr)
+	header := (*sliceHeader)(targetPtr)
+	header.Data = dataPtr
+	header.Len = n
+	header.Cap = capacity
+
+	// Decode each value into the slice elements
+	for i := 0; i < n; i++ {
+		if values[i] == nil {
+			continue // Leave as zero value
+		}
+		elemPtr := unsafe.Pointer(uintptr(dataPtr) + uintptr(i)*sliceDec.elemSize)
+		if err := sliceDec.elemDecoder.Decode(values[i], elemPtr); err != nil {
+			return fmt.Errorf("index %d: %w", i, err)
+		}
+	}
+
+	return nil
 }
 
 // GetTypeMetadata returns pre-computed type metadata.

@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -87,8 +86,8 @@ func TestCreate(t *testing.T) {
 					CREATE (a {name: 'Andy'})
 					RETURN a.name
 					`,
-				Bindings: map[string]reflect.Value{
-					"a.name": reflect.ValueOf(&name),
+				Bindings: map[string]any{
+					"a.name": &name,
 				},
 			})
 		})
@@ -131,8 +130,8 @@ func TestCreate(t *testing.T) {
 					CREATE (a)-[r:RELTYPE]->(b)
 					RETURN type(r)
 					`,
-				Bindings: map[string]reflect.Value{
-					"type(r)": reflect.ValueOf(&typeR),
+				Bindings: map[string]any{
+					"type(r)": &typeR,
 				},
 			})
 		})
@@ -184,9 +183,9 @@ func TestCreate(t *testing.T) {
 					CREATE (a)-[r:RELTYPE {name: a.name + '<->' + b.name}]->(b)
 					RETURN type(r), r.name
 					`,
-				Bindings: map[string]reflect.Value{
-					"type(r)": reflect.ValueOf(&typeR),
-					"r.name":  reflect.ValueOf(&r.Name),
+				Bindings: map[string]any{
+					"type(r)": &typeR,
+					"r.name":  &r.Name,
 				},
 			})
 		})
@@ -209,8 +208,8 @@ func TestCreate(t *testing.T) {
 					CREATE p = (:Person {name: 'Andy'})-[:WORKS_AT]->(:Company {name: 'Neo4j'})<-[:WORKS_AT]-(:Person {name: 'Michael'})
 					RETURN p
 					`,
-				Bindings: map[string]reflect.Value{
-					"p": reflect.ValueOf(&p),
+				Bindings: map[string]any{
+					"p": &p,
 				},
 			})
 		})
@@ -237,8 +236,8 @@ func TestCreate(t *testing.T) {
 					"n_name":     n.Name,
 					"n_position": n.Position,
 				},
-				Bindings: map[string]reflect.Value{
-					"n": reflect.ValueOf(&n),
+				Bindings: map[string]any{
+					"n": &n,
 				},
 			})
 		})

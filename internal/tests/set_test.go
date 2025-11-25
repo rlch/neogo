@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -24,9 +23,9 @@ func TestSet(t *testing.T) {
 					SET n.surname = 'Taylor'
 					RETURN n.name, n.surname
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name":    reflect.ValueOf(&n.Name),
-				"n.surname": reflect.ValueOf(&n.Surname),
+			Bindings: map[string]any{
+				"n.name":    &n.Name,
+				"n.surname": &n.Surname,
 			},
 		})
 	})
@@ -46,9 +45,9 @@ func TestSet(t *testing.T) {
 					SET n.age = toString(n.age)
 					RETURN n.name, n.age
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
-				"n.age":  reflect.ValueOf(&n.Age),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
+				"n.age":  &n.Age,
 			},
 		})
 	})
@@ -68,9 +67,9 @@ func TestSet(t *testing.T) {
 					SET n.name = null
 					RETURN n.name, n.age
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
-				"n.age":  reflect.ValueOf(&n.Age),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
+				"n.age":  &n.Age,
 			},
 		})
 	})
@@ -101,12 +100,12 @@ func TestSet(t *testing.T) {
 					SET at = properties(pn)
 					RETURN at.name, at.age, at.hungry, pn.name, pn.age
 					`,
-			Bindings: map[string]reflect.Value{
-				"at.name":   reflect.ValueOf(&at.Name),
-				"at.age":    reflect.ValueOf(&at.Age),
-				"pn.name":   reflect.ValueOf(&pn.Name),
-				"pn.age":    reflect.ValueOf(&pn.Age),
-				"at.hungry": reflect.ValueOf(&hungry),
+			Bindings: map[string]any{
+				"at.name":   &at.Name,
+				"at.age":    &at.Age,
+				"pn.name":   &pn.Name,
+				"pn.age":    &pn.Age,
+				"at.hungry": &hungry,
 			},
 		})
 	})
@@ -128,10 +127,10 @@ func TestSet(t *testing.T) {
 					SET p = {name: 'Peter Smith', position: 'Entrepreneur'}
 					RETURN p.name, p.age, p.position
 					`,
-			Bindings: map[string]reflect.Value{
-				"p.name":     reflect.ValueOf(&p.Name),
-				"p.age":      reflect.ValueOf(&p.Age),
-				"p.position": reflect.ValueOf(&p.Position),
+			Bindings: map[string]any{
+				"p.name":     &p.Name,
+				"p.age":      &p.Age,
+				"p.position": &p.Position,
 			},
 		})
 	})
@@ -153,9 +152,9 @@ func TestSet(t *testing.T) {
 					SET p = {}
 					RETURN p.name, p.age
 					`,
-			Bindings: map[string]reflect.Value{
-				"p.name": reflect.ValueOf(&p.Name),
-				"p.age":  reflect.ValueOf(&p.Age),
+			Bindings: map[string]any{
+				"p.name": &p.Name,
+				"p.age":  &p.Age,
 			},
 		})
 	})
@@ -178,11 +177,11 @@ func TestSet(t *testing.T) {
 					SET p += {age: 38, hungry: true, position: 'Entrepreneur'}
 					RETURN p.name, p.age, p.hungry, p.position
 					`,
-			Bindings: map[string]reflect.Value{
-				"p.name":     reflect.ValueOf(&p.Name),
-				"p.age":      reflect.ValueOf(&p.Age),
-				"p.position": reflect.ValueOf(&p.Position),
-				"p.hungry":   reflect.ValueOf(&hungry),
+			Bindings: map[string]any{
+				"p.name":     &p.Name,
+				"p.age":      &p.Age,
+				"p.position": &p.Position,
+				"p.hungry":   &hungry,
 			},
 		})
 	})
@@ -229,9 +228,9 @@ func TestSet(t *testing.T) {
 					SET n.surname = $surname
 					RETURN n.name, n.surname
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name":    reflect.ValueOf(&n.Name),
-				"n.surname": reflect.ValueOf(&n.Surname),
+			Bindings: map[string]any{
+				"n.name":    &n.Name,
+				"n.surname": &n.Surname,
 			},
 			Parameters: map[string]any{
 				"surname": "Taylor",
@@ -262,8 +261,8 @@ func TestSet(t *testing.T) {
 					SET n = $props
 					RETURN n.name
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
 			},
 			Parameters: map[string]any{
 				"props": props,
@@ -289,9 +288,9 @@ func TestSet(t *testing.T) {
 					SET n:German
 					RETURN n.name, labels(n) AS labels
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
-				"labels": reflect.ValueOf(&labels),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
+				"labels": &labels,
 			},
 		})
 	})
@@ -314,9 +313,9 @@ func TestSet(t *testing.T) {
 					SET n:Swedish:Bossman
 					RETURN n.name, labels(n) AS labels
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
-				"labels": reflect.ValueOf(&labels),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
+				"labels": &labels,
 			},
 		})
 	})

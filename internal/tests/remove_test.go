@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -24,9 +23,9 @@ func TestRemove(t *testing.T) {
 					REMOVE a.age
 					RETURN a.name, a.age
 					`,
-			Bindings: map[string]reflect.Value{
-				"a.name": reflect.ValueOf(&a.Name),
-				"a.age":  reflect.ValueOf(&a.Age),
+			Bindings: map[string]any{
+				"a.name": &a.Name,
+				"a.age":  &a.Age,
 			},
 		})
 	})
@@ -47,9 +46,9 @@ func TestRemove(t *testing.T) {
 					REMOVE n:German
 					RETURN n.name, labels(n)
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name":    reflect.ValueOf(&n.Name),
-				"labels(n)": reflect.ValueOf(&labels),
+			Bindings: map[string]any{
+				"n.name":    &n.Name,
+				"labels(n)": &labels,
 			},
 		})
 	})
@@ -70,9 +69,9 @@ func TestRemove(t *testing.T) {
 					REMOVE n:German
 					RETURN n.name, labels(n)
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name":    reflect.ValueOf(&n.Name),
-				"labels(n)": reflect.ValueOf(&labels),
+			Bindings: map[string]any{
+				"n.name":    &n.Name,
+				"labels(n)": &labels,
 			},
 		})
 	})
@@ -93,9 +92,9 @@ func TestRemove(t *testing.T) {
 					REMOVE n:German:Swedish
 					RETURN n.name, labels(n)
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name":    reflect.ValueOf(&n.Name),
-				"labels(n)": reflect.ValueOf(&labels),
+			Bindings: map[string]any{
+				"n.name":    &n.Name,
+				"labels(n)": &labels,
 			},
 		})
 	})

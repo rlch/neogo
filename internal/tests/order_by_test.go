@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -28,9 +27,9 @@ func TestOrderBy(t *testing.T) {
 					RETURN n.name, n.age
 					ORDER BY n.name
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
-				"n.age":  reflect.ValueOf(&n.Age),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
+				"n.age":  &n.Age,
 			},
 		})
 	})
@@ -52,9 +51,9 @@ func TestOrderBy(t *testing.T) {
 					RETURN n.name, n.age
 					ORDER BY n.age, n.name
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
-				"n.age":  reflect.ValueOf(&n.Age),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
+				"n.age":  &n.Age,
 			},
 		})
 	})
@@ -77,9 +76,9 @@ func TestOrderBy(t *testing.T) {
 					RETURN n.name, n.age
 					ORDER BY elementId(n)
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
-				"n.age":  reflect.ValueOf(&n.Age),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
+				"n.age":  &n.Age,
 			},
 		})
 	})
@@ -102,9 +101,9 @@ func TestOrderBy(t *testing.T) {
 					RETURN n.name, n.age
 					ORDER BY elementId(n)
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
-				"n.age":  reflect.ValueOf(&n.Age),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
+				"n.age":  &n.Age,
 			},
 		})
 	})
@@ -126,9 +125,9 @@ func TestOrderBy(t *testing.T) {
 					RETURN n.name, n.age
 					ORDER BY n.name DESC
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
-				"n.age":  reflect.ValueOf(&n.Age),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
+				"n.age":  &n.Age,
 			},
 		})
 	})
@@ -151,9 +150,9 @@ func TestOrderBy(t *testing.T) {
 					RETURN n.length, n.name, n.age
 					ORDER BY n.length
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
-				"n.age":  reflect.ValueOf(&n.Age),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
+				"n.age":  &n.Age,
 			},
 		})
 	})
@@ -176,8 +175,8 @@ func TestOrderBy(t *testing.T) {
 					ORDER BY n.age
 					RETURN collect(n.name) AS names
 					`,
-			Bindings: map[string]reflect.Value{
-				"names": reflect.ValueOf(&names),
+			Bindings: map[string]any{
+				"names": &names,
 			},
 		})
 	})

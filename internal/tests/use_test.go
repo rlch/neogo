@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -24,8 +23,8 @@ func TestUse(t *testing.T) {
 					MATCH (n)
 					RETURN n
 					`,
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		})
 	})
@@ -45,8 +44,8 @@ func TestUse(t *testing.T) {
 					MATCH (n)
 					RETURN n
 					`,
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		})
 	})
@@ -68,8 +67,8 @@ func TestUse(t *testing.T) {
 					MATCH (n)
 					RETURN n
 					`,
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 			Parameters: map[string]any{
 				"graphName": "'idksomegraph'",

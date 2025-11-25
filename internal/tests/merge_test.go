@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -26,9 +25,9 @@ func TestMerge(t *testing.T) {
 					MERGE (robert:Critic)
 					RETURN robert, labels(robert)
 					`,
-				Bindings: map[string]reflect.Value{
-					"robert":         reflect.ValueOf(&robert),
-					"labels(robert)": reflect.ValueOf(&labels),
+				Bindings: map[string]any{
+					"robert":         &robert,
+					"labels(robert)": &labels,
 				},
 			})
 		})
@@ -49,8 +48,8 @@ func TestMerge(t *testing.T) {
 					MERGE (charlie {age: 10, name: 'Charlie Sheen'})
 					RETURN charlie
 					`,
-				Bindings: map[string]reflect.Value{
-					"charlie": reflect.ValueOf(&charlie),
+				Bindings: map[string]any{
+					"charlie": &charlie,
 				},
 			})
 		})
@@ -70,9 +69,9 @@ func TestMerge(t *testing.T) {
 					MERGE (michael:Person {name: 'Michael Douglas'})
 					RETURN michael.name, michael.bornIn
 					`,
-				Bindings: map[string]reflect.Value{
-					"michael.name":   reflect.ValueOf(&michael.Name),
-					"michael.bornIn": reflect.ValueOf(&michael.BornIn),
+				Bindings: map[string]any{
+					"michael.name":   &michael.Name,
+					"michael.bornIn": &michael.BornIn,
 				},
 			})
 		})
@@ -97,10 +96,10 @@ func TestMerge(t *testing.T) {
 					MERGE (location:Location {name: person.bornIn})
 					RETURN person.name, person.bornIn, location
 					`,
-				Bindings: map[string]reflect.Value{
-					"person.name":   reflect.ValueOf(&person.Name),
-					"person.bornIn": reflect.ValueOf(&person.BornIn),
-					"location":      reflect.ValueOf(&location),
+				Bindings: map[string]any{
+					"person.name":   &person.Name,
+					"person.bornIn": &person.BornIn,
+					"location":      &location,
 				},
 			})
 		})
@@ -131,9 +130,9 @@ func TestMerge(t *testing.T) {
 					  SET keanu.created = timestamp()
 					RETURN keanu.name, keanu.created
 					`,
-				Bindings: map[string]reflect.Value{
-					"keanu.name":    reflect.ValueOf(&keanu.Name),
-					"keanu.created": reflect.ValueOf(&keanu.Created),
+				Bindings: map[string]any{
+					"keanu.name":    &keanu.Name,
+					"keanu.created": &keanu.Created,
 				},
 			})
 		})
@@ -156,9 +155,9 @@ func TestMerge(t *testing.T) {
 					  SET person.found = true
 					RETURN person.name, person.found
 					`,
-				Bindings: map[string]reflect.Value{
-					"person.name":  reflect.ValueOf(&person.Name),
-					"person.found": reflect.ValueOf(&person.Found),
+				Bindings: map[string]any{
+					"person.name":  &person.Name,
+					"person.found": &person.Found,
 				},
 			})
 		})
@@ -186,10 +185,10 @@ func TestMerge(t *testing.T) {
 					  SET keanu.lastSeen = timestamp()
 					RETURN keanu.name, keanu.created, keanu.lastSeen
 					`,
-				Bindings: map[string]reflect.Value{
-					"keanu.name":     reflect.ValueOf(&keanu.Name),
-					"keanu.created":  reflect.ValueOf(&keanu.Created),
-					"keanu.lastSeen": reflect.ValueOf(&keanu.LastSeen),
+				Bindings: map[string]any{
+					"keanu.name":     &keanu.Name,
+					"keanu.created":  &keanu.Created,
+					"keanu.lastSeen": &keanu.LastSeen,
 				},
 			})
 		})
@@ -217,10 +216,10 @@ func TestMerge(t *testing.T) {
 					    person.lastSeen = timestamp()
 					RETURN person.name, person.found, person.lastSeen
 					`,
-				Bindings: map[string]reflect.Value{
-					"person.name":     reflect.ValueOf(&person.Name),
-					"person.found":    reflect.ValueOf(&person.Found),
-					"person.lastSeen": reflect.ValueOf(&person.LastSeen),
+				Bindings: map[string]any{
+					"person.name":     &person.Name,
+					"person.found":    &person.Found,
+					"person.lastSeen": &person.LastSeen,
 				},
 			})
 		})
@@ -257,10 +256,10 @@ func TestMerge(t *testing.T) {
 					MERGE (charlie)-[r:ACTED_IN]->(wallStreet)
 					RETURN charlie.name, type(r), wallStreet.title
 					`,
-				Bindings: map[string]reflect.Value{
-					"charlie.name":     reflect.ValueOf(&charlie.Name),
-					"type(r)":          reflect.ValueOf(&typeR),
-					"wallStreet.title": reflect.ValueOf(&wallStreet.Title),
+				Bindings: map[string]any{
+					"charlie.name":     &charlie.Name,
+					"type(r)":          &typeR,
+					"wallStreet.title": &wallStreet.Title,
 				},
 			})
 		})
@@ -299,8 +298,8 @@ func TestMerge(t *testing.T) {
 					MERGE (oliver)-[:DIRECTED]->(movie:Movie)<-[:DIRECTED]-(reiner)
 					RETURN movie
 					`,
-				Bindings: map[string]reflect.Value{
-					"movie": reflect.ValueOf(&movie),
+				Bindings: map[string]any{
+					"movie": &movie,
 				},
 			})
 		})
@@ -338,8 +337,8 @@ func TestMerge(t *testing.T) {
 					MERGE (charlie)-[r:KNOWS]-(oliver)
 					RETURN r
 					`,
-				Bindings: map[string]reflect.Value{
-					"r": reflect.ValueOf(&knows),
+				Bindings: map[string]any{
+					"r": &knows,
 				},
 			})
 		})
@@ -370,10 +369,10 @@ func TestMerge(t *testing.T) {
 					MERGE (person)-[r:BORN_IN]->(location)
 					RETURN person.name, person.bornIn, location
 					`,
-				Bindings: map[string]reflect.Value{
-					"person.name":   reflect.ValueOf(&person.Name),
-					"person.bornIn": reflect.ValueOf(&person.BornIn),
-					"location":      reflect.ValueOf(&location),
+				Bindings: map[string]any{
+					"person.name":   &person.Name,
+					"person.bornIn": &person.BornIn,
+					"location":      &location,
 				},
 			})
 		})
@@ -410,10 +409,10 @@ func TestMerge(t *testing.T) {
 					MERGE (person)-[r:HAS_CHAUFFEUR]->(chauffeur:Chauffeur {name: person.chauffeurName})
 					RETURN person.name, person.chauffeurName, chauffeur
 					`,
-				Bindings: map[string]reflect.Value{
-					"person.name":          reflect.ValueOf(&person.Name),
-					"person.chauffeurName": reflect.ValueOf(&person.ChauffeurName),
-					"chauffeur":            reflect.ValueOf(&chauffeur),
+				Bindings: map[string]any{
+					"person.name":          &person.Name,
+					"person.chauffeurName": &person.ChauffeurName,
+					"chauffeur":            &chauffeur,
 				},
 			})
 		})

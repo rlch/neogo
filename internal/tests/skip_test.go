@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -26,8 +25,8 @@ func TestSkip(t *testing.T) {
 					ORDER BY n.name
 					SKIP 3
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
 			},
 		})
 	})
@@ -50,8 +49,8 @@ func TestSkip(t *testing.T) {
 					SKIP 1
 					LIMIT 2
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
 			},
 		})
 	})
@@ -73,8 +72,8 @@ func TestSkip(t *testing.T) {
 					ORDER BY n.name
 					SKIP 1 + toInteger(3*rand())
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&n.Name),
+			Bindings: map[string]any{
+				"n.name": &n.Name,
 			},
 		})
 	})

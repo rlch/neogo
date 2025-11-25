@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -26,8 +25,8 @@ func TestLimit(t *testing.T) {
 					ORDER BY n.name
 					LIMIT 3
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&name),
+			Bindings: map[string]any{
+				"n.name": &name,
 			},
 		})
 	})
@@ -53,8 +52,8 @@ func TestLimit(t *testing.T) {
 					ORDER BY n.name
 					LIMIT 1 + toInteger(3 * rand())
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&name),
+			Bindings: map[string]any{
+				"n.name": &name,
 			},
 		})
 	})
@@ -76,8 +75,8 @@ func TestLimit(t *testing.T) {
 					ORDER BY n.name
 					LIMIT 3
 					`,
-			Bindings: map[string]reflect.Value{
-				"n.name": reflect.ValueOf(&name),
+			Bindings: map[string]any{
+				"n.name": &name,
 			},
 		})
 	})

@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -28,8 +27,8 @@ func TestWith(t *testing.T) {
 					WHERE upperCaseName STARTS WITH 'C'
 					RETURN otherPerson.name
 					`,
-			Bindings: map[string]reflect.Value{
-				"otherPerson.name": reflect.ValueOf(&otherPersonName),
+			Bindings: map[string]any{
+				"otherPerson.name": &otherPersonName,
 			},
 		})
 	})
@@ -56,10 +55,10 @@ func TestWith(t *testing.T) {
 					WITH *, type(r) AS connectionType
 					RETURN person.name, otherPerson.name, connectionType
 					`,
-			Bindings: map[string]reflect.Value{
-				"person.name":      reflect.ValueOf(&personName),
-				"otherPerson.name": reflect.ValueOf(&otherPersonName),
-				"connectionType":   reflect.ValueOf(&connectionType),
+			Bindings: map[string]any{
+				"person.name":      &personName,
+				"otherPerson.name": &otherPersonName,
+				"connectionType":   &connectionType,
 			},
 		})
 	})
@@ -86,8 +85,8 @@ func TestWith(t *testing.T) {
 					WHERE foaf > 1
 					RETURN otherPerson.name
 					`,
-			Bindings: map[string]reflect.Value{
-				"otherPerson.name": reflect.ValueOf(&otherPersonName),
+			Bindings: map[string]any{
+				"otherPerson.name": &otherPersonName,
 			},
 		})
 	})
@@ -113,8 +112,8 @@ func TestWith(t *testing.T) {
 					LIMIT 3
 					RETURN collect(n.name)
 					`,
-			Bindings: map[string]reflect.Value{
-				"collect(n.name)": reflect.ValueOf(names),
+			Bindings: map[string]any{
+				"collect(n.name)": names,
 			},
 		})
 	})
@@ -145,8 +144,8 @@ func TestWith(t *testing.T) {
 					MATCH (m)--(o)
 					RETURN o.name
 					`,
-			Bindings: map[string]reflect.Value{
-				"o.name": reflect.ValueOf(names),
+			Bindings: map[string]any{
+				"o.name": names,
 			},
 		})
 	})
@@ -167,8 +166,8 @@ func TestWith(t *testing.T) {
 					WHERE x > 2
 					RETURN x
 					`,
-			Bindings: map[string]reflect.Value{
-				"x": reflect.ValueOf(&x),
+			Bindings: map[string]any{
+				"x": &x,
 			},
 		})
 	})

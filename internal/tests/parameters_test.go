@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -56,8 +55,8 @@ func TestParameter(t *testing.T) {
 			Parameters: map[string]any{
 				"propsList": &propsList,
 			},
-			Bindings: map[string]reflect.Value{
-				"props": reflect.ValueOf(&props),
+			Bindings: map[string]any{
+				"props": &props,
 			},
 		})
 	})

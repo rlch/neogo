@@ -8,7 +8,7 @@ import (
 )
 
 func TestBindFields(t *testing.T) {
-	t.Run("binds composite fields", func(t *testing.T) {
+	t.Run("binds composite fields to fields map only", func(t *testing.T) {
 		r := NewRegistry()
 		s := newScope(r)
 		p := &Person{}
@@ -23,10 +23,9 @@ func TestBindFields(t *testing.T) {
 				name:       "name",
 			},
 		}, s.fields)
-		require.Equal(t, map[reflect.Value]string{
-			reflect.ValueOf(&p.ID):   "p.id",
-			reflect.ValueOf(&p.Name): "p.name",
-		}, s.names)
+		// Fields are NOT added to names map to avoid conflict with struct pointer
+		// (first field has same address as struct itself)
+		require.Equal(t, map[uintptr]string{}, s.names)
 	})
 	// TODO: Need more tests
 }

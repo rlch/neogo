@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -23,8 +22,8 @@ func TestCypher(t *testing.T) {
 					WHERE n.name = 'Bob'
 					RETURN n
 					`,
-		Bindings: map[string]reflect.Value{
-			"n": reflect.ValueOf(&n),
+		Bindings: map[string]any{
+			"n": &n,
 		},
 	})
 }

@@ -123,9 +123,9 @@ func (d *sliceDecoder) Decode(data any, ptr unsafe.Pointer) error {
 	// Expect generic slice []any from Neo4j
 	src, ok := data.([]any)
 	if !ok {
-		// Handle single element unwrapping if necessary (legacy behavior support)
-		// For now, strict checking
-		return fmt.Errorf("expected []any, got %T", data)
+		// Handle single element wrapping: if data is not a slice, wrap it
+		// This supports binding a single value (e.g., Node) to a slice target
+		src = []any{data}
 	}
 
 	count := len(src)
@@ -310,6 +310,84 @@ func timeDecoder(data any, ptr unsafe.Pointer) error {
 		*(*time.Time)(ptr) = t
 	default:
 		return fmt.Errorf("cannot decode %T into time.Time", data)
+	}
+	return nil
+}
+
+func dateDecoder(data any, ptr unsafe.Pointer) error {
+	switch v := data.(type) {
+	case neo4j.Date:
+		*(*neo4j.Date)(ptr) = v
+	case time.Time:
+		*(*neo4j.Date)(ptr) = neo4j.DateOf(v)
+	default:
+		return fmt.Errorf("cannot decode %T into neo4j.Date", data)
+	}
+	return nil
+}
+
+func localTimeDecoder(data any, ptr unsafe.Pointer) error {
+	switch v := data.(type) {
+	case neo4j.LocalTime:
+		*(*neo4j.LocalTime)(ptr) = v
+	case time.Time:
+		*(*neo4j.LocalTime)(ptr) = neo4j.LocalTimeOf(v)
+	default:
+		return fmt.Errorf("cannot decode %T into neo4j.LocalTime", data)
+	}
+	return nil
+}
+
+func localDateTimeDecoder(data any, ptr unsafe.Pointer) error {
+	switch v := data.(type) {
+	case neo4j.LocalDateTime:
+		*(*neo4j.LocalDateTime)(ptr) = v
+	case time.Time:
+		*(*neo4j.LocalDateTime)(ptr) = neo4j.LocalDateTimeOf(v)
+	default:
+		return fmt.Errorf("cannot decode %T into neo4j.LocalDateTime", data)
+	}
+	return nil
+}
+
+func neo4jTimeDecoder(data any, ptr unsafe.Pointer) error {
+	switch v := data.(type) {
+	case neo4j.Time:
+		*(*neo4j.Time)(ptr) = v
+	case time.Time:
+		*(*neo4j.Time)(ptr) = neo4j.Time(v)
+	default:
+		return fmt.Errorf("cannot decode %T into neo4j.Time", data)
+	}
+	return nil
+}
+
+func durationDecoder(data any, ptr unsafe.Pointer) error {
+	switch v := data.(type) {
+	case neo4j.Duration:
+		*(*neo4j.Duration)(ptr) = v
+	default:
+		return fmt.Errorf("cannot decode %T into neo4j.Duration", data)
+	}
+	return nil
+}
+
+func point2DDecoder(data any, ptr unsafe.Pointer) error {
+	switch v := data.(type) {
+	case neo4j.Point2D:
+		*(*neo4j.Point2D)(ptr) = v
+	default:
+		return fmt.Errorf("cannot decode %T into neo4j.Point2D", data)
+	}
+	return nil
+}
+
+func point3DDecoder(data any, ptr unsafe.Pointer) error {
+	switch v := data.(type) {
+	case neo4j.Point3D:
+		*(*neo4j.Point3D)(ptr) = v
+	default:
+		return fmt.Errorf("cannot decode %T into neo4j.Point3D", data)
 	}
 	return nil
 }

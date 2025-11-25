@@ -2,7 +2,6 @@ package neogo
 
 import (
 	"context"
-	"reflect"
 	"testing"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -31,8 +30,8 @@ func TestUnmarshalRecord(t *testing.T) {
 	t.Run("err on non-existent key", func(t *testing.T) {
 		n := tests.Person{}
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"m": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"m": &n,
 			},
 		}
 		record := &neo4j.Record{
@@ -53,8 +52,8 @@ func TestUnmarshalRecord(t *testing.T) {
 	t.Run("binds to node", func(t *testing.T) {
 		n := tests.Person{}
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		record := &neo4j.Record{
@@ -78,8 +77,8 @@ func TestUnmarshalRecord(t *testing.T) {
 	t.Run("binds to abstract nodes with length 1", func(t *testing.T) {
 		var n []tests.Organism
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		err := s.unmarshalRecord(cy,
@@ -115,8 +114,8 @@ func TestUnmarshalRecord(t *testing.T) {
 	t.Run("binds to null", func(t *testing.T) {
 		var n *tests.Person
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		record := &neo4j.Record{
@@ -131,8 +130,8 @@ func TestUnmarshalRecord(t *testing.T) {
 	t.Run("binds to abstract node", func(t *testing.T) {
 		var n tests.Organism = &tests.BaseOrganism{}
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		record := &neo4j.Record{
@@ -166,8 +165,8 @@ func TestUnmarshalRecord(t *testing.T) {
 	t.Run("binds to multi-polymorphic abstract node", func(t *testing.T) {
 		var n tests.Pet = &tests.BasePet{}
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		record := &neo4j.Record{
@@ -205,8 +204,8 @@ func TestUnmarshalRecord(t *testing.T) {
 	t.Run("binds to nodes", func(t *testing.T) {
 		var n []tests.Person
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		err := s.unmarshalRecord(cy,
@@ -242,8 +241,8 @@ func TestUnmarshalRecord(t *testing.T) {
 	t.Run("binds to nodes with length 1", func(t *testing.T) {
 		var n []tests.Person
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		err := s.unmarshalRecord(cy,
@@ -268,8 +267,8 @@ func TestUnmarshalRecord(t *testing.T) {
 	t.Run("binds to abstract nodes with length 1", func(t *testing.T) {
 		var n []tests.Organism
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		err := s.unmarshalRecord(cy,
@@ -309,8 +308,8 @@ func TestUnmarshalRecords(t *testing.T) {
 	t.Run("err on non-existent key", func(t *testing.T) {
 		n1 := tests.Person{}
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n1),
+			Bindings: map[string]any{
+				"n": &n1,
 			},
 		}
 		records := []*neo4j.Record{
@@ -338,8 +337,8 @@ func TestUnmarshalRecords(t *testing.T) {
 	t.Run("binds to nodes", func(t *testing.T) {
 		var n []tests.Person
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		records := []*neo4j.Record{
@@ -379,8 +378,8 @@ func TestUnmarshalRecords(t *testing.T) {
 	t.Run("binds to slice of nils", func(t *testing.T) {
 		var n []*tests.Person
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		records := []*neo4j.Record{
@@ -402,8 +401,8 @@ func TestUnmarshalRecords(t *testing.T) {
 	t.Run("considers nil nodes in slices", func(t *testing.T) {
 		var n []*tests.Person
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		records := []*neo4j.Record{
@@ -437,8 +436,8 @@ func TestUnmarshalRecords(t *testing.T) {
 	t.Run("binds to []any", func(t *testing.T) {
 		var n []any
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		records := []*neo4j.Record{
@@ -460,8 +459,8 @@ func TestUnmarshalRecords(t *testing.T) {
 	t.Run("binds to [][]any", func(t *testing.T) {
 		var n [][]any
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		records := []*neo4j.Record{
@@ -484,8 +483,8 @@ func TestUnmarshalRecords(t *testing.T) {
 		s := newTestSession()
 		var n []tests.Organism
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		records := []*neo4j.Record{
@@ -551,8 +550,8 @@ func TestUnmarshalRecords(t *testing.T) {
 		s := newTestSession()
 		var n [][]tests.Organism
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		records := []*neo4j.Record{
@@ -615,8 +614,8 @@ func TestUnmarshalRecords(t *testing.T) {
 		s := newTestSession()
 		var n [][]tests.BasePet
 		cy := &internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"n": reflect.ValueOf(&n),
+			Bindings: map[string]any{
+				"n": &n,
 			},
 		}
 		records := []*neo4j.Record{
@@ -673,8 +672,8 @@ func TestUnmarshalRecords(t *testing.T) {
 			},
 		}
 		err := s.unmarshalRecord(&internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"persons": reflect.ValueOf(&persons),
+			Bindings: map[string]any{
+				"persons": &persons,
 			},
 		}, record)
 		require.NoError(err)
@@ -695,8 +694,8 @@ func TestUnmarshalRecords(t *testing.T) {
 			Values: []any{nil},
 		}
 		err := s.unmarshalRecord(&internal.CompiledCypher{
-			Bindings: map[string]reflect.Value{
-				"persons": reflect.ValueOf(&persons),
+			Bindings: map[string]any{
+				"persons": &persons,
 			},
 		}, record)
 		require.NoError(err)

@@ -18,58 +18,99 @@ type Valuer[V neo4j.RecordValue] interface {
 	Unmarshal(*V) error
 }
 
-// BindValue binds a Neo4j record value to a Go value.
-// The 'to' parameter must be a settable reflect.Value (typically an addressable value).
+// Bind binds a Neo4j record value to a Go value.
+// The 'to' parameter must be a pointer to the target value.
 //
-// This function handles:
-// - Neo4j nodes and relationships (extracts Props)
-// - Slices (with depth matching)
+// This function delegates to the zero-reflection codec for most cases.
+// Special handling is only used for:
 // - Custom Valuer implementations
-// - Primitive type coercion
-// - Struct decoding via compiled codecs (zero reflection)
+// - Abstract node (polymorphic) binding
+// - Slice depth mismatches
+// - Empty interface targets
+func (r *Registry) Bind(from any, to any) error {
+	toV := reflect.ValueOf(to)
+	if toV.Kind() != reflect.Ptr {
+		return fmt.Errorf("Bind requires pointer target, got %T", to)
+	}
+	return r.BindValue(from, toV.Elem())
+}
+
+// BindValue binds a Neo4j record value to a reflect.Value target.
+// Uses zero-reflection codec as the primary path, with reflection fallbacks
+// only for special cases that require runtime type inspection.
 func (r *Registry) BindValue(from any, to reflect.Value) error {
 	toT := to.Type()
 
-	// Fast path: bind to any/interface{}
-	if isEmptyInterface(toT, to) {
-		return bindToInterface(from, to)
-	}
-
-	// Handle nil input
+	// Handle nil input - requires reflection to set zero value
 	if from == nil {
 		return r.bindNil(to)
 	}
 
-	// Try Valuer interface first (custom unmarshaling)
+	// Fast path: bind to any/interface{} - direct assignment
+	if isEmptyInterface(toT, to) {
+		return bindToInterface(from, to)
+	}
+
+	// Try Valuer interface (custom unmarshaling) - requires interface check
 	if ok, err := r.tryValuer(from, to); ok || err != nil {
 		return err
 	}
 
-	// Handle Neo4j types that need unwrapping
-	switch v := from.(type) {
-	case neo4j.Node:
-		return r.bindNode(v, to, toT)
-	case neo4j.Relationship:
-		return r.bindRelationship(v, to, toT)
+	// Handle abstract nodes (polymorphic lookup by labels)
+	// This requires runtime label inspection to find concrete type
+	if node, ok := from.(neo4j.Node); ok {
+		if r.isAbstractTarget(toT) {
+			return r.BindAbstractNode(node, to)
+		}
+		// Handle single node to slice of abstract types
+		innerT := codec.UnwindType(toT)
+		if innerT.Kind() == reflect.Slice {
+			elemT := innerT.Elem()
+			if r.isAbstractTarget(elemT) {
+				return r.wrapInSlice(node, to)
+			}
+		}
 	}
 
-	// Handle slice input
-	if reflect.TypeOf(from).Kind() == reflect.Slice {
-		return r.bindSlice(from, to, toT)
+	// Handle slice depth mismatch (codec doesn't handle wrapping records)
+	if fromT := reflect.TypeOf(from); fromT != nil && fromT.Kind() == reflect.Slice {
+		toInnerT := codec.UnwindType(toT)
+		if toInnerT.Kind() == reflect.Slice {
+			// Direct assignment if types match (e.g., []int to []int)
+			// The codec's sliceDecoder expects []any but we might have []T
+			if fromT.AssignableTo(toInnerT) {
+				target := to
+				for target.Kind() == reflect.Ptr {
+					if target.IsNil() {
+						target.Set(reflect.New(target.Type().Elem()))
+					}
+					target = target.Elem()
+				}
+				target.Set(reflect.ValueOf(from))
+				return nil
+			}
+			fromDepth := r.computeSliceDepthRuntime(from)
+			toDepth := computeDepth(toInnerT)
+			if fromDepth != toDepth {
+				return r.bindSliceDepthMismatch(from, to, toT, fromDepth, toDepth)
+			}
+			// Check if element type is abstract - needs special handling
+			elemT := toInnerT.Elem()
+			for elemT.Kind() == reflect.Slice {
+				elemT = elemT.Elem()
+			}
+			if r.isAbstractTarget(elemT) {
+				return r.bindSliceWithAbstractElements(from, to)
+			}
+		}
 	}
 
-	// Handle single value -> slice wrapping (non-slice from to slice to)
-	innerToT := codec.UnwindType(toT)
-	if innerToT.Kind() == reflect.Slice {
-		return r.wrapInSlice(from, to)
-	}
-
-	// Handle primitive types directly (codec expects map/Node for struct decoding)
-	if ok, err := r.bindPrimitive(from, to); ok || err != nil {
-		return err
-	}
-
-	// Delegate to codec for struct decoding (zero reflection hot path)
+	// Zero-reflection codec path for everything else:
+	// - Structs (nodes, relationships)
+	// - Primitives (int, string, bool, float, time.Time, etc.)
+	// - Slices with matching depth
+	// - Pointers
+	// - Maps
 	return r.decodeWithCodec(from, to)
 }
 
@@ -92,9 +133,7 @@ func bindToInterface(from any, to reflect.Value) error {
 	return nil
 }
 
-// bindNil handles nil input
-// - For slice targets: creates slice with one nil element
-// - For pointer targets: sets the pointer to nil (zero value)
+// bindNil handles nil input by setting target to zero value
 func (r *Registry) bindNil(to reflect.Value) error {
 	// Unwrap to get the actual type
 	target := to
@@ -102,7 +141,7 @@ func (r *Registry) bindNil(to reflect.Value) error {
 		target = target.Elem()
 	}
 
-	// For slice targets, create a single-element slice
+	// For slice targets, create a single-element slice with zero value
 	if target.Kind() == reflect.Slice {
 		target.Set(reflect.MakeSlice(target.Type(), 1, 1))
 		return r.BindValue(nil, target.Index(0).Addr())
@@ -179,98 +218,53 @@ func bindValuer[V neo4j.RecordValue](value V, to reflect.Value) (ok bool, err er
 	return true, nil
 }
 
-// bindPrimitive handles direct primitive type binding
-func (r *Registry) bindPrimitive(from any, to reflect.Value) (handled bool, err error) {
-	// Get the settable value (unwrap pointers)
-	target := to
-	for target.Kind() == reflect.Ptr {
-		if target.IsNil() {
-			target.Set(reflect.New(target.Type().Elem()))
-		}
-		target = target.Elem()
-	}
-
-	if !target.CanSet() {
-		return false, nil
-	}
-
-	// Direct type match - use reflect to set value
-	fromV := reflect.ValueOf(from)
-	if fromV.Type().AssignableTo(target.Type()) {
-		target.Set(fromV)
-		return true, nil
-	}
-
-	// Handle type conversions
-	if fromV.Type().ConvertibleTo(target.Type()) {
-		target.Set(fromV.Convert(target.Type()))
-		return true, nil
-	}
-
-	// Handle time.Time specially
-	if target.Type() == reflect.TypeOf(time.Time{}) {
-		return r.bindTime(from, target)
-	}
-
-	return false, nil
-}
-
-// bindTime handles binding various time types to time.Time
-func (r *Registry) bindTime(from any, to reflect.Value) (handled bool, err error) {
-	var t time.Time
-	switch v := from.(type) {
-	case time.Time:
-		t = v
-	case neo4j.Time:
-		t = v.Time()
-	case neo4j.Date:
-		t = v.Time()
-	case neo4j.LocalDateTime:
-		t = v.Time()
-	case neo4j.LocalTime:
-		t = v.Time()
-	case string:
-		parsed, err := time.Parse(time.RFC3339, v)
-		if err != nil {
-			return false, err
-		}
-		t = parsed
-	default:
-		return false, nil
-	}
-	to.Set(reflect.ValueOf(t))
-	return true, nil
-}
-
-// bindNode handles neo4j.Node binding
-func (r *Registry) bindNode(node neo4j.Node, to reflect.Value, toT reflect.Type) error {
-	// Handle single node to slice
-	if codec.UnwindType(toT).Kind() == reflect.Slice {
-		return r.wrapInSlice(node, to)
-	}
-
-	// Check for abstract node (polymorphic)
+// isAbstractTarget checks if the target type is an abstract interface
+func (r *Registry) isAbstractTarget(toT reflect.Type) bool {
 	innerT := toT
 	for innerT.Kind() == reflect.Ptr {
 		innerT = innerT.Elem()
 	}
-	if (toT.Implements(rAbstract) || toT.Elem().Implements(rAbstract)) && innerT.Kind() == reflect.Interface {
-		return r.BindAbstractNode(node, to)
+	if innerT.Kind() != reflect.Interface {
+		return false
 	}
-
-	// Decode node props to struct
-	return r.decodeWithCodec(node, to)
+	return toT.Implements(rAbstract) || (toT.Kind() == reflect.Ptr && toT.Elem().Implements(rAbstract))
 }
 
-// bindRelationship handles neo4j.Relationship binding
-func (r *Registry) bindRelationship(rel neo4j.Relationship, to reflect.Value, toT reflect.Type) error {
-	// Handle single relationship to slice
-	if codec.UnwindType(toT).Kind() == reflect.Slice {
-		return r.wrapInSlice(rel, to)
+// computeSliceDepthRuntime computes slice depth at runtime, checking actual element types
+// This is needed because []any might contain slices at runtime
+func (r *Registry) computeSliceDepthRuntime(from any) int {
+	fromV := reflect.ValueOf(from)
+	fromT := fromV.Type()
+	depth := computeDepth(fromT)
+
+	// Special case: []any might contain slices at runtime
+	if fromT.Elem().Kind() == reflect.Interface && fromV.Len() > 0 {
+		firstElem := fromV.Index(0).Interface()
+		if firstElem != nil && reflect.TypeOf(firstElem).Kind() == reflect.Slice {
+			depth++
+		}
+	}
+	return depth
+}
+
+// bindSliceDepthMismatch handles cases where source and target slice depths differ
+func (r *Registry) bindSliceDepthMismatch(from any, to reflect.Value, toT reflect.Type, fromDepth, toDepth int) error {
+	if to.Kind() == reflect.Ptr {
+		to = to.Elem()
+	}
+	if to.Kind() != reflect.Slice {
+		return errors.New("cannot bind slice to non-slice type")
+	}
+	toT = to.Type()
+
+	if fromDepth+1 == toDepth {
+		// Single record wrapping: from is one level shallower
+		// e.g., []Person -> [][]Person (wrap as single result set)
+		to.Set(reflect.MakeSlice(toT, 1, 1))
+		return r.BindValue(from, to.Index(0))
 	}
 
-	// Decode relationship props to struct
-	return r.decodeWithCodec(rel, to)
+	return fmt.Errorf("cannot bind slice of depth %d to slice of depth %d", fromDepth, toDepth)
 }
 
 // wrapInSlice creates a single-element slice and binds the value to it
@@ -283,60 +277,32 @@ func (r *Registry) wrapInSlice(from any, to reflect.Value) error {
 	return r.BindValue(from, sliceV.Index(0).Addr())
 }
 
-// bindSlice handles slice input with depth matching
-func (r *Registry) bindSlice(from any, to reflect.Value, _ reflect.Type) error {
-	if to.Kind() == reflect.Ptr {
-		to = to.Elem()
+// bindSliceWithAbstractElements handles binding a slice where elements are abstract interfaces
+func (r *Registry) bindSliceWithAbstractElements(from any, to reflect.Value) error {
+	sliceV := to
+	for sliceV.Kind() == reflect.Ptr {
+		sliceV = sliceV.Elem()
 	}
-	if to.Kind() != reflect.Slice {
-		return errors.New("cannot bind slice to non-slice type")
-	}
-	toT := to.Type()
 
 	fromV := reflect.ValueOf(from)
 	n := fromV.Len()
 
-	// For []any (common from Neo4j), we need to check the runtime type of elements
-	// to determine if this is actually a nested slice
-	fromT := fromV.Type()
-	fromDepth := computeDepth(fromT)
-	toDepth := computeDepth(toT)
+	sliceV.Set(reflect.MakeSlice(sliceV.Type(), n, n))
 
-	// Special case: []any might contain slices at runtime
-	// Check first element to determine actual depth
-	if fromT.Elem().Kind() == reflect.Interface && n > 0 {
-		firstElem := fromV.Index(0).Interface()
-		if firstElem != nil && reflect.TypeOf(firstElem).Kind() == reflect.Slice {
-			// Elements are slices, so actual depth is one more than static type suggests
-			fromDepth++
+	for i := 0; i < n; i++ {
+		elemV := sliceV.Index(i)
+		if elemV.CanAddr() {
+			elemV = elemV.Addr()
+		}
+		fromElem := fromV.Index(i).Interface()
+		if err := r.BindValue(fromElem, elemV.Elem()); err != nil {
+			return fmt.Errorf("index %d: %w", i, err)
 		}
 	}
-
-	if fromDepth == toDepth {
-		// 1:1 mapping
-		to.Set(reflect.MakeSlice(toT, n, n))
-		for i := range n {
-			toI := to.Index(i)
-			if toI.CanAddr() {
-				toI = toI.Addr()
-			}
-			if err := r.BindValue(fromV.Index(i).Interface(), toI); err != nil {
-				return fmt.Errorf("error binding slice element %d: %w", i, err)
-			}
-		}
-		return nil
-	}
-
-	if fromDepth+1 == toDepth {
-		// Single record wrapping: from is one level shallower
-		to.Set(reflect.MakeSlice(toT, 1, 1))
-		return r.BindValue(from, to.Index(0))
-	}
-
-	return fmt.Errorf("cannot bind slice of depth %d to slice of depth %d", fromDepth, toDepth)
+	return nil
 }
 
-// decodeWithCodec uses the zero-reflection codec for struct decoding
+// decodeWithCodec uses the zero-reflection codec for struct/primitive decoding
 func (r *Registry) decodeWithCodec(from any, to reflect.Value) error {
 	if to.Kind() == reflect.Ptr {
 		return r.codecs.Decode(from, to.Interface())

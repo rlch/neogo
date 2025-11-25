@@ -158,17 +158,29 @@ Options:
   - Nil pointer preservation in slices
 - [x] Phase 3: Update client_impl.go
   - Fixed nil pre-allocation issue
-- [ ] Phase 4: Further simplify binding.go (future work)
-- [ ] Phase 5: Evaluate scope.go bindings map (future work)
+- [x] Phase 4: Scope bindings migration from reflect.Value to any
+  - Changed `bindings` from `map[string]reflect.Value` to `map[string]any` (pointers)
+  - Changed `names` from `map[reflect.Value]string` to `map[uintptr]string` (pointer addresses)
+  - Added `ptrAddr()` helper for pointer address extraction
+  - Fixed field/name lookup priority for zero-size embedded types
+    - Primitive pointers (string, int, etc.) check fields first
+    - Struct/interface pointers check names first
+  - Updated `propertyIdentifier` and `valueIdentifier` with same logic
+  - Fixed WHERE clause identifier to use name string instead of raw identifier
+  - Delete field entry when aliasing to prevent stale lookups
+- [ ] Phase 5: Further simplify binding.go (future work)
+- [ ] Phase 6: Evaluate remaining reflection in query building (future work)
 
 ## Code Stats
 
 **Before refactor:**
 - `binding.go`: ~300 lines with heavy reflection
+- `scope.go`: Used `reflect.Value` for bindings map
 - Used `cast` library for type coercion
 
 **After refactor:**
-- `binding.go`: ~350 lines but cleaner structure
+- `binding.go`: ~400 lines but cleaner structure
+- `scope.go`: Uses `map[string]any` with `map[uintptr]string` for reverse lookup
 - Delegates to codec for struct decoding (zero reflection hot path)
 - Primitives handled with direct type matching
 - Removed dependency on `cast` library for most paths

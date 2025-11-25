@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -28,8 +27,8 @@ func TestCallSubquery(t *testing.T) {
 					}
 					RETURN innerReturn
 					`,
-			Bindings: map[string]reflect.Value{
-				"innerReturn": reflect.ValueOf(&innerReturn),
+			Bindings: map[string]any{
+				"innerReturn": &innerReturn,
 			},
 		})
 
@@ -71,9 +70,9 @@ func TestCallSubquery(t *testing.T) {
 					MATCH (n:Counter)
 					RETURN innerCount, n.count AS totalCount
 					`,
-			Bindings: map[string]reflect.Value{
-				"innerCount": reflect.ValueOf(&innerCount),
-				"totalCount": reflect.ValueOf(&totalCount),
+			Bindings: map[string]any{
+				"innerCount": &innerCount,
+				"totalCount": &totalCount,
 			},
 		})
 	})
@@ -99,9 +98,9 @@ func TestCallSubquery(t *testing.T) {
 					}
 					RETURN x, y
 					`,
-			Bindings: map[string]reflect.Value{
-				"x": reflect.ValueOf(&x),
-				"y": reflect.ValueOf(&y),
+			Bindings: map[string]any{
+				"x": &x,
+				"y": &y,
 			},
 		})
 
@@ -165,11 +164,11 @@ func TestCallSubquery(t *testing.T) {
 					}
 					RETURN from.name AS name, from.age AS age, to.name AS closestOlderName, to.age AS closestOlderAge
 					`,
-			Bindings: map[string]reflect.Value{
-				"name":             reflect.ValueOf(&from.Name),
-				"age":              reflect.ValueOf(&from.Age),
-				"closestOlderName": reflect.ValueOf(&next.Name),
-				"closestOlderAge":  reflect.ValueOf(&next.Age),
+			Bindings: map[string]any{
+				"name":             &from.Name,
+				"age":              &from.Age,
+				"closestOlderName": &next.Name,
+				"closestOlderAge":  &next.Age,
 			},
 		})
 	})
@@ -217,9 +216,9 @@ func TestCallSubquery(t *testing.T) {
 					RETURN p.name, p.age
 					ORDER BY p.name
 					`,
-			Bindings: map[string]reflect.Value{
-				"p.name": reflect.ValueOf(&p.Name),
-				"p.age":  reflect.ValueOf(&p.Age),
+			Bindings: map[string]any{
+				"p.name": &p.Name,
+				"p.age":  &p.Age,
 			},
 		})
 
@@ -277,9 +276,9 @@ func TestCallSubquery(t *testing.T) {
 					}
 					RETURN DISTINCT p.name, count(other)
 					`,
-			Bindings: map[string]reflect.Value{
-				"p.name":       reflect.ValueOf(&p.Name),
-				"count(other)": reflect.ValueOf(&cOther),
+			Bindings: map[string]any{
+				"p.name":       &p.Name,
+				"count(other)": &cOther,
 			},
 		})
 	})
@@ -315,9 +314,9 @@ func TestCallSubquery(t *testing.T) {
 					}
 					RETURN p.name, numberOfConnections
 					`,
-			Bindings: map[string]reflect.Value{
-				"p.name":              reflect.ValueOf(&p.Name),
-				"numberOfConnections": reflect.ValueOf(&numConn),
+			Bindings: map[string]any{
+				"p.name":              &p.Name,
+				"numberOfConnections": &numConn,
 			},
 		})
 	})
@@ -353,8 +352,8 @@ func TestCallSubquery(t *testing.T) {
 					}
 					RETURN count(*)
 					`,
-			Bindings: map[string]reflect.Value{
-				"count(*)": reflect.ValueOf(&count),
+			Bindings: map[string]any{
+				"count(*)": &count,
 			},
 		})
 	})
@@ -391,9 +390,9 @@ func TestCallSubquery(t *testing.T) {
 					}
 					RETURN p.name, youngerPersonsCount
 					`,
-			Bindings: map[string]reflect.Value{
-				"youngerPersonsCount": reflect.ValueOf(&count),
-				"p.name":              reflect.ValueOf(&p.Name),
+			Bindings: map[string]any{
+				"youngerPersonsCount": &count,
+				"p.name":              &p.Name,
 			},
 		})
 	})
@@ -432,10 +431,10 @@ func TestCallSubquery(t *testing.T) {
 			}
 			RETURN slice, slice1, slice2
 					`,
-			Bindings: map[string]reflect.Value{
-				"slice":  reflect.ValueOf(&v1),
-				"slice1": reflect.ValueOf(&v2),
-				"slice2": reflect.ValueOf(&v3),
+			Bindings: map[string]any{
+				"slice":  &v1,
+				"slice1": &v2,
+				"slice2": &v3,
 			},
 			Parameters: map[string]any{
 				"slice":  &v1,
@@ -499,8 +498,8 @@ func TestCallProcedure(t *testing.T) {
 			YIELD label
 			RETURN label
 					`,
-			Bindings: map[string]reflect.Value{
-				"label": reflect.ValueOf(&labels),
+			Bindings: map[string]any{
+				"label": &labels,
 			},
 		})
 	})
@@ -528,8 +527,8 @@ func TestCallProcedure(t *testing.T) {
 					WHERE name = 'dbms.listConfig'
 					RETURN signature
 					`,
-			Bindings: map[string]reflect.Value{
-				"signature": reflect.ValueOf(&sig),
+			Bindings: map[string]any{
+				"signature": &sig,
 			},
 		})
 	})
@@ -561,9 +560,9 @@ func TestCallProcedure(t *testing.T) {
 					WHERE n[prop] ` + isNot + ` NULL
 					RETURN prop, count(n) AS numNodes
 					`,
-			Bindings: map[string]reflect.Value{
-				"prop":     reflect.ValueOf(&prop),
-				"numNodes": reflect.ValueOf(&numNodes),
+			Bindings: map[string]any{
+				"prop":     &prop,
+				"numNodes": &numNodes,
 			},
 		})
 	})

@@ -412,71 +412,145 @@ func (s *session) unmarshalRecords(
 	records []*neo4j.Record,
 ) error {
 	n := len(records)
-	slices := make(map[string]reflect.Value)
-	for name, binding := range cy.Bindings {
-		for binding.Kind() == reflect.Ptr {
-			binding = binding.Elem()
-		}
-		if binding.Kind() != reflect.Slice {
-			return fmt.Errorf("cannot allocate results a non-slice value, name: %q", name)
-		}
-		binding.Set(reflect.MakeSlice(
-			binding.Type(),
-			n, n,
-		))
-		slices[name] = binding
+	if n == 0 {
+		return nil
 	}
-	for i, record := range records {
-		for key, binding := range slices {
+
+	// For each binding, try zero-reflection batch decode first
+	for key, binding := range cy.Bindings {
+		// Collect values for this key from all records
+		values := make([]any, n)
+		for i, record := range records {
 			value, ok := record.Get(key)
 			if !ok {
 				return fmt.Errorf("no value associated with key %q", key)
 			}
-			to := binding.Index(i)
+			values[i] = value
+		}
 
-			// Don't pre-allocate if value is nil - let BindValue handle it
-			// This preserves nil pointers in results
-			if value != nil {
-				if to.Kind() == reflect.Ptr {
-					to.Set(reflect.New(to.Type().Elem()))
-				} else {
-					to.Set(reflect.New(to.Type()).Elem())
-				}
+		// Try zero-reflection batch decode (fast path)
+		// This handles most common cases: structs, primitives, slices
+		// Skip for abstract types which need polymorphic lookup
+		slicePtr, err := normalizeSliceBinding(binding)
+		if err == nil && !isAbstractSliceBinding(slicePtr) {
+			if err := s.reg.Codecs().DecodeMultiple(values, slicePtr); err == nil {
+				continue // Success - next binding
 			}
+			// DecodeMultiple failed, fall through to reflection path
+		}
 
-			if to.CanAddr() {
-				to = to.Addr()
-			}
-			if err := s.reg.BindValue(value, to); err != nil {
-				return fmt.Errorf(
-					"error binding key %s to type %T: %w",
-					key, binding.Interface(), err,
-				)
-			}
+		// Reflection fallback for special cases:
+		// - Valuer interface implementations
+		// - Abstract node (polymorphic) bindings
+		// - Complex pointer chains
+		if err := s.unmarshalRecordsFallback(key, values, binding); err != nil {
+			return err
 		}
 	}
-	// names := cy.Names()
-	// for name, selection := range cy.Queries {
-	// 	root := selection.Alloc
-	// 	curAlloc := reflect.ValueOf(root)
-	// 	nextNode := []*internal.NodeSelection{selection}
-	// 	nextAlloc := []reflect.Value{curAlloc}
-	// 	// n, [a, b, c], [[w], [x], [y, z]], [[[1]], [[2]], [[3], [4, 5]]]
-	// 	for nextNode != nil {
-	// 		rel := selection.Next
-	// 		if rel == nil {
-	// 			break
-	// 		}
-	// 		// relBinding :=
-	// 		relAllocs := make([]*reflect.Value, len(nextAlloc))
-	// 		relAllocs := curAlloc.FieldByName(rel.Field)
-	// 		if _, ok := names[nextAlloc]; ok {
-	// 			relAlloc.Set(reflect.ValueOf(selection.Alloc))
-	// 		} else {
-	// 			rel.Allloc.Set(reflect.MakeSlice())
-	// 		}
-	// 	}
-	// }
+
+	return nil
+}
+
+// normalizeSliceBinding unwraps pointer chains (e.g., **[]T, ***[]T) to get *[]T
+// Returns the normalized slice pointer or error if binding is not a slice type.
+// Uses reflection once per binding (not per record).
+func normalizeSliceBinding(binding any) (any, error) {
+	v := reflect.ValueOf(binding)
+	if v.Kind() != reflect.Ptr {
+		return nil, fmt.Errorf("binding must be a pointer")
+	}
+
+	// Unwrap pointer chain until we find the slice
+	for {
+		elem := v.Elem()
+		switch elem.Kind() {
+		case reflect.Ptr:
+			if elem.IsNil() {
+				elem.Set(reflect.New(elem.Type().Elem()))
+			}
+			v = elem
+		case reflect.Slice:
+			// v is *[]T, which is what DecodeMultiple expects
+			return v.Interface(), nil
+		default:
+			return nil, fmt.Errorf("expected slice, got %v", elem.Kind())
+		}
+	}
+}
+
+// isAbstractSliceBinding checks if the slice element type (or nested element type)
+// is an abstract interface that requires polymorphic lookup. Uses reflection once per binding.
+func isAbstractSliceBinding(slicePtr any) bool {
+	v := reflect.ValueOf(slicePtr)
+	if v.Kind() != reflect.Ptr {
+		return false
+	}
+	sliceT := v.Elem().Type()
+	if sliceT.Kind() != reflect.Slice {
+		return false
+	}
+	// Unwind nested slices to get the innermost element type
+	elemT := sliceT.Elem()
+	for elemT.Kind() == reflect.Slice {
+		elemT = elemT.Elem()
+	}
+	// Check if element type is an interface that implements IAbstract
+	if elemT.Kind() != reflect.Interface {
+		return false
+	}
+	rAbstract := reflect.TypeOf((*internal.IAbstract)(nil)).Elem()
+	return elemT.Implements(rAbstract)
+}
+
+// unmarshalRecordsFallback handles special cases that DecodeMultiple can't:
+// - Valuer interface implementations
+// - Abstract node (polymorphic) bindings
+// - Complex types requiring runtime inspection
+func (s *session) unmarshalRecordsFallback(key string, values []any, binding any) error {
+	n := len(values)
+
+	// Use reflect to allocate the slice - once per binding, not per record
+	bindingV := reflect.ValueOf(binding)
+	if bindingV.Kind() != reflect.Ptr {
+		return fmt.Errorf("binding for key %q must be a pointer", key)
+	}
+	sliceV := bindingV.Elem()
+	for sliceV.Kind() == reflect.Ptr {
+		if sliceV.IsNil() {
+			sliceV.Set(reflect.New(sliceV.Type().Elem()))
+		}
+		sliceV = sliceV.Elem()
+	}
+	if sliceV.Kind() != reflect.Slice {
+		return fmt.Errorf("binding for key %q must be a pointer to slice, got %v", key, sliceV.Kind())
+	}
+
+	// Allocate the slice
+	sliceV.Set(reflect.MakeSlice(sliceV.Type(), n, n))
+
+	// Decode each value into the slice
+	for i, value := range values {
+		elemV := sliceV.Index(i)
+
+		// Handle nil values - leave as zero value
+		if value == nil {
+			continue
+		}
+
+		// Allocate pointer elements if needed
+		if elemV.Kind() == reflect.Ptr && elemV.IsNil() {
+			elemV.Set(reflect.New(elemV.Type().Elem()))
+		}
+
+		// Use BindValue which handles Valuer, abstract nodes, etc.
+		if elemV.CanAddr() {
+			elemV = elemV.Addr()
+		}
+		if err := s.reg.BindValue(value, elemV.Elem()); err != nil {
+			return fmt.Errorf("error binding key %q index %d: %w", key, i, err)
+		}
+	}
+
 	return nil
 }
 
@@ -489,11 +563,8 @@ func (s *session) unmarshalRecord(
 		if !ok {
 			return fmt.Errorf("no value associated with key %q", key)
 		}
-		if err := s.reg.BindValue(value, binding); err != nil {
-			return fmt.Errorf(
-				"error binding key %q to type %T: %w",
-				key, binding.Interface(), err,
-			)
+		if err := s.reg.Bind(value, binding); err != nil {
+			return fmt.Errorf("error binding key %q: %w", key, err)
 		}
 	}
 	return nil

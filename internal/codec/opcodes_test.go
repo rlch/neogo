@@ -101,8 +101,10 @@ func TestOpcodes(t *testing.T) {
 		encoded, err := registry.Encode(&original)
 		require.NoError(t, err)
 
-		point := encoded["point"].(map[string]any)
-		assert.InDelta(t, 1.5, point["x"], 0.01)
+		// Point should be encoded as neo4j.Point2D directly (Neo4j native type)
+		point, ok := encoded["point"].(neo4j.Point2D)
+		require.True(t, ok, "expected neo4j.Point2D, got %T", encoded["point"])
+		assert.InDelta(t, 1.5, point.X, 0.01)
 
 		var decoded AllNeo4jTypes
 		err = registry.Decode(encoded, &decoded)

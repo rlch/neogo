@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -33,8 +32,8 @@ func TestUnion(t *testing.T) {
 					MATCH (n:Movie)
 					RETURN n.title AS name
 					`,
-			Bindings: map[string]reflect.Value{
-				"name": reflect.ValueOf(&name),
+			Bindings: map[string]any{
+				"name": &name,
 			},
 		})
 	})
@@ -63,8 +62,8 @@ func TestUnion(t *testing.T) {
 					MATCH (n:Movie)
 					RETURN n.title AS name
 					`,
-			Bindings: map[string]reflect.Value{
-				"name": reflect.ValueOf(&name),
+			Bindings: map[string]any{
+				"name": &name,
 			},
 		})
 	})

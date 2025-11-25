@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -19,7 +18,7 @@ func TestMatch(t *testing.T) {
 					MATCH (n)
 					RETURN n
 					`,
-				Bindings: map[string]reflect.Value{"n": reflect.ValueOf(n)},
+				Bindings: map[string]any{"n": n},
 			})
 		})
 
@@ -36,8 +35,8 @@ func TestMatch(t *testing.T) {
 					MATCH (movie:Movie)
 					RETURN movie.title
 					`,
-				Bindings: map[string]reflect.Value{
-					"movie.title": reflect.ValueOf(&mts),
+				Bindings: map[string]any{
+					"movie.title": &mts,
 				},
 			})
 		})
@@ -63,8 +62,8 @@ func TestMatch(t *testing.T) {
 					MATCH (director {name: 'Oliver Stone'})--(movie)
 					RETURN movie.title
 					`,
-				Bindings: map[string]reflect.Value{
-					"movie.title": reflect.ValueOf(&m.Title),
+				Bindings: map[string]any{
+					"movie.title": &m.Title,
 				},
 			})
 		})
@@ -83,8 +82,8 @@ func TestMatch(t *testing.T) {
 					MATCH (:Person {name: 'Oliver Stone'})--(movie:Movie)
 					RETURN movie.title
 					`,
-				Bindings: map[string]reflect.Value{
-					"movie.title": reflect.ValueOf(&m.Title),
+				Bindings: map[string]any{
+					"movie.title": &m.Title,
 				},
 			})
 		})
@@ -103,9 +102,9 @@ func TestMatch(t *testing.T) {
 					MATCH (n:Movie|Person)
 					RETURN n.name AS name, n.title AS title
 					`,
-				Bindings: map[string]reflect.Value{
-					"name":  reflect.ValueOf(&name),
-					"title": reflect.ValueOf(&title),
+				Bindings: map[string]any{
+					"name":  &name,
+					"title": &title,
 				},
 			})
 		})
@@ -133,8 +132,8 @@ func TestMatch(t *testing.T) {
 					MATCH (:Person {name: 'Oliver Stone'})-->(movie)
 					RETURN movie.title
 					`,
-				Bindings: map[string]reflect.Value{
-					"movie.title": reflect.ValueOf(&m.Title),
+				Bindings: map[string]any{
+					"movie.title": &m.Title,
 				},
 			})
 		})
@@ -158,8 +157,8 @@ func TestMatch(t *testing.T) {
 					MATCH (:Person {name: 'Oliver Stone'})-[r]->(movie)
 					RETURN type(r)
 					`,
-				Bindings: map[string]reflect.Value{
-					"type(r)": reflect.ValueOf(&out),
+				Bindings: map[string]any{
+					"type(r)": &out,
 				},
 			})
 		})
@@ -185,9 +184,9 @@ func TestMatch(t *testing.T) {
 					MATCH (a)-[:ACTED_IN {role: 'Bud Fox'}]-(b)
 					RETURN a, b
 					`,
-				Bindings: map[string]reflect.Value{
-					"a": reflect.ValueOf(&a),
-					"b": reflect.ValueOf(&b),
+				Bindings: map[string]any{
+					"a": &a,
+					"b": &b,
 				},
 			})
 		})
@@ -209,8 +208,8 @@ func TestMatch(t *testing.T) {
 					MATCH (wallstreet:Movie {title: 'Wall Street'})<-[:ACTED_IN]-(actor)
 					RETURN actor.name
 					`,
-				Bindings: map[string]reflect.Value{
-					"actor.name": reflect.ValueOf(&name),
+				Bindings: map[string]any{
+					"actor.name": &name,
 				},
 			})
 		})
@@ -232,8 +231,8 @@ func TestMatch(t *testing.T) {
 		MATCH (wallstreet {title: 'Wall Street'})<-[:ACTED_IN|DIRECTED]-(person)
 		RETURN person.name
 		`,
-				Bindings: map[string]reflect.Value{
-					"person.name": reflect.ValueOf(&name),
+				Bindings: map[string]any{
+					"person.name": &name,
 				},
 			})
 		})
@@ -254,8 +253,8 @@ func TestMatch(t *testing.T) {
 					MATCH (wallstreet {title: 'Wall Street'})<-[r:ACTED_IN]-(actor)
 					RETURN r.role
 					`,
-				Bindings: map[string]reflect.Value{
-					"r.role": reflect.ValueOf(&r.Role),
+				Bindings: map[string]any{
+					"r.role": &r.Role,
 				},
 			})
 		})
@@ -324,9 +323,9 @@ func TestMatch(t *testing.T) {
 					MATCH (charlie {name: 'Charlie Sheen'})-[:ACTED_IN]->(movie)<-[:DIRECTED]-(director)
 					RETURN movie.title, director.name
 					`,
-				Bindings: map[string]reflect.Value{
-					"movie.title":   reflect.ValueOf(&mTitle),
-					"director.name": reflect.ValueOf(&dName),
+				Bindings: map[string]any{
+					"movie.title":   &mTitle,
+					"director.name": &dName,
 				},
 			})
 		})
@@ -356,9 +355,9 @@ func TestMatch(t *testing.T) {
 		OPTIONAL MATCH (a)-[r:DIRECTED]->()
 		RETURN a.name, r
 		`,
-				Bindings: map[string]reflect.Value{
-					"a.name": reflect.ValueOf(&a.Name),
-					"r":      reflect.ValueOf(&r),
+				Bindings: map[string]any{
+					"a.name": &a.Name,
+					"r":      &r,
 				},
 			})
 		})
@@ -385,8 +384,8 @@ func TestMatch(t *testing.T) {
 		OPTIONAL MATCH (a)-->(x)
 		RETURN x
 		`,
-				Bindings: map[string]reflect.Value{
-					"x": reflect.ValueOf(&x),
+				Bindings: map[string]any{
+					"x": &x,
 				},
 			})
 		})
@@ -414,9 +413,9 @@ func TestMatch(t *testing.T) {
 		OPTIONAL MATCH (a)-->(x)
 		RETURN x, x.name
 		`,
-				Bindings: map[string]reflect.Value{
-					"x":      reflect.ValueOf(&x),
-					"x.name": reflect.ValueOf(&name),
+				Bindings: map[string]any{
+					"x":      &x,
+					"x.name": &name,
 				},
 			})
 		})
@@ -444,10 +443,10 @@ func TestMatch(t *testing.T) {
 		OPTIONAL MATCH (x)-[r:ACTED_IN]->(a)
 		RETURN a.title, x.name, type(r)
 		`,
-				Bindings: map[string]reflect.Value{
-					"a.title": reflect.ValueOf(&a.Title),
-					"type(r)": reflect.ValueOf(&typeR),
-					"x.name":  reflect.ValueOf(&name),
+				Bindings: map[string]any{
+					"a.title": &a.Title,
+					"type(r)": &typeR,
+					"x.name":  &name,
 				},
 			})
 		})

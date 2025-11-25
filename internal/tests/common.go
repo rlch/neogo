@@ -3,7 +3,6 @@
 package tests
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 
@@ -24,7 +23,7 @@ func Check(t *testing.T, cy *internal.CompiledCypher, err error, want internal.C
 		want.Parameters = map[string]any{}
 	}
 	if want.Bindings == nil {
-		want.Bindings = map[string]reflect.Value{}
+		want.Bindings = map[string]any{}
 	}
 	require.Equal(t, want.Cypher, cy.Cypher)
 	require.Equal(t, want.Parameters, cy.Parameters)

@@ -3,7 +3,6 @@ package internal
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -25,37 +24,19 @@ func (c *cypher) Params() map[string]any {
 	return c.parameters
 }
 
-func (c *cypher) Bindings() map[string]reflect.Value {
+func (c *cypher) Bindings() map[string]any {
 	return c.bindings
 }
 
-func (c *cypher) Names() map[reflect.Value]string {
-	if c.bindings == nil {
-		return nil
-	}
-	names := make(map[reflect.Value]string, len(c.bindings))
-	for name, value := range c.bindings {
-		names[value] = name
-	}
-	return names
+func (c *cypher) Names() map[uintptr]string {
+	return c.names
 }
 
 type CompiledCypher struct {
 	Cypher     string
 	Parameters map[string]any
-	Bindings   map[string]reflect.Value
+	Bindings   map[string]any // name -> pointer to user's binding target
 	IsWrite    bool
-}
-
-func (c *CompiledCypher) Names() map[reflect.Value]string {
-	if c.Bindings == nil {
-		return nil
-	}
-	names := make(map[reflect.Value]string, len(c.Bindings))
-	for name, value := range c.Bindings {
-		names[value] = name
-	}
-	return names
 }
 
 var (
@@ -147,7 +128,9 @@ func (cy *cypher) writeNode(m *member) {
 			}
 			if m.where != nil {
 				cy.WriteRune(' ')
-				m.where.Identifier = m.identifier
+				// Use the name (m.expr) as the identifier for property lookup in WHERE.
+				// This handles non-pointer identifiers like Person{} which can't be looked up by address.
+				m.where.Identifier = m.expr
 				cy.writeWhereClause(m.where, true)
 			}
 			cy.WriteString(")")
@@ -209,7 +192,9 @@ func (cy *cypher) writeRelationship(m *member, rs *rsPatternPart) {
 				panic(errUnresolvedProps)
 			}
 			if m.where != nil {
-				m.where.Identifier = m.identifier
+				// Use the name (m.expr) as the identifier for property lookup in WHERE.
+				// This handles non-pointer identifiers which can't be looked up by address.
+				m.where.Identifier = m.expr
 				prevBuilder := cy.Builder
 				cy.Builder = &strings.Builder{}
 				cy.WriteRune(' ')
@@ -669,7 +654,7 @@ func (cy *cypher) writeProjectionBodyClause(clause string, parent *Scope, vars .
 				continue
 			}
 			delete(cy.bindings, name)
-			delete(cy.names, v)
+			delete(cy.names, ptrAddr(v))
 		}
 	})
 }

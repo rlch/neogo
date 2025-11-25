@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/rlch/neogo/db"
@@ -27,9 +26,9 @@ func TestUnwind(t *testing.T) {
 			Parameters: map[string]any{
 				"v1": 2,
 			},
-			Bindings: map[string]reflect.Value{
-				"x": reflect.ValueOf(&x),
-				"y": reflect.ValueOf(&y),
+			Bindings: map[string]any{
+				"x": &x,
+				"y": &y,
 			},
 		})
 	})
@@ -50,8 +49,8 @@ func TestUnwind(t *testing.T) {
 					WITH DISTINCT x
 					RETURN collect(x) AS setOfVals
 					`,
-			Bindings: map[string]reflect.Value{
-				"setOfVals": reflect.ValueOf(&setOfVals),
+			Bindings: map[string]any{
+				"setOfVals": &setOfVals,
 			},
 		})
 	})
@@ -73,8 +72,8 @@ func TestUnwind(t *testing.T) {
 					UNWIND (a + b) AS x
 					RETURN x
 					`,
-			Bindings: map[string]reflect.Value{
-				"x": reflect.ValueOf(&x),
+			Bindings: map[string]any{
+				"x": &x,
 			},
 		})
 	})
@@ -95,8 +94,8 @@ func TestUnwind(t *testing.T) {
 					UNWIND x AS y
 					RETURN y
 					`,
-			Bindings: map[string]reflect.Value{
-				"y": reflect.ValueOf(&y),
+			Bindings: map[string]any{
+				"y": &y,
 			},
 		})
 	})
@@ -112,7 +111,7 @@ func TestUnwind(t *testing.T) {
 					UNWIND [] AS empty
 					RETURN 'literal_that_is_not_returned'
 					`,
-			Bindings: map[string]reflect.Value{},
+			Bindings: map[string]any{},
 		})
 	})
 
@@ -127,7 +126,7 @@ func TestUnwind(t *testing.T) {
 					UNWIND null AS x
 					RETURN x, 'some_literal'
 					`,
-			Bindings: map[string]reflect.Value{},
+			Bindings: map[string]any{},
 		})
 	})
 
@@ -183,8 +182,8 @@ func TestUnwind(t *testing.T) {
 					RETURN e.id AS x
 					ORDER BY x
 					`,
-			Bindings: map[string]reflect.Value{
-				"x": reflect.ValueOf(&e.ID),
+			Bindings: map[string]any{
+				"x": &e.ID,
 			},
 			Parameters: map[string]any{
 				"events": &events,

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"reflect"
 	"regexp"
 	"strings"
 	"text/template"
@@ -284,7 +283,7 @@ func (c *CypherRunner) Compile() (*CompiledCypher, error) {
 	out := c.String()
 	out = strings.TrimRight(out, "\n")
 	if !c.isReturn {
-		c.bindings = map[string]reflect.Value{}
+		c.bindings = map[string]any{}
 	}
 	cy := &CompiledCypher{
 		Cypher:     out,
@@ -331,7 +330,7 @@ Bindings:
 	err = t.Execute(os.Stdout, struct {
 		Cypher     string
 		Parameters map[string]any
-		Bindings   map[string]reflect.Value
+		Bindings   map[string]any
 		IsWrite    bool
 	}{
 		Cypher:     c.String(),
