@@ -27,13 +27,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Entity System
 
 - **Node**: Base struct for Neo4J nodes with ID, labels via struct tags
-- **Relationship**: Base struct for Neo4J relationships with type via struct tags  
+- **Relationship**: Base struct for Neo4J relationships with type via struct tags
 - **Abstract**: Interface for nodes with multiple concrete implementations
 - **Registry**: Manages mappings between abstract interfaces and concrete types
 
 ## Development Commands
 
 ### Testing
+
 ```bash
 # Run all tests
 go test ./...
@@ -49,6 +50,7 @@ go test ./internal/tests/match_test.go
 ```
 
 ### Building
+
 ```bash
 # Build the module
 go build ./...
@@ -58,6 +60,7 @@ go build -o neogo
 ```
 
 ### Linting & Formatting
+
 ```bash
 # Format code
 go fmt ./...
@@ -88,3 +91,13 @@ go vet ./...
 - Requires Go 1.22+
 - Heavily tested with full coverage of Neo4J documentation examples
 - API is experimental and subject to change before v1.0
+
+## Codec System (internal/codec)
+
+Handles encoding/decoding of Go structs to/from Neo4J data. Architecture optimized following goccy/go-json patterns.
+
+## Communication Guidelines
+
+- Never write throwaway markdown documents
+- Prefer communicating in chat window
+

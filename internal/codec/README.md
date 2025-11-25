@@ -66,7 +66,7 @@ Populate struct fields using unsafe pointers
 - Circular references handled with early cache registration
 
 **Field Information:**
-- `FieldInfo`: Parsed from struct tags (`db:"..."`)
+- `FieldInfo`: Parsed from struct tags (`neo4j:"..."`)
   - `DBName`: Database field name
   - `IsSkip`: Field excluded from serialization
   - `IsEmbed`: Embedded struct flattened into parent
@@ -83,13 +83,13 @@ Populate struct fields using unsafe pointers
 ### Embedded Struct Handling
 ```go
 type Address struct {
-    Street string `db:"street"`
-    City   string `db:"city"`
+    Street string `neo4j:"street"`
+    City   string `neo4j:"city"`
 }
 
 type Person struct {
-    Name    string `db:"name"`
-    Address Address `db:",embed"`  // Fields merged at top level
+    Name    string `neo4j:"name"`
+    Address Address `neo4j:",embed"`  // Fields merged at top level
 }
 
 // Encoded as: {"name": "...", "street": "...", "city": "..."}
@@ -138,7 +138,7 @@ Decoders handle flexible type conversion:
 - `TestEmptySlices`: Empty slice handling
 - `TestNumericBoundaries`: Max/min int64, float64
 - `TestTypeCoercion`: Int type conversions
-- `TestFieldSkip`: Fields marked `db:"-"`
+- `TestFieldSkip`: Fields marked `neo4j:"-"`
 - `TestDecodeErrors`: Error handling
 - `TestLazyRegistration`: Unregistered types
 
@@ -159,7 +159,7 @@ codec/
 ├── compiler.go             # Type compiler for opcodes/decoders
 ├── decoder.go              # Decoder implementations
 ├── registry.go             # Type registry and API
-├── tags.go                 # Struct tag parsing (db:"...")
+├── tags.go                 # Struct tag parsing (neo4j:"...")
 ├── typeptr.go              # Type information and conversions
 ├── codec_test.go           # Comprehensive test suite
 ├── neo4j_extractor.go      # Neo4j metadata extraction (legacy)
@@ -195,15 +195,11 @@ val, err := registry.EncodeValue([]string{"a", "b"})
    - Registry lazy compilation
    - Neo4j type decoders
 
-2. **Tag system unification**: Move to `neo4j:` tags only
-   - Remove `db:` tag support
-   - Keep `json:` as fallback
+2. **Custom codec support**: `neo4j:"codec:mycodec"` tag option
 
-3. **Custom codec support**: `db:"codec:mycodec"` tag option
+3. **Map encoding**: Support `map[string]T` encoding
 
-4. **Map encoding**: Support `map[string]T` encoding
-
-5. **Performance benchmarks**: Compare with standard JSON
+4. **Performance benchmarks**: Compare with standard JSON
 
 ## References
 
