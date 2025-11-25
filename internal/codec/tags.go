@@ -8,19 +8,19 @@ import (
 // FieldInfo contains parsed information about a struct field
 type FieldInfo struct {
 	Name     string    // Go field name
-	DBName   string    // Database field name (from db tag or derived)
+	DBName   string    // Database field name (from neo4j tag or derived)
 	Meta     FieldMeta // Pre-computed field metadata
-	Options  []string  // Additional options from db tag
-	IsSkip   bool      // Field should be skipped (db:"-")
+	Options  []string  // Additional options from neo4j tag
+	IsSkip   bool      // Field should be skipped (neo4j:"-")
 	IsCustom bool      // Has custom codec
 	IsEmbed  bool      // Embedded struct
 	Codec    string    // Name of custom codec
 }
 
-// parseDBTag parses a db struct tag
-// Format: `db:"field_name,option1,option2:value,option3"`
+// parseNeo4jTag parses a neo4j struct tag
+// Format: `neo4j:"field_name,option1,option2:value,option3"`
 // Returns field name and options
-func parseDBTag(tag string) (string, []string) {
+func parseNeo4jTag(tag string) (string, []string) {
 	if tag == "" {
 		return "", nil
 	}
@@ -55,12 +55,12 @@ func parseFieldInfo(field reflect.StructField) *FieldInfo {
 		Meta: extractFieldMeta(field),
 	}
 
-	// Parse db tag
-	dbTag := field.Tag.Get("db")
-	dbName, options := parseDBTag(dbTag)
+	// Parse neo4j tag
+	neo4jTag := field.Tag.Get("neo4j")
+	dbName, options := parseNeo4jTag(neo4jTag)
 
 	if dbName == "" {
-		// If no db tag, use field name converted to snake_case
+		// If no neo4j tag, use field name converted to snake_case
 		dbName = toSnakeCase(field.Name)
 	}
 
@@ -78,6 +78,14 @@ func parseFieldInfo(field reflect.StructField) *FieldInfo {
 			info.IsCustom = true
 			info.Codec = strings.TrimPrefix(option, "codec:")
 		}
+	}
+
+	// Anonymous (embedded) struct fields should be treated as embedded
+	// even without explicit ",embed" tag. This handles cases like:
+	//   type Human struct { BaseOrganism `neo4j:"Human"` }
+	// where the tag specifies a Neo4j label but the field is still embedded in Go.
+	if field.Anonymous && UnwindType(field.Type).Kind() == reflect.Struct {
+		info.IsEmbed = true
 	}
 
 	return info
