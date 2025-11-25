@@ -92,7 +92,7 @@ func (r *Registry) BindValue(from any, to reflect.Value) error {
 			fromDepth := r.computeSliceDepthRuntime(from)
 			toDepth := computeDepth(toInnerT)
 			if fromDepth != toDepth {
-				return r.bindSliceDepthMismatch(from, to, toT, fromDepth, toDepth)
+				return r.bindSliceDepthMismatch(from, to, fromDepth, toDepth)
 			}
 			// Check if element type is abstract - needs special handling
 			elemT := toInnerT.Elem()
@@ -248,19 +248,18 @@ func (r *Registry) computeSliceDepthRuntime(from any) int {
 }
 
 // bindSliceDepthMismatch handles cases where source and target slice depths differ
-func (r *Registry) bindSliceDepthMismatch(from any, to reflect.Value, toT reflect.Type, fromDepth, toDepth int) error {
+func (r *Registry) bindSliceDepthMismatch(from any, to reflect.Value, fromDepth, toDepth int) error {
 	if to.Kind() == reflect.Ptr {
 		to = to.Elem()
 	}
 	if to.Kind() != reflect.Slice {
 		return errors.New("cannot bind slice to non-slice type")
 	}
-	toT = to.Type()
 
 	if fromDepth+1 == toDepth {
 		// Single record wrapping: from is one level shallower
 		// e.g., []Person -> [][]Person (wrap as single result set)
-		to.Set(reflect.MakeSlice(toT, 1, 1))
+		to.Set(reflect.MakeSlice(to.Type(), 1, 1))
 		return r.BindValue(from, to.Index(0))
 	}
 
