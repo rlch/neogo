@@ -77,7 +77,9 @@ func (r *Registry) ExtractRelationshipType(rel any) string {
 	return n.Reltype
 }
 
-func extractJSONFieldName(field reflect.StructField) (string, bool) {
+// extractNeo4jFieldName extracts the Neo4j property name from a struct field tag.
+// Returns the property name and true if the field should be mapped to a Neo4j property.
+func extractNeo4jFieldName(field reflect.StructField) (string, bool) {
 	// Anonymous (embedded) fields are for labels/inheritance, not properties
 	if field.Anonymous {
 		return "", false

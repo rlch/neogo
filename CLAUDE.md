@@ -94,7 +94,7 @@ go vet ./...
 
 ## Codec System (internal/codec)
 
-Handles encoding/decoding of Go structs to/from Neo4J data. Architecture optimized following goccy/go-json patterns.
+Handles encoding/decoding of Go structs to/from Neo4J data. Zero-reflection hot path architecture.
 
 ## Communication Guidelines
 

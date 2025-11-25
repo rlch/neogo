@@ -70,10 +70,10 @@ func (r *CodecRegistry) walkStructFields(typ reflect.Type, val reflect.Value, me
 		field := typ.Field(i)
 		fieldVal := val.Field(i)
 
-		// Extract field name mapping from db or json tags (only for non-anonymous fields)
+		// Extract field name mapping from neo4j tags (only for non-anonymous fields)
 		if !field.Anonymous {
-			if dbName, ok := r.extractFieldName(field); ok {
-				meta.FieldsToProps[field.Name] = dbName
+			if propName, ok := r.extractFieldName(field); ok {
+				meta.FieldsToProps[field.Name] = propName
 			}
 		}
 
@@ -83,12 +83,8 @@ func (r *CodecRegistry) walkStructFields(typ reflect.Type, val reflect.Value, me
 			shouldRecurse = r.handleAnonymousField(field, meta, postpendLabels)
 		}
 
-		// Parse DB or Neo4j tags (support both formats)
-		var tag string
-		var hasTag bool
-		if tag, hasTag = field.Tag.Lookup("db"); !hasTag || tag == "" {
-			tag, hasTag = field.Tag.Lookup("neo4j")
-		}
+		// Parse neo4j tag
+		tag, hasTag := field.Tag.Lookup("neo4j")
 		if !hasTag || tag == "" {
 			// If no neo4j tag but should recurse, continue recursion
 			if shouldRecurse {

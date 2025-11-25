@@ -43,9 +43,9 @@ See the following resources to get started with `neogo`:
 type Person struct {
 	neogo.Node `neo4j:"Person"`
 
-	Name    string `json:"name"`
-	Surname string `json:"surname"`
-	Age     int    `json:"age"`
+	Name    string `neo4j:"name"`
+	Surname string `neo4j:"surname"`
+	Age     int    `neo4j:"age"`
 }
 
 func main() {

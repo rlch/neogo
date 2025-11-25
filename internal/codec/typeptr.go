@@ -225,7 +225,7 @@ func ExtractFieldMeta(field reflect.StructField) FieldMeta {
 type TypeInfo struct {
 	Name           string                    // Type name
 	Fields         map[string]*FieldMeta     // field name -> metadata
-	FieldsToProps  map[string]string         // Go field name -> JSON property name
+	FieldsToProps  map[string]string         // Go field name -> Neo4j property name
 	Neo4jRelations map[string]*Neo4jRelation // field name -> neo4j relation info
 	IsNode         bool
 	IsRelationship bool

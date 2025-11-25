@@ -17,7 +17,7 @@ EncodeStruct() → Iterate Opcodes
     ↓
 EncodeAny() → Execute Opcode
     ↓
-map[string]any (JSON-compatible output)
+map[string]any (Neo4j-compatible output)
 ```
 
 **Key Components:**
@@ -199,7 +199,7 @@ val, err := registry.EncodeValue([]string{"a", "b"})
 
 3. **Map encoding**: Support `map[string]T` encoding
 
-4. **Performance benchmarks**: Compare with standard JSON
+4. **Performance benchmarks**: Compare with reflection-based approaches
 
 ## References
 

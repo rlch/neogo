@@ -302,7 +302,7 @@ func (s *Scope) bindFields(strct reflect.Value, memberName string) {
 	if err := codec.WalkStruct(
 		strct,
 		func(i int, typ reflect.StructField, val reflect.Value) (bool, error) {
-			accessor, ok := extractJSONFieldName(typ)
+			accessor, ok := extractNeo4jFieldName(typ)
 			if !ok {
 				return true, nil
 			}
@@ -535,7 +535,7 @@ func identifierToProps(identifier reflect.Value, qualifier string) Props {
 			continue
 		}
 		fT := innerT.Field(i)
-		name, ok := extractJSONFieldName(fT)
+		name, ok := extractNeo4jFieldName(fT)
 		if !ok {
 			if fT.Anonymous {
 				innerProps := identifierToProps(f, qualifier)

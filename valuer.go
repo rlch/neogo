@@ -7,7 +7,7 @@ import (
 
 // Valuer allows arbitrary types to be marshalled into and unmarshalled from
 // Neo4J data types. This allows any type (as oppposed to stdlib types, [INode],
-// [IAbstract], [IRelationship], and structs with json tags) to be used with
+// [IAbstract], [IRelationship], and structs with neo4j tags) to be used with
 // [neogo]. The valid Neo4J data types are defined by [neo4j.RecordValue].
 //
 // For example, here we define a custom type MyString that marshals to and
