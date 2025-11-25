@@ -171,7 +171,7 @@ func ExampleDriver_readSession() {
 func ExampleDriver_writeSession() {
 	// Skip this example - requires complex Neo4j transaction behavior that's hard to mock
 	return
-
+	//nolint:govet // unreachable code is intentional - this is example code that's skipped
 	ctx := context.Background()
 	// Always use mock for examples to avoid connection dependencies
 	m := NewMock()

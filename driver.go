@@ -42,7 +42,7 @@ func New(
 	d := driver{
 		db:                   neo4j,
 		causalConsistencyKey: cfg.CausalConsistencyKey,
-		sessionSemaphore:     semaphore.NewWeighted(int64(cfg.Config.MaxConnectionPoolSize)),
+		sessionSemaphore:     semaphore.NewWeighted(int64(cfg.MaxConnectionPoolSize)),
 	}
 
 	// Initialize registry

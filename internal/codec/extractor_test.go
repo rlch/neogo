@@ -98,10 +98,11 @@ func TestReflectionHelpers(t *testing.T) {
 		val := reflect.ValueOf(s)
 
 		fieldCount := 0
-		codec.WalkStruct(val, func(i int, field reflect.StructField, fval reflect.Value) (bool, error) {
+		err := codec.WalkStruct(val, func(i int, field reflect.StructField, fval reflect.Value) (bool, error) {
 			fieldCount++
 			return false, nil
 		})
+		assert.NoError(t, err)
 
 		// Should have walked through some fields
 		assert.Greater(t, fieldCount, 0)
@@ -112,10 +113,11 @@ func TestReflectionHelpers(t *testing.T) {
 		val := reflect.ValueOf(s)
 
 		fieldCount := 0
-		codec.WalkStruct(val, func(i int, field reflect.StructField, fval reflect.Value) (bool, error) {
+		err := codec.WalkStruct(val, func(i int, field reflect.StructField, fval reflect.Value) (bool, error) {
 			fieldCount++
 			return false, nil
 		})
+		assert.NoError(t, err)
 
 		assert.Greater(t, fieldCount, 0)
 	})

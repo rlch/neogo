@@ -98,7 +98,6 @@ var (
 	rAbstract      = reflect.TypeOf((*IAbstract)(nil)).Elem()
 	rINode         = reflect.TypeOf((*INode)(nil)).Elem()
 	rIRelationship = reflect.TypeOf((*IRelationship)(nil)).Elem()
-	rNode          = reflect.TypeOf(Node{})
 )
 
 func NewRegistry() *Registry {
@@ -193,13 +192,14 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 				relField := relStruct.Field(i)
 				tag := relField.Tag.Get("neo4j")
 
-				if tag == "startNode" {
+				switch tag {
+				case "startNode":
 					// This field represents the start node
 					relReg.StartNode = NodeTarget{
 						Field:          relField.Name,
 						RegisteredNode: registered, // The current node being processed
 					}
-				} else if tag == "endNode" {
+				case "endNode":
 					// This field represents the end node
 					relReg.EndNode = NodeTarget{
 						Field:          relField.Name,
