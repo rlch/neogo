@@ -59,9 +59,26 @@ func parseFieldInfo(field reflect.StructField) *FieldInfo {
 		Meta: extractFieldMeta(field),
 	}
 
+	// Skip One[R] and Many[R] relationship wrapper types - they're not serializable fields
+	fieldTypeName := field.Type.Name()
+	if strings.HasPrefix(fieldTypeName, "One[") || strings.HasPrefix(fieldTypeName, "Many[") {
+		info.IsSkip = true
+		return info
+	}
+
 	// Parse neo4j tag
 	neo4jTag := field.Tag.Get("neo4j")
 	dbName, options := parseNeo4jTag(neo4jTag)
+	
+	// Skip relationship direction markers (shorthand syntax)
+	if strings.HasSuffix(dbName, ">") || strings.HasPrefix(dbName, "<") {
+		info.IsSkip = true
+		return info
+	}
+	if dbName == "->" || dbName == "<-" {
+		info.IsSkip = true
+		return info
+	}
 
 	if dbName == "" {
 		// If no neo4j tag, use field name converted to snake_case

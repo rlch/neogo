@@ -24,10 +24,11 @@ func (m *Neo4jNodeMetadata) Type() reflect.Type {
 // Neo4jRelationshipTarget represents a relationship field in a node
 type Neo4jRelationshipTarget struct {
 	FieldName string
-	Many      bool // true for slice relationships
-	Dir       bool // true = ->, false = <-
-	RelType   string
-	NodeType  reflect.Type // Target node type
+	Many      bool         // true for Many[R], false for One[R]
+	Dir       bool         // true = ->, false = <-
+	RelType   string       // Relationship type (e.g., "ACTED_IN")
+	NodeType  reflect.Type // Target type (node or relationship struct) - use registry to get labels
+	Required  bool         // true if relationship is required (existence constraint)
 }
 
 // ExtractNeo4jNodeMeta extracts Neo4j node metadata from a struct.
@@ -195,10 +196,17 @@ func (r *CodecRegistry) walkStructFieldsWithSchema(typ reflect.Type, val reflect
 	return nil
 }
 
-// extractFieldName extracts field name from neo4j tag
+// extractFieldName extracts field name from neo4j tag for property fields.
+// Returns false for relationship fields (One[R]/Many[R]) and special markers.
 func (r *CodecRegistry) extractFieldName(field reflect.StructField) (string, bool) {
 	neo4jTag := field.Tag.Get("neo4j")
 	if neo4jTag == "" || neo4jTag == "-" {
+		return "", false
+	}
+
+	// Skip One[R] and Many[R] relationship fields - they're not properties
+	fieldTypeName := field.Type.Name()
+	if strings.HasPrefix(fieldTypeName, "One[") || strings.HasPrefix(fieldTypeName, "Many[") {
 		return "", false
 	}
 
@@ -206,9 +214,14 @@ func (r *CodecRegistry) extractFieldName(field reflect.StructField) (string, boo
 	if len(parts) > 0 {
 		fieldName := strings.TrimSpace(parts[0])
 		// Skip relationship direction markers and other special values
-		if fieldName != "" && fieldName != "->" && fieldName != "<-" && fieldName != "startNode" && fieldName != "endNode" {
-			return fieldName, true
+		if fieldName == "" || fieldName == "->" || fieldName == "<-" || fieldName == "startNode" || fieldName == "endNode" {
+			return "", false
 		}
+		// Skip shorthand relationship syntax (e.g., "FRIEND>", "<FOLLOWS")
+		if strings.HasSuffix(fieldName, ">") || strings.HasPrefix(fieldName, "<") {
+			return "", false
+		}
+		return fieldName, true
 	}
 
 	return "", false
@@ -294,10 +307,12 @@ func (r *CodecRegistry) parseNeo4jTag(field reflect.StructField, neo4jTag string
 	}
 
 	ident := parts[0]
+	options := parts[1:] // Additional options like "required"
+
 	switch ident {
 	case "<-", "->":
 		// Direct relationship definition
-		return r.registerRelationshipField(field, ident == "->", "", meta, typeName)
+		return r.registerRelationshipField(field, ident == "->", "", options, meta, typeName)
 
 	case "":
 		return fmt.Errorf("field has empty neo4j label / direction: %s.%s", typeName, field.Name)
@@ -309,9 +324,9 @@ func (r *CodecRegistry) parseNeo4jTag(field reflect.StructField, neo4jTag string
 		} else {
 			// Check if it's a shorthand relationship (starts with < or ends with >)
 			if ident[0] == '<' {
-				return r.registerRelationshipField(field, false, ident[1:], meta, typeName)
+				return r.registerRelationshipField(field, false, ident[1:], options, meta, typeName)
 			} else if ident[len(ident)-1] == '>' {
-				return r.registerRelationshipField(field, true, ident[:len(ident)-1], meta, typeName)
+				return r.registerRelationshipField(field, true, ident[:len(ident)-1], options, meta, typeName)
 			}
 			// If it's not a relationship and not anonymous, it's ignored
 			// Labels only come from anonymous embedded structs
@@ -321,23 +336,52 @@ func (r *CodecRegistry) parseNeo4jTag(field reflect.StructField, neo4jTag string
 	return nil
 }
 
-// registerRelationshipField registers a relationship field
-func (r *CodecRegistry) registerRelationshipField(field reflect.StructField, dir bool, shorthand string, meta *Neo4jNodeMetadata, typeName string) error {
+// registerRelationshipField registers a relationship field.
+// Only One[R] and Many[R] wrapper types are supported for relationship definitions.
+func (r *CodecRegistry) registerRelationshipField(field reflect.StructField, dir bool, shorthand string, options []string, meta *Neo4jNodeMetadata, typeName string) error {
 	relType := field.Type
 	isMany := false
+	isRequired := false
 
-	// Check if it's a slice type (many relationship)
-	if relType.Kind() == reflect.Slice {
-		relType = relType.Elem() // Get *T from []*T
-		isMany = true
+	// Parse options
+	for _, opt := range options {
+		opt = strings.TrimSpace(opt)
+		if opt == "required" {
+			isRequired = true
+		}
 	}
 
-	if relType.Kind() != reflect.Ptr {
-		return fmt.Errorf("invalid relationship for field %s.%s. Got %s", typeName, field.Name, relType)
+	// Only One[R] and Many[R] zero-cost wrapper types are supported
+	if relType.Kind() != reflect.Struct {
+		return fmt.Errorf("relationship field %s.%s must use One[R] or Many[R] type, got %s", typeName, field.Name, relType)
 	}
 
-	// Determine relationship type and target node type
+	relWrapperName := relType.Name()
+	if !strings.HasPrefix(relWrapperName, "One[") && !strings.HasPrefix(relWrapperName, "Many[") {
+		return fmt.Errorf("relationship field %s.%s must use One[R] or Many[R] type, got %s", typeName, field.Name, relWrapperName)
+	}
+
+	isMany = strings.HasPrefix(relWrapperName, "Many[")
+
+	// Extract the type parameter R from One[R] or Many[R]
+	// The type parameter is accessible via the struct's first field type
+	if relType.NumField() == 0 {
+		return fmt.Errorf("relationship field %s.%s has invalid One/Many type structure", typeName, field.Name)
+	}
+
+	// The phantom field is [0]R, so its element type is R
+	phantomField := relType.Field(0)
+	if phantomField.Type.Kind() != reflect.Array || phantomField.Type.Len() != 0 {
+		return fmt.Errorf("relationship field %s.%s has invalid One/Many type structure", typeName, field.Name)
+	}
+
+	innerType := phantomField.Type.Elem()
+	// Wrap in pointer for consistency with existing code
+	relType = reflect.PointerTo(innerType)
+
+	// Determine relationship type
 	var relTypeName string
+
 	if shorthand != "" {
 		relTypeName = shorthand
 	} else {
@@ -347,9 +391,9 @@ func (r *CodecRegistry) registerRelationshipField(field reflect.StructField, dir
 			// Look for neo4j tag on the relationship struct itself
 			if relStructType.Kind() == reflect.Struct {
 				for i := 0; i < relStructType.NumField(); i++ {
-					field := relStructType.Field(i)
-					if field.Anonymous && field.Type.Name() == "Relationship" {
-						if tagVal := field.Tag.Get("neo4j"); tagVal != "" {
+					f := relStructType.Field(i)
+					if f.Anonymous && f.Type.Name() == "Relationship" {
+						if tagVal := f.Tag.Get("neo4j"); tagVal != "" {
 							relTypeName = tagVal
 							break
 						}
@@ -376,6 +420,7 @@ func (r *CodecRegistry) registerRelationshipField(field reflect.StructField, dir
 		Dir:       dir,
 		RelType:   relTypeName,
 		NodeType:  relType,
+		Required:  isRequired,
 	}
 
 	return nil

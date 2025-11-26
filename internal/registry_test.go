@@ -41,10 +41,10 @@ type (
 	nodeWithRelationship struct {
 		Node `neo4j:"Simple"`
 
-		Forward   *simpleRelationship   `neo4j:"->"`
-		Backward  *simpleRelationship   `neo4j:"<-"`
-		Forwards  []*simpleRelationship `neo4j:"->"`
-		Backwards []*simpleRelationship `neo4j:"<-"`
+		Forward   One[simpleRelationship]  `neo4j:"->"`
+		Backward  One[simpleRelationship]  `neo4j:"<-"`
+		Forwards  Many[simpleRelationship] `neo4j:"->"`
+		Backwards Many[simpleRelationship] `neo4j:"<-"`
 	}
 	simpleRelationship struct {
 		Relationship `neo4j:"SIMPLE"`
@@ -55,10 +55,21 @@ type (
 	}
 	shorthandRelationshipNode struct {
 		simpleNode
-		Forward   *simpleNode   `neo4j:"->"`
-		Backward  *simpleNode   `neo4j:"<-"`
-		Forwards  []*simpleNode `neo4j:"->"`
-		Backwards []*simpleNode `neo4j:"<-"`
+		Forward   One[simpleNode]  `neo4j:"FRIEND>"`
+		Backward  One[simpleNode]  `neo4j:"<FOLLOWS"`
+		Forwards  Many[simpleNode] `neo4j:"LIKES>"`
+		Backwards Many[simpleNode] `neo4j:"<LIKED_BY"`
+	}
+
+	// Test required relationships
+	nodeWithRequiredRelationship struct {
+		Node `neo4j:"RequiredTest"`
+
+		// Required relationship - must exist
+		Manager One[simpleNode] `neo4j:"REPORTS_TO>,required"`
+
+		// Optional relationship (default)
+		Mentor One[simpleNode] `neo4j:"MENTORED_BY>"`
 	}
 )
 
@@ -128,7 +139,7 @@ func TestRegisterNode(t *testing.T) {
 			},
 		},
 		{
-			name: "registers a node with shorthand relationship syntax",
+			name: "registers a node with shorthand relationship syntax using One/Many",
 			node: &shorthandRelationshipNode{},
 			want: nodeExpectation{
 				name:          "shorthandRelationshipNode",
@@ -205,22 +216,62 @@ func TestRegisterNodeShorthand(t *testing.T) {
 	r := NewRegistry()
 	reg := r.RegisterNode(&shorthandRelationshipNode{})
 
-	// Verify shorthand relationships
+	// Verify shorthand relationships using One/Many with named relationship types
 	require.NotNil(reg.Relationships)
 	require.Len(reg.Relationships, 4)
 
-	// Forward shorthand
+	// Forward shorthand (One[simpleNode] with "FRIEND>")
 	fwd := reg.Relationships["Forward"]
 	require.NotNil(fwd)
 	require.True(fwd.Dir)
 	require.False(fwd.Many)
-	require.Equal("SHORTHAND", fwd.Rel.Reltype)
+	require.Equal("FRIEND", fwd.Rel.Reltype)
 
-	// Backward shorthand
+	// Backward shorthand (One[simpleNode] with "<FOLLOWS")
 	bwd := reg.Relationships["Backward"]
 	require.NotNil(bwd)
 	require.False(bwd.Dir)
 	require.False(bwd.Many)
+	require.Equal("FOLLOWS", bwd.Rel.Reltype)
+
+	// Forwards shorthand (Many[simpleNode] with "LIKES>")
+	fwds := reg.Relationships["Forwards"]
+	require.NotNil(fwds)
+	require.True(fwds.Dir)
+	require.True(fwds.Many)
+	require.Equal("LIKES", fwds.Rel.Reltype)
+
+	// Backwards shorthand (Many[simpleNode] with "<LIKED_BY")
+	bwds := reg.Relationships["Backwards"]
+	require.NotNil(bwds)
+	require.False(bwds.Dir)
+	require.True(bwds.Many)
+	require.Equal("LIKED_BY", bwds.Rel.Reltype)
+}
+
+func TestRegisterNodeWithRequiredRelationship(t *testing.T) {
+	require := require.New(t)
+	r := NewRegistry()
+
+	r.RegisterTypes(&simpleNode{}, &nodeWithRequiredRelationship{})
+
+	nodeMeta := r.Codecs().GetNodeMeta("nodeWithRequiredRelationship")
+	require.NotNil(nodeMeta)
+	require.Len(nodeMeta.Relationships, 2)
+
+	// Manager is required
+	manager := nodeMeta.Relationships["Manager"]
+	require.NotNil(manager)
+	require.True(manager.Required)
+	require.Equal("REPORTS_TO", manager.RelType)
+	require.True(manager.Dir)
+	require.False(manager.Many)
+
+	// Mentor is optional (default)
+	mentor := nodeMeta.Relationships["Mentor"]
+	require.NotNil(mentor)
+	require.False(mentor.Required)
+	require.Equal("MENTORED_BY", mentor.RelType)
 }
 
 func TestGet(t *testing.T) {
