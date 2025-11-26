@@ -1,0 +1,111 @@
+---
+title: Declaring Models
+description: Overview of how to declare nodes and relationships in neogo
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+# Declaring Models
+
+neogo maps Go structs to Neo4j nodes and relationships. By embedding base types and using struct tags, you define the schema for your graph data with full type safety.
+
+<Aside type="caution" title="Experimental API">
+  The neogo API is still in an experimental phase. Expect minor changes until v1.0.
+</Aside>
+
+## Core Concepts
+
+<CardGrid>
+  <Card title="Nodes" icon="document">
+    Graph entities represented as Go structs embedding `neogo.Node`. Each node has labels and properties.
+    
+    [Learn about Nodes →](/models/nodes/)
+  </Card>
+  <Card title="Relationships" icon="right-arrow">
+    Connections between nodes, represented as Go structs embedding `neogo.Relationship`. Each has a type and optional properties.
+    
+    [Learn about Relationships →](/models/relationships/)
+  </Card>
+  <Card title="Abstract Nodes" icon="puzzle">
+    Interface-based polymorphism allowing multiple concrete node types to share behavior and be queried together.
+    
+    [Learn about Abstract Nodes →](/models/abstract-nodes/)
+  </Card>
+  <Card title="Labels & Types" icon="setting">
+    Multiple labels via struct embedding and relationship type naming conventions.
+    
+    [Learn about Labels →](/models/labels/)
+  </Card>
+</CardGrid>
+
+## Quick Example
+
+```go
+package main
+
+import "github.com/rlch/neogo"
+
+// Node: A Person in the graph
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    Name string `neo4j:"name"`
+    Age  int    `neo4j:"age"`
+}
+
+// Relationship: A friendship connection
+type FriendsWith struct {
+    neogo.Relationship `neo4j:"FRIENDS_WITH"`
+
+    Since int `neo4j:"since"`
+}
+```
+
+## How It Works
+
+1. **Embed Base Types**: Use `neogo.Node` for nodes, `neogo.Relationship` for relationships
+2. **Add Labels/Types**: The `neo4j` tag on the embedded type defines the Neo4j label or relationship type
+3. **Define Properties**: Struct fields with `neo4j` tags become properties in the database
+4. **Register Types**: Types are registered when creating the driver with `neogo.WithTypes()`
+
+```go
+driver, err := neogo.New(
+    "neo4j://localhost:7687",
+    neo4j.BasicAuth("neo4j", "password", ""),
+    neogo.WithTypes(
+        &Person{},
+        &FriendsWith{},
+    ),
+)
+```
+
+## Conventions
+
+| Go | Neo4j |
+|---|---|
+| Struct with `neogo.Node` | Node |
+| Struct with `neogo.Relationship` | Relationship |
+| `neo4j` tag on embedded type | Label / Relationship Type |
+| `neo4j` tag on fields | Property name |
+| Field without tag | Property with snake_case name |
+| Field with `neo4j:"-"` | Ignored |
+
+## Type Mapping
+
+| Go Type | Neo4j Type |
+|---------|------------|
+| `string` | String |
+| `int`, `int64`, etc. | Integer |
+| `float64` | Float |
+| `bool` | Boolean |
+| `[]byte` | ByteArray |
+| `time.Time` | DateTime |
+| `[]T` | List |
+| `map[string]any` | Map |
+| `*T` (pointer) | Nullable property |
+
+## Next Steps
+
+- [Nodes](/models/nodes/) - Deep dive into node definitions
+- [Relationships](/models/relationships/) - Learn about relationship types
+- [Field Tags](/models/tags/) - Complete tag reference

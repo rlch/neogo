@@ -1,0 +1,71 @@
+---
+title: Introduction
+description: Learn about neogo - a Golang ORM for Neo4j
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Introduction to neogo
+
+**neogo** is a Golang ORM for Neo4j that creates idiomatic and fluent Cypher queries. It was designed to make writing Cypher as simple as possible, providing a safety-net and reducing boilerplate by leveraging canonical representations of nodes and relationships as Go structs.
+
+<Aside type="caution" title="Experimental API">
+  The neogo API is still in an experimental phase. Expect minor changes and additions until the first release.
+</Aside>
+
+## Why neogo?
+
+Working with Neo4j in Go traditionally involves writing raw Cypher queries as strings, manually handling parameter binding, and writing boilerplate code to marshal/unmarshal data between Go structs and Neo4j types. neogo solves these problems by providing:
+
+- **Hands-free marshalling/unmarshalling** between Go and Neo4j
+- **No dynamic property, variable, or label qualification** necessary
+- **Readable, interoperable Cypher queries** that you can inspect and debug
+- **Abstract nodes** with multiple concrete implementers
+- **Automatic & explicit variable qualification**, node/relationship label patterns, and parameter injection
+- **Heavily tested** with full coverage of Neo4j docs examples
+
+## Key Concepts
+
+### Nodes
+
+In neogo, Neo4j nodes are represented as Go structs that embed `neogo.Node`:
+
+```go
+type Person struct {
+	neogo.Node `neo4j:"Person"`
+
+	Name    string `neo4j:"name"`
+	Surname string `neo4j:"surname"`
+	Age     int    `neo4j:"age"`
+}
+```
+
+### Relationships
+
+Relationships are similarly defined by embedding `neogo.Relationship`:
+
+```go
+type FriendsWith struct {
+	neogo.Relationship `neo4j:"FRIENDS_WITH"`
+
+	Since time.Time `neo4j:"since"`
+}
+```
+
+### Fluent Query Building
+
+neogo provides a chainable API for building Cypher queries:
+
+```go
+err := d.Exec().
+	Match(db.Node(&person)).
+	Where(db.Cond(&person.Age, ">", 18)).
+	Return(&person).
+	Run(ctx)
+```
+
+## Next Steps
+
+- [Installation](/getting-started/installation/) - Add neogo to your project
+- [Quick Start](/getting-started/quick-start/) - Build your first query
+- [Defining Nodes](/guides/nodes/) - Learn about node definitions in depth

@@ -1,0 +1,280 @@
+---
+title: Labels & Types
+description: Understanding Neo4j labels for nodes and types for relationships
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Neo4j uses **labels** for nodes and **types** for relationships. neogo provides flexible ways to define and work with both.
+
+## Node Labels
+
+### Single Label
+
+The simplest case is a node with one label:
+
+```go
+type Person struct {
+    Name string `json:"name"`
+}
+
+func (p *Person) Node() *db.NodePattern {
+    return db.Node("Person")
+}
+```
+
+Generated Cypher:
+```cypher
+(:Person)
+```
+
+### Multiple Labels
+
+Nodes can have multiple labels for categorization:
+
+```go
+type Employee struct {
+    Name       string `json:"name"`
+    Department string `json:"department"`
+}
+
+func (e *Employee) Node() *db.NodePattern {
+    return db.Node("Person", "Employee", "Active")
+}
+```
+
+Generated Cypher:
+```cypher
+(:Person:Employee:Active)
+```
+
+### Dynamic Labels
+
+For labels determined at runtime, use `db.Var()`:
+
+```go
+// Label from a string variable
+labelName := "Person"
+cy := c.Match(
+    db.Node(db.Var(labelName)),
+).Return(db.Lit("count(*)"))
+```
+
+## Label Inheritance with Embedding
+
+Go's struct embedding creates natural label hierarchies:
+
+```go
+// Base type
+type Person struct {
+    Name string `json:"name"`
+    Age  int    `json:"age"`
+}
+
+func (p *Person) Node() *db.NodePattern {
+    return db.Node("Person")
+}
+
+// Employee extends Person
+type Employee struct {
+    Person              // Embedded
+    EmployeeID string `json:"employee_id"`
+    Salary     int    `json:"salary"`
+}
+
+func (e *Employee) Node() *db.NodePattern {
+    return db.Node("Person", "Employee")
+}
+
+// Manager extends Employee
+type Manager struct {
+    Employee              // Embedded
+    Department string `json:"department"`
+}
+
+func (m *Manager) Node() *db.NodePattern {
+    return db.Node("Person", "Employee", "Manager")
+}
+```
+
+This creates a hierarchy where:
+- All `Manager` nodes are also `Employee` and `Person` nodes
+- Querying for `Person` returns all three types
+- Querying for `Employee` returns `Employee` and `Manager` nodes
+
+## Relationship Types
+
+### Single Type
+
+Relationships have exactly one type:
+
+```go
+type Knows struct {
+    Since int `json:"since"`
+}
+
+func (k *Knows) Relationship() *db.RelationshipPattern {
+    return db.Rel("KNOWS")
+}
+```
+
+Generated Cypher:
+```cypher
+-[:KNOWS]->
+```
+
+### Matching Multiple Types
+
+While relationships can only have one type, you can match multiple types in a query:
+
+```go
+var person, other Person
+
+// Match either KNOWS or FRIENDS_WITH
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(db.Var("KNOWS", "FRIENDS_WITH"), db.To, &other),
+    ),
+).Return(&other)
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person)-[:KNOWS|FRIENDS_WITH]->(other:Person)
+RETURN other
+```
+
+<Aside type="caution">
+When matching multiple relationship types, you cannot bind the relationship to a typed struct since the type is ambiguous.
+</Aside>
+
+## Naming Conventions
+
+### Labels (Nodes)
+
+| Convention | Example | Use Case |
+|------------|---------|----------|
+| PascalCase | `Person`, `UserAccount` | Standard node labels |
+| SCREAMING_SNAKE | `PERSON`, `USER_ACCOUNT` | Legacy systems |
+
+### Types (Relationships)
+
+| Convention | Example | Use Case |
+|------------|---------|----------|
+| SCREAMING_SNAKE | `KNOWS`, `WORKS_AT` | Standard (recommended) |
+| PascalCase | `Knows`, `WorksAt` | Alternative style |
+
+<Aside type="tip">
+Neo4j convention uses `PascalCase` for labels and `SCREAMING_SNAKE_CASE` for relationship types. neogo works with any naming convention.
+</Aside>
+
+## Working with Labels in Queries
+
+### Setting Labels
+
+Add labels to existing nodes:
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person),
+).Where(
+    db.Cond(&person, "name", db.Equal, "Alice"),
+).SetLabels(&person, "Premium", "Verified")
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person)
+WHERE person.name = "Alice"
+SET person:Premium:Verified
+```
+
+### Removing Labels
+
+Remove labels from nodes:
+
+```go
+cy := c.Match(
+    db.Node(&person),
+).RemoveLabels(&person, "Temporary")
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person)
+REMOVE person:Temporary
+```
+
+### Checking Labels
+
+Use `labels()` function:
+
+```go
+cy := c.Match(
+    db.Node(&person),
+).Return(
+    &person,
+    db.Lit("labels(person)"),
+)
+```
+
+## Label and Type Patterns
+
+### Anonymous with Label Only
+
+When you only care about the label, not the data:
+
+```go
+// Count all Person nodes
+cy := c.Match(
+    db.Node(db.Var("Person")),
+).Return(db.Lit("count(*)"))
+```
+
+### Any Node or Relationship
+
+Match any node regardless of label:
+
+```go
+// Match any node connected to person
+var person Person
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(nil, db.To, db.Node(nil)),  // Any relationship to any node
+    ),
+).Return(db.Lit("count(*)"))
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person)-->()
+RETURN count(*)
+```
+
+## Best Practices
+
+### Label Design
+
+1. **Use labels for entity types**: `Person`, `Company`, `Product`
+2. **Use labels for roles**: `Admin`, `Guest`, `Premium`
+3. **Use labels for state**: `Active`, `Archived`, `Pending`
+4. **Keep labels orthogonal**: Don't create overlapping hierarchies
+
+### Relationship Type Design
+
+1. **Use verb phrases**: `KNOWS`, `WORKS_AT`, `PURCHASED`
+2. **Be specific**: `MANAGES` vs generic `RELATED_TO`
+3. **Consider direction**: Name types so direction is natural
+
+```go
+// Good: Direction makes semantic sense
+// (person)-[:WORKS_AT]->(company)
+// (manager)-[:MANAGES]->(employee)
+
+// Avoid: Direction is unclear
+// (person)-[:EMPLOYMENT]->(company)  // Which direction?
+```

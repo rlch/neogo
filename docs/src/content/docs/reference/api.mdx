@@ -1,0 +1,398 @@
+---
+title: API Reference
+description: Complete API reference for neogo
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# API Reference
+
+This page provides a comprehensive reference for neogo's public API.
+
+<Aside>
+  For detailed Go documentation, see the [pkg.go.dev reference](https://pkg.go.dev/github.com/rlch/neogo).
+</Aside>
+
+## Core Types
+
+### neogo.Node
+
+Embedded in structs to define Neo4j nodes.
+
+```go
+type Node struct {
+    ID string
+}
+
+// Methods
+func (n *Node) GenerateID()  // Generates a UUID for the node
+```
+
+### neogo.Relationship
+
+Embedded in structs to define Neo4j relationships.
+
+```go
+type Relationship struct {
+    // Internal fields
+}
+```
+
+### neogo.INode
+
+Interface that all node types implement.
+
+```go
+type INode interface {
+    GetID() string
+    SetID(string)
+}
+```
+
+## Client
+
+### neogo.New
+
+Creates a new neogo client from a Neo4j driver.
+
+```go
+func New(driver neo4j.DriverWithContext) *Client
+```
+
+### Client.Exec
+
+Starts a new query builder.
+
+```go
+func (c *Client) Exec() *QueryBuilder
+```
+
+### Client.WithTx
+
+Returns a client that uses a specific transaction.
+
+```go
+func (c *Client) WithTx(tx neo4j.ManagedTransaction) *Client
+```
+
+## Query Builder
+
+### Pattern Functions
+
+#### db.Node
+
+Creates a node pattern.
+
+```go
+func Node(node INode) Pattern
+```
+
+#### db.Path
+
+Creates a path pattern with nodes and relationships.
+
+```go
+func Path(start INode, segments ...PathSegment) Pattern
+```
+
+#### db.To
+
+Creates an outgoing relationship segment.
+
+```go
+func To(rel IRelationship, node INode) PathSegment
+```
+
+#### db.From
+
+Creates an incoming relationship segment.
+
+```go
+func From(rel IRelationship, node INode) PathSegment
+```
+
+#### db.Either
+
+Creates an undirected relationship segment.
+
+```go
+func Either(rel IRelationship, node INode) PathSegment
+```
+
+### Clause Methods
+
+#### Match
+
+```go
+func (q *QueryBuilder) Match(patterns ...Pattern) *QueryBuilder
+```
+
+#### OptionalMatch
+
+```go
+func (q *QueryBuilder) OptionalMatch(patterns ...Pattern) *QueryBuilder
+```
+
+#### Where
+
+```go
+func (q *QueryBuilder) Where(conditions ...Condition) *QueryBuilder
+```
+
+#### Create
+
+```go
+func (q *QueryBuilder) Create(patterns ...Pattern) *QueryBuilder
+```
+
+#### Merge
+
+```go
+func (q *QueryBuilder) Merge(pattern Pattern) *QueryBuilder
+```
+
+#### Set
+
+```go
+func (q *QueryBuilder) Set(setters ...Setter) *QueryBuilder
+```
+
+#### Remove
+
+```go
+func (q *QueryBuilder) Remove(removers ...Remover) *QueryBuilder
+```
+
+#### Delete
+
+```go
+func (q *QueryBuilder) Delete(items ...any) *QueryBuilder
+```
+
+#### DetachDelete
+
+```go
+func (q *QueryBuilder) DetachDelete(items ...any) *QueryBuilder
+```
+
+#### Return
+
+```go
+func (q *QueryBuilder) Return(items ...any) *QueryBuilder
+```
+
+#### ReturnDistinct
+
+```go
+func (q *QueryBuilder) ReturnDistinct(items ...any) *QueryBuilder
+```
+
+#### OrderBy
+
+```go
+func (q *QueryBuilder) OrderBy(orders ...Order) *QueryBuilder
+```
+
+#### Skip
+
+```go
+func (q *QueryBuilder) Skip(n int) *QueryBuilder
+```
+
+#### Limit
+
+```go
+func (q *QueryBuilder) Limit(n int) *QueryBuilder
+```
+
+#### With
+
+```go
+func (q *QueryBuilder) With(items ...any) *QueryBuilder
+```
+
+#### Unwind
+
+```go
+func (q *QueryBuilder) Unwind(list any, as string) *QueryBuilder
+```
+
+### Condition Functions
+
+#### db.Cond
+
+Creates a comparison condition.
+
+```go
+func Cond(prop any, operator string, value any) Condition
+```
+
+#### db.And
+
+Combines conditions with AND.
+
+```go
+func And(conditions ...Condition) Condition
+```
+
+#### db.Or
+
+Combines conditions with OR.
+
+```go
+func Or(conditions ...Condition) Condition
+```
+
+#### db.Not
+
+Negates a condition.
+
+```go
+func Not(condition Condition) Condition
+```
+
+#### db.IsNull
+
+Checks if a property is null.
+
+```go
+func IsNull(prop any) Condition
+```
+
+#### db.IsNotNull
+
+Checks if a property is not null.
+
+```go
+func IsNotNull(prop any) Condition
+```
+
+### Setter Functions
+
+#### db.SetPropValue
+
+Sets a property to a literal value.
+
+```go
+func SetPropValue(prop any, value any) Setter
+```
+
+#### db.SetProp
+
+Sets a property to another property's value.
+
+```go
+func SetProp(prop any, fromProp any) Setter
+```
+
+#### db.SetProps
+
+Replaces all properties.
+
+```go
+func SetProps(node any, props any) Setter
+```
+
+#### db.SetPropsAdd
+
+Adds/updates properties (merge).
+
+```go
+func SetPropsAdd(node any, props any) Setter
+```
+
+### Order Functions
+
+#### db.Asc
+
+Orders ascending.
+
+```go
+func Asc(prop any) Order
+```
+
+#### db.Desc
+
+Orders descending.
+
+```go
+func Desc(prop any) Order
+```
+
+### Aggregation Functions
+
+```go
+func Count(item any) Aggregation
+func Sum(prop any) Aggregation
+func Avg(prop any) Aggregation
+func Min(prop any) Aggregation
+func Max(prop any) Aggregation
+func Collect(item any) Aggregation
+```
+
+### Utility Functions
+
+#### db.Qual
+
+Qualifies a variable for result collection.
+
+```go
+func Qual(dest any, varName string) any
+```
+
+### Execution Methods
+
+#### Run
+
+Executes the query.
+
+```go
+func (q *QueryBuilder) Run(ctx context.Context) error
+```
+
+#### Print
+
+Prints the generated Cypher (for debugging).
+
+```go
+func (q *QueryBuilder) Print() *QueryBuilder
+```
+
+#### Cypher
+
+Returns the generated Cypher and parameters.
+
+```go
+func (q *QueryBuilder) Cypher() (string, map[string]any)
+```
+
+## Struct Tags
+
+### neo4j Tag
+
+Used on embedded `neogo.Node` or `neogo.Relationship` to specify labels/types:
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`        // Single label
+}
+
+type Actor struct {
+    neogo.Node `neo4j:"Person,Actor"`  // Multiple labels
+}
+
+type FriendsWith struct {
+    neogo.Relationship `neo4j:"FRIENDS_WITH"`
+}
+```
+
+Used on fields to specify property names:
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    Name      string    `neo4j:"name"`
+    BirthDate time.Time `neo4j:"birth_date"`
+}
+```

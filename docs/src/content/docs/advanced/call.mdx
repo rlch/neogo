@@ -1,0 +1,256 @@
+---
+title: CALL & Procedures
+description: Calling stored procedures and functions in neogo
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# CALL & Procedures
+
+Neo4j provides built-in procedures and allows custom procedures. Use `Call()` to invoke them and `Yield()` to capture their output.
+
+## Basic Procedure Call
+
+### Call with YIELD
+
+```go
+var name string
+var signature string
+
+err := client.Exec().
+    Call("dbms.procedures()").
+    Yield(
+        db.Qual(&name, "name"),
+        db.Qual(&signature, "signature"),
+    ).
+    Return(&name, &signature).
+    Run(ctx)
+```
+
+```cypher
+CALL dbms.procedures()
+YIELD name, signature
+RETURN name, signature
+```
+
+### Call without YIELD
+
+Some procedures don't return results:
+
+```go
+err := client.Exec().
+    Call("db.createLabel('NewLabel')").
+    Run(ctx)
+```
+
+```cypher
+CALL db.createLabel('NewLabel')
+```
+
+## Common Built-in Procedures
+
+### Database Information
+
+```go
+// List all labels
+var labels []string
+err := client.Exec().
+    Call("db.labels()").
+    Yield(db.Qual(&labels, "label")).
+    Return(&labels).
+    Run(ctx)
+
+// List all relationship types
+var types []string
+err := client.Exec().
+    Call("db.relationshipTypes()").
+    Yield(db.Qual(&types, "relationshipType")).
+    Return(&types).
+    Run(ctx)
+
+// List all property keys
+var keys []string
+err := client.Exec().
+    Call("db.propertyKeys()").
+    Yield(db.Qual(&keys, "propertyKey")).
+    Return(&keys).
+    Run(ctx)
+```
+
+### Schema Information
+
+```go
+// Show indexes
+var indexName, state string
+err := client.Exec().
+    Call("db.indexes()").
+    Yield(
+        db.Qual(&indexName, "name"),
+        db.Qual(&state, "state"),
+    ).
+    Return(&indexName, &state).
+    Run(ctx)
+
+// Show constraints
+var constraintName, description string
+err := client.Exec().
+    Call("db.constraints()").
+    Yield(
+        db.Qual(&constraintName, "name"),
+        db.Qual(&description, "description"),
+    ).
+    Return(&constraintName, &description).
+    Run(ctx)
+```
+
+## SHOW Commands
+
+For schema introspection, you can also use `Show()`:
+
+```go
+var indexName, indexType string
+
+err := client.Exec().
+    Show("INDEXES").
+    Yield(
+        db.Qual(&indexName, "name"),
+        db.Qual(&indexType, "type"),
+    ).
+    Return(&indexName, &indexType).
+    Run(ctx)
+```
+
+```cypher
+SHOW INDEXES
+YIELD name, type
+RETURN name, type
+```
+
+### Show with Filtering
+
+```go
+err := client.Exec().
+    Show("INDEXES").
+    Yield("name", "type", "labelsOrTypes").
+    Where("type = 'RANGE'").
+    Return("name", "labelsOrTypes").
+    Run(ctx)
+```
+
+```cypher
+SHOW INDEXES
+YIELD name, type, labelsOrTypes
+WHERE type = 'RANGE'
+RETURN name, labelsOrTypes
+```
+
+## Procedures with Parameters
+
+Some procedures accept parameters:
+
+```go
+// Full-text search (if you have a fulltext index)
+var node any
+var score float64
+
+err := client.Exec().
+    Call("db.index.fulltext.queryNodes('myIndex', 'search term')").
+    Yield(
+        db.Qual(&node, "node"),
+        db.Qual(&score, "score"),
+    ).
+    Return(&node, &score).
+    Run(ctx)
+```
+
+## APOC Procedures
+
+If you have APOC installed, you can call its procedures:
+
+```go
+// APOC: Create UUID
+var uuid string
+err := client.Exec().
+    Call("apoc.create.uuid()").
+    Yield(db.Qual(&uuid, "uuid")).
+    Return(&uuid).
+    Run(ctx)
+
+// APOC: Load JSON
+err := client.Exec().
+    Call("apoc.load.json('https://api.example.com/data')").
+    Yield("value").
+    Unwind("value.items", "item").
+    Create(db.Node(db.Var("n", db.Props{"data": "item"}))).
+    Run(ctx)
+```
+
+## Combining with Other Clauses
+
+Procedures can be part of larger queries:
+
+```go
+var person Person
+
+err := client.Exec().
+    Match(db.Node(db.Qual(&person, "p"))).
+    Call("apoc.create.uuid()").
+    Yield(db.Qual("uuid", "newId")).
+    Set(db.SetPropValue(&person.ID, "newId")).
+    Return(&person).
+    Run(ctx)
+```
+
+```cypher
+MATCH (p:Person)
+CALL apoc.create.uuid()
+YIELD uuid AS newId
+SET p.id = newId
+RETURN p
+```
+
+<Aside type="note">
+  Available procedures depend on your Neo4j version and installed plugins. Use `CALL dbms.procedures()` to see what's available.
+</Aside>
+
+## Subqueries with CALL
+
+For complex operations, use `Subquery()`:
+
+```go
+var person Person
+var friendCount int64
+
+err := client.Exec().
+    Match(db.Node(db.Qual(&person, "p"))).
+    Subquery(func(c builder.Builder) builder.Runner {
+        return c.
+            With(&person).
+            Match(db.Node(&person).To(nil, db.Var("friend"))).
+            Return(db.Qual(&friendCount, "count(friend)", db.Name("cnt")))
+    }).
+    Return(&person.Name, &friendCount).
+    Run(ctx)
+```
+
+```cypher
+MATCH (p:Person)
+CALL {
+  WITH p
+  MATCH (p)-->(friend)
+  RETURN count(friend) AS cnt
+}
+RETURN p.name, cnt
+```
+
+## Best Practices
+
+1. **Check procedure availability**: Not all procedures are available in all Neo4j editions
+2. **Use YIELD selectively**: Only yield columns you need for better performance
+3. **Combine with WHERE**: Filter procedure results early
+4. **Handle errors**: Procedures can fail - wrap calls appropriately
+
+## See Also
+
+- [WITH & Subqueries](/advanced/with/) - Using WITH for data passing
+- [Schema Migration](/schema/migration/) - Using schema procedures

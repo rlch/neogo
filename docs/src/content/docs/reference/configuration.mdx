@@ -1,0 +1,319 @@
+---
+title: Configuration
+description: Configuring the neogo driver and connections
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Configuration
+
+neogo wraps the official Neo4j Go driver and provides additional configuration options for ORM features.
+
+## Creating a Driver
+
+```go
+import (
+    "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+    "github.com/rlch/neogo"
+)
+
+driver, err := neogo.New(
+    "neo4j://localhost:7687",           // Connection URI
+    neo4j.BasicAuth("neo4j", "pass", ""), // Authentication
+    // ...configurers
+)
+if err != nil {
+    log.Fatal(err)
+}
+defer driver.DB().Close(ctx)
+```
+
+## Connection URIs
+
+| Scheme | Description |
+|--------|-------------|
+| `neo4j://` | Unsecured connection (default port 7687) |
+| `neo4j+s://` | Secured connection with full certificate verification |
+| `neo4j+ssc://` | Secured connection, accepts self-signed certificates |
+| `bolt://` | Direct Bolt connection (no routing) |
+| `bolt+s://` | Direct Bolt with TLS |
+| `bolt+ssc://` | Direct Bolt with self-signed TLS |
+
+```go
+// Local development
+driver, _ := neogo.New("neo4j://localhost:7687", auth)
+
+// Aura or secured cluster
+driver, _ := neogo.New("neo4j+s://xxxx.databases.neo4j.io", auth)
+
+// Self-signed certificate
+driver, _ := neogo.New("neo4j+ssc://internal-server:7687", auth)
+```
+
+## Authentication
+
+### Basic Authentication
+
+```go
+auth := neo4j.BasicAuth("username", "password", "")
+driver, _ := neogo.New(uri, auth)
+```
+
+### Kerberos Authentication
+
+```go
+auth := neo4j.KerberosAuth("ticket")
+driver, _ := neogo.New(uri, auth)
+```
+
+### Bearer Token (SSO)
+
+```go
+auth := neo4j.BearerAuth("token")
+driver, _ := neogo.New(uri, auth)
+```
+
+### Custom Authentication
+
+```go
+auth := neo4j.CustomAuth("principal", "credentials", "realm", "scheme", nil)
+driver, _ := neogo.New(uri, auth)
+```
+
+### No Authentication
+
+```go
+auth := neo4j.NoAuth()
+driver, _ := neogo.New(uri, auth)
+```
+
+## Type Registration
+
+Register your node and relationship types for proper schema handling:
+
+```go
+driver, _ := neogo.New(
+    uri,
+    auth,
+    neogo.WithTypes(
+        &Person{},
+        &Movie{},
+        &ActedIn{},
+        &Directed{},
+    ),
+)
+```
+
+<Aside type="tip">
+  Registering types is required for auto migration and enables better type inference during queries.
+</Aside>
+
+## Connection Pool Settings
+
+neogo passes configuration to the underlying Neo4j driver:
+
+```go
+import "github.com/neo4j/neo4j-go-driver/v5/neo4j/config"
+
+driver, _ := neogo.New(
+    uri,
+    auth,
+    func(c *neogo.Config) {
+        // Maximum number of connections in the pool
+        c.MaxConnectionPoolSize = 100
+
+        // Maximum time a connection can live
+        c.MaxConnectionLifetime = 1 * time.Hour
+
+        // Timeout for acquiring a connection from the pool
+        c.ConnectionAcquisitionTimeout = 1 * time.Minute
+
+        // Socket connection timeout
+        c.SocketConnectTimeout = 5 * time.Second
+
+        // Enable TCP keepalive
+        c.SocketKeepalive = true
+
+        // Transaction retry timeout
+        c.MaxTransactionRetryTime = 30 * time.Second
+    },
+)
+```
+
+### Default Values
+
+| Setting | Default |
+|---------|---------|
+| `MaxConnectionPoolSize` | 100 |
+| `MaxConnectionLifetime` | 1 hour |
+| `ConnectionAcquisitionTimeout` | 1 minute |
+| `SocketConnectTimeout` | 5 seconds |
+| `SocketKeepalive` | true |
+| `MaxTransactionRetryTime` | 30 seconds |
+
+## Causal Consistency
+
+Enable causal consistency for read-your-writes guarantees across sessions:
+
+```go
+driver, _ := neogo.New(
+    uri,
+    auth,
+    neogo.WithCausalConsistency(func(ctx context.Context) string {
+        // Return a key that identifies the causal chain
+        // e.g., user ID or request ID
+        if userID := ctx.Value("userID"); userID != nil {
+            return userID.(string)
+        }
+        return ""
+    }),
+)
+```
+
+<Aside>
+  Causal consistency ensures that if you write data in one session, subsequent reads in a new session will see that data (when using the same key).
+</Aside>
+
+## Session Configuration
+
+Configure individual sessions:
+
+```go
+// Read session with specific database
+session := driver.ReadSession(ctx, func(c *neo4j.SessionConfig) {
+    c.DatabaseName = "mydb"
+})
+defer session.Close(ctx)
+
+// Write session with bookmarks
+session := driver.WriteSession(ctx, func(c *neo4j.SessionConfig) {
+    c.DatabaseName = "mydb"
+    c.Bookmarks = neo4j.BookmarksFromRawValues("bookmark1", "bookmark2")
+})
+```
+
+## Exec Configuration
+
+Configure per-query execution:
+
+```go
+// With session config
+err := driver.Exec(
+    neogo.WithSessionConfig(func(c *neo4j.SessionConfig) {
+        c.DatabaseName = "mydb"
+    }),
+).Match(db.Node(&person)).Return(&person).Run(ctx)
+
+// With transaction config
+err := driver.Exec(
+    neogo.WithTxConfig(func(c *neo4j.TransactionConfig) {
+        c.Timeout = 30 * time.Second
+        c.Metadata = map[string]any{"app": "myapp"}
+    }),
+).Match(db.Node(&person)).Return(&person).Run(ctx)
+
+// Both
+err := driver.Exec(
+    neogo.WithSessionConfig(func(c *neo4j.SessionConfig) {
+        c.DatabaseName = "mydb"
+    }),
+    neogo.WithTxConfig(func(c *neo4j.TransactionConfig) {
+        c.Timeout = 60 * time.Second
+    }),
+).Create(db.Node(&person)).Run(ctx)
+```
+
+## Driver Interface
+
+The `Driver` interface provides these methods:
+
+```go
+type Driver interface {
+    // Registry returns the type registry
+    Registry() *internal.Registry
+
+    // DB returns the underlying neo4j driver
+    DB() neo4j.DriverWithContext
+
+    // Schema returns the schema interface
+    Schema() Schema
+
+    // ReadSession creates a read-only session
+    ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) readSession
+
+    // WriteSession creates a read-write session
+    WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) writeSession
+
+    // Exec creates a query builder with auto session management
+    Exec(configurers ...func(*execConfig)) Query
+}
+```
+
+## Accessing the Neo4j Driver
+
+For advanced operations, access the underlying driver:
+
+```go
+neo4jDriver := driver.DB()
+
+// Verify connectivity
+err := neo4jDriver.VerifyConnectivity(ctx)
+
+// Get server info
+info, err := neo4jDriver.GetServerInfo(ctx)
+fmt.Printf("Neo4j %s at %s\n", info.ProtocolVersion(), info.Address())
+```
+
+## Multi-Database Support
+
+Neo4j 4.0+ supports multiple databases:
+
+```go
+// Default database
+err := driver.Exec().Match(db.Node(&n)).Return(&n).Run(ctx)
+
+// Specific database
+err := driver.Exec(
+    neogo.WithSessionConfig(func(c *neo4j.SessionConfig) {
+        c.DatabaseName = "analytics"
+    }),
+).Match(db.Node(&n)).Return(&n).Run(ctx)
+```
+
+## Environment-Based Configuration
+
+Example of environment-based configuration:
+
+```go
+func NewDriver() (neogo.Driver, error) {
+    uri := os.Getenv("NEO4J_URI")
+    if uri == "" {
+        uri = "neo4j://localhost:7687"
+    }
+
+    user := os.Getenv("NEO4J_USER")
+    pass := os.Getenv("NEO4J_PASSWORD")
+
+    auth := neo4j.BasicAuth(user, pass, "")
+
+    poolSize := 100
+    if ps := os.Getenv("NEO4J_POOL_SIZE"); ps != "" {
+        poolSize, _ = strconv.Atoi(ps)
+    }
+
+    return neogo.New(
+        uri,
+        auth,
+        neogo.WithTypes(&Person{}, &Movie{}),
+        func(c *neogo.Config) {
+            c.MaxConnectionPoolSize = poolSize
+        },
+    )
+}
+```
+
+## See Also
+
+- [Sessions](/transactions/sessions/) - Session management
+- [Transactions](/transactions/transactions/) - Transaction handling
+- [Auto Migration](/schema/migration/) - Schema management

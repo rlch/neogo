@@ -1,0 +1,269 @@
+---
+title: Indexes
+description: Creating and managing Neo4j indexes with neogo
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+# Indexes
+
+Indexes improve query performance by allowing Neo4j to find nodes and relationships quickly without scanning the entire graph. neogo supports all Neo4j index types through struct tags.
+
+## Index Types
+
+Neo4j supports several index types:
+
+| Type | Use Case | Tag |
+|------|----------|-----|
+| **RANGE** | General purpose, equality, ranges | `index` |
+| **TEXT** | String prefix, suffix, contains | `text` |
+| **POINT** | Geospatial queries | `point` |
+| **FULLTEXT** | Full-text search with scoring | `fulltext` |
+| **VECTOR** | Vector similarity search (AI/ML) | `vector` |
+
+## Basic Index
+
+Create a range index on a property:
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    Name string `neo4j:"name,index"`
+    Age  int    `neo4j:"age,index"`
+}
+```
+
+This generates:
+```cypher
+CREATE INDEX idx_Person_name IF NOT EXISTS FOR (n:Person) ON (n.name)
+CREATE INDEX idx_Person_age IF NOT EXISTS FOR (n:Person) ON (n.age)
+```
+
+## Named Indexes
+
+Specify a custom index name:
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    Email string `neo4j:"email,index:person_email_idx"`
+}
+```
+
+```cypher
+CREATE INDEX person_email_idx IF NOT EXISTS FOR (n:Person) ON (n.email)
+```
+
+## Text Indexes
+
+For string pattern matching (STARTS WITH, ENDS WITH, CONTAINS):
+
+```go
+type Article struct {
+    neogo.Node `neo4j:"Article"`
+
+    Title string `neo4j:"title,text"`
+    Slug  string `neo4j:"slug,text:article_slug_text"`
+}
+```
+
+```cypher
+CREATE TEXT INDEX text_Article_title IF NOT EXISTS FOR (n:Article) ON (n.title)
+CREATE TEXT INDEX article_slug_text IF NOT EXISTS FOR (n:Article) ON (n.slug)
+```
+
+<Aside type="tip">
+  Use TEXT indexes when you frequently search with `STARTS WITH`, `ENDS WITH`, or `CONTAINS` operators.
+</Aside>
+
+## Point Indexes
+
+For geospatial data:
+
+```go
+type Location struct {
+    neogo.Node `neo4j:"Location"`
+
+    Coordinates any `neo4j:"coordinates,point"`
+}
+```
+
+```cypher
+CREATE POINT INDEX point_Location_coordinates IF NOT EXISTS FOR (n:Location) ON (n.coordinates)
+```
+
+## Fulltext Indexes
+
+For full-text search with relevance scoring:
+
+```go
+type Document struct {
+    neogo.Node `neo4j:"Document"`
+
+    Title   string `neo4j:"title,fulltext:doc_search"`
+    Content string `neo4j:"content,fulltext:doc_search"`
+}
+```
+
+```cypher
+CREATE FULLTEXT INDEX doc_search IF NOT EXISTS FOR (n:Document) ON EACH [n.title, n.content]
+```
+
+<Aside>
+  Multiple fields with the same fulltext index name are combined into a single composite fulltext index.
+</Aside>
+
+### Querying Fulltext Indexes
+
+```go
+var doc Document
+var score float64
+
+err := client.Exec().
+    Call("db.index.fulltext.queryNodes('doc_search', 'search terms')").
+    Yield(
+        db.Qual(&doc, "node"),
+        db.Qual(&score, "score"),
+    ).
+    Return(&doc, &score).
+    Run(ctx)
+```
+
+## Vector Indexes
+
+For AI/ML vector similarity search (Neo4j 5.11+):
+
+```go
+type Embedding struct {
+    neogo.Node `neo4j:"Embedding"`
+
+    // Vector with 1536 dimensions using cosine similarity
+    Vector []float64 `neo4j:"vector,vector:1536:cosine"`
+}
+```
+
+```cypher
+CREATE VECTOR INDEX vector_Embedding_vector IF NOT EXISTS 
+FOR (n:Embedding) ON (n.vector) 
+OPTIONS {indexConfig: {`vector.dimensions`: 1536, `vector.similarity_function`: 'cosine'}}
+```
+
+### Vector Index Options
+
+```go
+// With explicit name
+Vector []float64 `neo4j:"vector,vector:my_embeddings:1536:cosine"`
+
+// Different similarity functions: cosine, euclidean
+Vector []float64 `neo4j:"vector,vector:1536:euclidean"`
+```
+
+### Querying Vector Indexes
+
+```go
+queryVector := []float64{0.1, 0.2, ...} // Your query vector
+
+var node any
+var score float64
+
+err := client.Exec().
+    Call(fmt.Sprintf(
+        "db.index.vector.queryNodes('my_embeddings', 10, %v)",
+        queryVector,
+    )).
+    Yield(
+        db.Qual(&node, "node"),
+        db.Qual(&score, "score"),
+    ).
+    Return(&node, &score).
+    Run(ctx)
+```
+
+## Composite Indexes
+
+Create indexes on multiple properties using the same name and priority:
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    FirstName string `neo4j:"first_name,index:name_idx,priority:1"`
+    LastName  string `neo4j:"last_name,index:name_idx,priority:2"`
+}
+```
+
+```cypher
+CREATE INDEX name_idx IF NOT EXISTS FOR (n:Person) ON (n.first_name, n.last_name)
+```
+
+<Aside type="note">
+  Properties are ordered by priority (ascending). Lower priority = earlier in the index.
+</Aside>
+
+## Relationship Indexes
+
+Indexes also work on relationships:
+
+```go
+type WorksAt struct {
+    neogo.Relationship `neo4j:"WORKS_AT"`
+
+    Since int    `neo4j:"since,index"`
+    Role  string `neo4j:"role,index:works_at_role_idx"`
+}
+```
+
+```cypher
+CREATE INDEX idx_WORKS_AT_since IF NOT EXISTS FOR ()-[r:WORKS_AT]-() ON (r.since)
+CREATE INDEX works_at_role_idx IF NOT EXISTS FOR ()-[r:WORKS_AT]-() ON (r.role)
+```
+
+## Index Naming Conventions
+
+Auto-generated index names follow these patterns:
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| Range | `idx_{Label}_{property}` | `idx_Person_name` |
+| Text | `text_{Label}_{property}` | `text_Article_title` |
+| Point | `point_{Label}_{property}` | `point_Location_coords` |
+| Fulltext | `fulltext_{Label}_{property}` | `fulltext_Doc_content` |
+| Vector | `vector_{Label}_{property}` | `vector_Embed_vector` |
+
+## Checking Existing Indexes
+
+```go
+indexes, err := driver.Schema().GetIndexes(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, idx := range indexes {
+    fmt.Printf("%s (%s): %v on %v\n", 
+        idx.Name, 
+        idx.Type, 
+        idx.Properties, 
+        idx.LabelsOrTypes,
+    )
+}
+```
+
+## Best Practices
+
+1. **Index frequently queried properties**: Add indexes to properties used in WHERE clauses
+2. **Use appropriate index types**: TEXT for string patterns, POINT for geo, FULLTEXT for search
+3. **Consider composite indexes**: For queries filtering on multiple properties together
+4. **Monitor index usage**: Use `EXPLAIN` to verify indexes are being used
+5. **Don't over-index**: Each index has write overhead; only index what you query
+
+<Aside type="caution">
+  Creating indexes on large databases can take time. Neo4j creates indexes in the background, but queries using those properties may be slow until the index is ONLINE.
+</Aside>
+
+## See Also
+
+- [Auto Migration](/schema/migration/) - Running schema migrations
+- [Constraints](/schema/constraints/) - Unique and other constraints
+- [Struct Tags](/reference/struct-tags/) - Complete tag reference

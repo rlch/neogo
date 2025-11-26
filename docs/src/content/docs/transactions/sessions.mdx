@@ -1,0 +1,293 @@
+---
+title: Sessions
+description: Managing Neo4j sessions and database access with neogo
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Sessions are the primary way to interact with Neo4j. They manage connections, transactions, and query execution.
+
+## Creating Sessions
+
+### Basic Session
+
+```go
+import (
+    "context"
+    "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+)
+
+driver, err := neo4j.NewDriverWithContext(
+    "neo4j://localhost:7687",
+    neo4j.BasicAuth("neo4j", "password", ""),
+)
+if err != nil {
+    return err
+}
+defer driver.Close(ctx)
+
+// Create a session
+session := driver.NewSession(ctx, neo4j.SessionConfig{})
+defer session.Close(ctx)
+```
+
+### Session Configuration
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{
+    // Target database (default: "neo4j")
+    DatabaseName: "mydb",
+    
+    // Access mode
+    AccessMode: neo4j.AccessModeRead, // or AccessModeWrite
+    
+    // Bookmarks for causal consistency
+    Bookmarks: neo4j.BookmarksFromRawValues("bookmark1", "bookmark2"),
+    
+    // Fetch size for result streaming
+    FetchSize: 1000,
+})
+```
+
+## Access Modes
+
+### Read Mode
+
+For queries that don't modify data:
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{
+    AccessMode: neo4j.AccessModeRead,
+})
+
+var person Person
+cy := c.Match(db.Node(&person)).Return(&person)
+results, err := cy.All(ctx, session)
+```
+
+<Aside type="tip">
+Use read mode when possible. It allows Neo4j to route queries to read replicas in a cluster, improving performance.
+</Aside>
+
+### Write Mode
+
+For queries that create, update, or delete data:
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{
+    AccessMode: neo4j.AccessModeWrite,
+})
+
+var person Person
+cy := c.Create(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).Return(&person)
+result, err := cy.Single(ctx, session)
+```
+
+## Auto-Commit Transactions
+
+### Direct Execution
+
+The simplest way to run queries:
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{})
+defer session.Close(ctx)
+
+var person Person
+cy := c.Match(db.Node(&person)).Return(&person)
+
+// Runs in an auto-commit transaction
+results, err := cy.All(ctx, session)
+```
+
+<Aside type="caution">
+Auto-commit transactions cannot be rolled back. Use explicit transactions for operations that need atomicity.
+</Aside>
+
+## Session Lifecycle
+
+### Proper Cleanup
+
+Always close sessions:
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{})
+defer session.Close(ctx) // Important!
+
+// Use session...
+```
+
+### Session Pooling
+
+Sessions are lightweight and should be short-lived:
+
+```go
+func GetPerson(ctx context.Context, driver neo4j.DriverWithContext, name string) (*Person, error) {
+    session := driver.NewSession(ctx, neo4j.SessionConfig{
+        AccessMode: neo4j.AccessModeRead,
+    })
+    defer session.Close(ctx)
+    
+    var person Person
+    cy := c.Match(
+        db.Node(&person, db.Props{"name": name}),
+    ).Return(&person)
+    
+    result, err := cy.Single(ctx, session)
+    if err != nil {
+        return nil, err
+    }
+    return &result.Person, nil
+}
+```
+
+## Multi-Database Support
+
+### Specifying Database
+
+```go
+// Connect to a specific database
+session := driver.NewSession(ctx, neo4j.SessionConfig{
+    DatabaseName: "customers",
+})
+
+// Or for system operations
+systemSession := driver.NewSession(ctx, neo4j.SessionConfig{
+    DatabaseName: "system",
+})
+```
+
+### Default Database
+
+If no database is specified, Neo4j uses the default database (usually "neo4j"):
+
+```go
+// Uses default database
+session := driver.NewSession(ctx, neo4j.SessionConfig{})
+```
+
+## Causal Consistency
+
+### Using Bookmarks
+
+Bookmarks ensure reads see writes from previous transactions:
+
+```go
+// First session - write
+writeSession := driver.NewSession(ctx, neo4j.SessionConfig{
+    AccessMode: neo4j.AccessModeWrite,
+})
+
+_, err := writeSession.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    var person Person
+    return c.Create(
+        db.Node(&person, db.Props{"name": "Alice"}),
+    ).Run(ctx, tx)
+})
+
+bookmarks := writeSession.LastBookmarks()
+writeSession.Close(ctx)
+
+// Second session - read with bookmark
+readSession := driver.NewSession(ctx, neo4j.SessionConfig{
+    AccessMode: neo4j.AccessModeRead,
+    Bookmarks:  bookmarks,
+})
+defer readSession.Close(ctx)
+
+// This read is guaranteed to see the write above
+var person Person
+cy := c.Match(db.Node(&person, db.Props{"name": "Alice"})).Return(&person)
+result, err := cy.Single(ctx, readSession)
+```
+
+### Bookmark Management
+
+```go
+type BookmarkManager struct {
+    bookmarks neo4j.Bookmarks
+    mu        sync.Mutex
+}
+
+func (bm *BookmarkManager) Update(session neo4j.SessionWithContext) {
+    bm.mu.Lock()
+    defer bm.mu.Unlock()
+    bm.bookmarks = neo4j.CombineBookmarks(bm.bookmarks, session.LastBookmarks())
+}
+
+func (bm *BookmarkManager) Get() neo4j.Bookmarks {
+    bm.mu.Lock()
+    defer bm.mu.Unlock()
+    return bm.bookmarks
+}
+```
+
+## Error Handling
+
+### Session Errors
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{})
+defer session.Close(ctx)
+
+results, err := cy.All(ctx, session)
+if err != nil {
+    // Check error type
+    if neo4j.IsNeo4jError(err) {
+        neo4jErr := err.(*neo4j.Neo4jError)
+        switch neo4jErr.Code {
+        case "Neo.ClientError.Security.Unauthorized":
+            return fmt.Errorf("authentication failed")
+        case "Neo.ClientError.Database.DatabaseNotFound":
+            return fmt.Errorf("database not found")
+        default:
+            return fmt.Errorf("neo4j error: %s", neo4jErr.Message)
+        }
+    }
+    return err
+}
+```
+
+## Best Practices
+
+<Aside type="tip" title="Session Guidelines">
+
+1. **Short-lived sessions**: Create sessions per operation or request
+2. **Always close**: Use `defer session.Close(ctx)`
+3. **Use appropriate access mode**: Read mode for queries, write mode for mutations
+4. **Use bookmarks**: For causal consistency in distributed systems
+5. **Handle errors**: Check for specific Neo4j errors
+6. **Specify database**: Be explicit about which database you're using
+
+</Aside>
+
+### HTTP Request Pattern
+
+```go
+func (h *Handler) GetPerson(w http.ResponseWriter, r *http.Request) {
+    ctx := r.Context()
+    
+    session := h.driver.NewSession(ctx, neo4j.SessionConfig{
+        AccessMode:   neo4j.AccessModeRead,
+        DatabaseName: "myapp",
+    })
+    defer session.Close(ctx)
+    
+    name := r.URL.Query().Get("name")
+    
+    var person Person
+    cy := c.Match(
+        db.Node(&person, db.Props{"name": name}),
+    ).Return(&person)
+    
+    result, err := cy.Single(ctx, session)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    
+    json.NewEncoder(w).Encode(result.Person)
+}
+```

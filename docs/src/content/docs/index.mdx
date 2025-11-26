@@ -1,0 +1,120 @@
+---
+title: neogo
+description: A Golang ORM for Neo4j which creates idiomatic & fluent Cypher
+template: splash
+hero:
+  tagline: A type-safe Golang ORM for Neo4j that generates idiomatic Cypher queries.
+  image:
+    file: ../../assets/logo.png
+  actions:
+    - text: Get Started
+      link: /getting-started/introduction/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/rlch/neogo
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Experimental API">
+  The neogo API is still in an experimental phase. Expect minor changes until v1.0.
+</Aside>
+
+## Why neogo?
+
+<CardGrid stagger>
+	<Card title="Type-Safe Queries" icon="approve-check">
+		Write Cypher queries with full Go type safety. Struct fields become properties, embedded types define labels.
+	</Card>
+	<Card title="Zero Boilerplate" icon="rocket">
+		Automatic marshalling between Go structs and Neo4j nodes/relationships. No manual parameter binding.
+	</Card>
+	<Card title="Fluent API" icon="pencil">
+		Chainable methods that mirror Cypher clauses. Generate readable, debuggable queries.
+	</Card>
+	<Card title="Full Cypher Support" icon="puzzle">
+		MATCH, CREATE, MERGE, SET, DELETE, WITH, UNWIND, UNION, and more. Variable-length paths and pattern predicates included.
+	</Card>
+</CardGrid>
+
+## Quick Example
+
+```go
+type Person struct {
+	neogo.Node `neo4j:"Person"`
+
+	Name string `neo4j:"name"`
+	Age  int    `neo4j:"age"`
+}
+
+func main() {
+	driver, _ := neogo.New(
+		"neo4j://localhost:7687",
+		neo4j.BasicAuth("neo4j", "password", ""),
+		neogo.WithTypes(&Person{}),
+	)
+
+	// Query with raw Cypher + type-safe result binding
+	var people []*Person
+	
+	err := driver.Exec().
+		Cypher(`
+			MATCH (p:Person)-[:KNOWS]->(friend:Person)
+			WHERE p.age > $minAge
+			WITH p, count(friend) AS friendCount
+			WHERE friendCount > 5
+		`).
+		Return(db.Qual(&people, "p")).
+		RunWithParams(ctx, map[string]any{
+			"minAge": 21,
+		})
+}
+```
+
+**The pattern:** Write expressive Cypher, bind results to Go types with `db.Qual()`, pass parameters safely with `RunWithParams()`.
+
+## Features
+
+<CardGrid>
+	<Card title="Raw Cypher Queries" icon="rocket">
+		Write expressive Cypher with type-safe result binding. The recommended approach.
+		
+		[Learn more →](/crud/cypher/)
+	</Card>
+	<Card title="Declaring Models" icon="document">
+		Define nodes, relationships, and abstract types with struct tags.
+		
+		[Learn more →](/models/overview/)
+	</Card>
+	<Card title="Fluent Builder" icon="pencil">
+		Build simple queries programmatically when you prefer.
+		
+		[Learn more →](/crud/query/)
+	</Card>
+	<Card title="Schema Management" icon="setting">
+		Auto-migrate indexes and constraints from struct tags.
+		
+		[Learn more →](/schema/migration/)
+	</Card>
+</CardGrid>
+
+## Installation
+
+```bash
+go get github.com/rlch/neogo
+```
+
+```go
+import (
+	"github.com/rlch/neogo"
+	"github.com/rlch/neogo/db"
+)
+```
+
+## Next Steps
+
+- **[Introduction](/getting-started/introduction/)** - Learn the core concepts
+- **[Quick Start](/getting-started/quick-start/)** - Build your first query
+- **[Declaring Models](/models/overview/)** - Define your graph schema

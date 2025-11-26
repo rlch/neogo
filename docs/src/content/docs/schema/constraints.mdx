@@ -1,0 +1,301 @@
+---
+title: Constraints
+description: Creating and managing Neo4j constraints with neogo
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+# Constraints
+
+Constraints enforce data integrity rules in your Neo4j database. neogo supports defining constraints through struct tags that are applied during auto migration.
+
+## Constraint Types
+
+| Type | Description | Tag |
+|------|-------------|-----|
+| **Unique** | Property value must be unique across all nodes/relationships with that label/type | `unique` |
+| **Node Key** | Combination of properties must be unique (composite unique) | `nodeKey:name` |
+| **Not Null** | Property must have a value (cannot be null) | `notNull` |
+
+<Aside type="note">
+  Constraint availability depends on your Neo4j edition. Some constraints require Neo4j Enterprise Edition.
+</Aside>
+
+## Unique Constraints
+
+Ensure a property value is unique across all nodes with a label:
+
+```go
+type User struct {
+    neogo.Node `neo4j:"User"`
+
+    Email    string `neo4j:"email,unique"`
+    Username string `neo4j:"username,unique"`
+}
+```
+
+This generates:
+```cypher
+CREATE CONSTRAINT unique_User_email IF NOT EXISTS FOR (n:User) REQUIRE n.email IS UNIQUE
+CREATE CONSTRAINT unique_User_username IF NOT EXISTS FOR (n:User) REQUIRE n.username IS UNIQUE
+```
+
+### Named Unique Constraints
+
+```go
+type User struct {
+    neogo.Node `neo4j:"User"`
+
+    Email string `neo4j:"email,unique:user_email_unique"`
+}
+```
+
+```cypher
+CREATE CONSTRAINT user_email_unique IF NOT EXISTS FOR (n:User) REQUIRE n.email IS UNIQUE
+```
+
+<Aside type="tip">
+  Unique constraints automatically create an index on the property, so you don't need to add both `unique` and `index` tags.
+</Aside>
+
+## Node Key Constraints
+
+A node key constraint ensures that a combination of properties is unique and all properties are present (not null):
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    FirstName string `neo4j:"first_name,nodeKey:person_name_key,priority:1"`
+    LastName  string `neo4j:"last_name,nodeKey:person_name_key,priority:2"`
+    BirthDate string `neo4j:"birth_date,nodeKey:person_name_key,priority:3"`
+}
+```
+
+```cypher
+CREATE CONSTRAINT person_name_key IF NOT EXISTS 
+FOR (n:Person) 
+REQUIRE (n.first_name, n.last_name, n.birth_date) IS NODE KEY
+```
+
+<Aside>
+  Node keys require Neo4j Enterprise Edition. Properties are ordered by priority (ascending).
+</Aside>
+
+## Not Null Constraints
+
+Ensure a property always has a value:
+
+```go
+type Product struct {
+    neogo.Node `neo4j:"Product"`
+
+    Name  string  `neo4j:"name,notNull"`
+    SKU   string  `neo4j:"sku,notNull:product_sku_required"`
+    Price float64 `neo4j:"price,notNull"`
+}
+```
+
+```cypher
+CREATE CONSTRAINT notnull_Product_name IF NOT EXISTS FOR (n:Product) REQUIRE n.name IS NOT NULL
+CREATE CONSTRAINT product_sku_required IF NOT EXISTS FOR (n:Product) REQUIRE n.sku IS NOT NULL
+CREATE CONSTRAINT notnull_Product_price IF NOT EXISTS FOR (n:Product) REQUIRE n.price IS NOT NULL
+```
+
+<Aside type="caution">
+  Not null constraints require Neo4j Enterprise Edition.
+</Aside>
+
+## Combining Constraints
+
+You can combine multiple constraints on a single property:
+
+```go
+type User struct {
+    neogo.Node `neo4j:"User"`
+
+    // Unique and indexed (unique creates an index automatically)
+    Email string `neo4j:"email,unique"`
+
+    // Required and indexed
+    Name string `neo4j:"name,notNull,index"`
+}
+```
+
+## Relationship Constraints
+
+Constraints also work on relationships:
+
+```go
+type WorksAt struct {
+    neogo.Relationship `neo4j:"WORKS_AT"`
+
+    EmployeeID string `neo4j:"employee_id,unique"`
+    StartDate  string `neo4j:"start_date,notNull"`
+}
+```
+
+```cypher
+CREATE CONSTRAINT unique_WORKS_AT_employee_id IF NOT EXISTS 
+FOR ()-[r:WORKS_AT]-() REQUIRE r.employee_id IS UNIQUE
+
+CREATE CONSTRAINT notnull_WORKS_AT_start_date IF NOT EXISTS 
+FOR ()-[r:WORKS_AT]-() REQUIRE r.start_date IS NOT NULL
+```
+
+## Constraint Naming Conventions
+
+Auto-generated constraint names follow these patterns:
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| Unique | `unique_{Label}_{property}` | `unique_User_email` |
+| Node Key | Must be explicit | `person_name_key` |
+| Not Null | `notnull_{Label}_{property}` | `notnull_Product_name` |
+
+## Checking Existing Constraints
+
+```go
+constraints, err := driver.Schema().GetConstraints(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, con := range constraints {
+    fmt.Printf("%s (%s): %v on %v\n",
+        con.Name,
+        con.Type,
+        con.Properties,
+        con.LabelsOrTypes,
+    )
+}
+```
+
+## Constraint Violations
+
+When you try to create data that violates a constraint, Neo4j returns an error:
+
+```go
+user1 := User{Email: "test@example.com"}
+user2 := User{Email: "test@example.com"} // Same email
+
+err := client.Exec().Create(db.Node(&user1)).Run(ctx)
+// Success
+
+err = client.Exec().Create(db.Node(&user2)).Run(ctx)
+// Error: Node already exists with label `User` and property `email` = 'test@example.com'
+```
+
+Handle constraint violations appropriately:
+
+```go
+err := client.Exec().Create(db.Node(&user)).Run(ctx)
+if err != nil {
+    if strings.Contains(err.Error(), "already exists") {
+        // Handle duplicate
+        return ErrUserAlreadyExists
+    }
+    return err
+}
+```
+
+## Using MERGE with Constraints
+
+Constraints work well with MERGE for upsert operations:
+
+```go
+user := User{Email: "test@example.com", Name: "Test User"}
+
+err := client.Exec().
+    Merge(db.Node(db.Qual(&user, "u", db.Props{
+        "email": &user.Email,
+    }))).
+    OnCreate(db.SetPropValue(&user.Name, &user.Name)).
+    Return(&user).
+    Run(ctx)
+```
+
+With a unique constraint on `email`, this safely creates or matches the user.
+
+## Complete Example
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+
+    "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+    "github.com/rlch/neogo"
+)
+
+type Account struct {
+    neogo.Node `neo4j:"Account"`
+
+    // Primary identifier - must be unique
+    ID string `neo4j:"id,unique"`
+
+    // Email must be unique
+    Email string `neo4j:"email,unique:account_email_unique"`
+
+    // Required fields
+    Name      string `neo4j:"name,notNull"`
+    CreatedAt int64  `neo4j:"created_at,notNull"`
+
+    // Optional but indexed for search
+    Company string `neo4j:"company,index"`
+}
+
+// Composite key example
+type Transaction struct {
+    neogo.Node `neo4j:"Transaction"`
+
+    // Composite unique key: account + transaction ID
+    AccountID     string `neo4j:"account_id,nodeKey:txn_key,priority:1"`
+    TransactionID string `neo4j:"transaction_id,nodeKey:txn_key,priority:2"`
+
+    Amount    float64 `neo4j:"amount,notNull"`
+    Timestamp int64   `neo4j:"timestamp,notNull,index"`
+}
+
+func main() {
+    ctx := context.Background()
+
+    driver, err := neogo.New(
+        "neo4j://localhost:7687",
+        neo4j.BasicAuth("neo4j", "password", ""),
+        neogo.WithTypes(&Account{}, &Transaction{}),
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer driver.DB().Close(ctx)
+
+    // Run migrations
+    actions, err := driver.Schema().AutoMigrate(ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    log.Printf("Created %d schema elements\n", len(actions))
+}
+```
+
+## Best Practices
+
+1. **Always use unique constraints for IDs**: Prevents duplicate entities
+2. **Use node keys for natural composite keys**: When multiple properties together identify an entity
+3. **Apply not null to required fields**: Catch missing data at the database level
+4. **Name your constraints**: Makes debugging and schema management easier
+5. **Test constraints in development**: Verify constraint violations are handled properly
+
+<Aside type="tip">
+  Unique constraints are essential for safe MERGE operations. Without them, concurrent MERGE operations could create duplicates.
+</Aside>
+
+## See Also
+
+- [Auto Migration](/schema/migration/) - Running schema migrations
+- [Indexes](/schema/indexes/) - Performance optimization
+- [Merge](/crud/merge/) - Upsert operations with constraints

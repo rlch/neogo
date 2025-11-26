@@ -1,0 +1,264 @@
+---
+title: Relationships
+description: Defining relationship structs with types and properties in neogo
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Relationships connect nodes in Neo4j. In neogo, relationships are defined as Go structs that implement the `db.IRelationship` interface.
+
+## Basic Relationship Definition
+
+To define a relationship, create a struct and implement the `Relationship()` method:
+
+```go
+import "github.com/rlch/neogo/db"
+
+type Knows struct {
+    Since int `json:"since"`
+}
+
+func (k *Knows) Relationship() *db.RelationshipPattern {
+    return db.Rel("KNOWS")
+}
+```
+
+The type passed to `db.Rel()` determines the Neo4j relationship type.
+
+## Relationship Interface
+
+The `db.IRelationship` interface requires a single method:
+
+```go
+type IRelationship interface {
+    Relationship() *db.RelationshipPattern
+}
+```
+
+## Properties on Relationships
+
+Like nodes, relationships can have properties:
+
+```go
+type WorksWith struct {
+    Since      time.Time `json:"since"`
+    Department string    `json:"department"`
+    Role       string    `json:"role,omitempty"`
+}
+
+func (w *WorksWith) Relationship() *db.RelationshipPattern {
+    return db.Rel("WORKS_WITH")
+}
+```
+
+## Relationship Patterns
+
+Relationships are used in patterns with direction specifiers:
+
+```go
+var person, friend Person
+var knows Knows
+
+// Outgoing relationship: (person)-[:KNOWS]->(friend)
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(&knows, db.To, &friend),
+    ),
+).Return(&friend)
+
+// Incoming relationship: (person)<-[:KNOWS]-(friend)
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(&knows, db.From, &friend),
+    ),
+).Return(&friend)
+
+// Undirected: (person)-[:KNOWS]-(friend)
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(&knows, db.Either, &friend),
+    ),
+).Return(&friend)
+```
+
+## Direction Constants
+
+neogo provides three direction constants:
+
+| Constant    | Direction | Cypher           |
+|-------------|-----------|------------------|
+| `db.To`     | Outgoing  | `()-[]->()`      |
+| `db.From`   | Incoming  | `()<-[]-()`      |
+| `db.Either` | Both      | `()-[]-()`       |
+
+## Using Relationships in Queries
+
+### Creating Relationships
+
+```go
+var person, friend Person
+var knows Knows
+
+cy := c.Create(
+    db.Patterns(
+        db.Node(&person, db.Props{"name": "Alice"}),
+        db.Related(&knows, db.To, &friend, db.Props{"name": "Bob"}),
+    ),
+)
+```
+
+Generates:
+
+```cypher
+CREATE (person:Person {name: "Alice"})-[knows:KNOWS]->(friend:Person {name: "Bob"})
+```
+
+### Matching Relationships
+
+```go
+var person Person
+var knows Knows
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(&knows, db.To, db.Node(nil)),
+    ),
+).Return(&person, &knows)
+```
+
+Generates:
+
+```cypher
+MATCH (person:Person)-[knows:KNOWS]->()
+RETURN person, knows
+```
+
+## Inline Properties
+
+Filter relationships by properties:
+
+```go
+var person, friend Person
+var knows Knows
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(&knows, db.To, &friend, db.Props{"since": 2020}),
+    ),
+).Return(&friend)
+```
+
+Generates:
+
+```cypher
+MATCH (person:Person)-[knows:KNOWS {since: 2020}]->(friend:Person)
+RETURN friend
+```
+
+## Anonymous Relationships
+
+For patterns where you only care about connectivity:
+
+```go
+var person, friend Person
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(db.Var("KNOWS"), db.To, &friend),
+    ),
+).Return(&friend)
+```
+
+Or completely anonymous:
+
+```go
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(nil, db.To, &friend),  // Any relationship type
+    ),
+).Return(&friend)
+```
+
+## Multiple Relationship Types
+
+Match multiple relationship types:
+
+```go
+var person, other Person
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(db.Var("KNOWS", "FRIENDS_WITH"), db.To, &other),
+    ),
+).Return(&other)
+```
+
+Generates:
+
+```cypher
+MATCH (person:Person)-[:KNOWS|FRIENDS_WITH]->(other:Person)
+RETURN other
+```
+
+<Aside type="note">
+When using multiple relationship types with `db.Var()`, you cannot bind properties to a struct since the relationship type is ambiguous.
+</Aside>
+
+## Relationship Chains
+
+Create complex patterns with multiple relationships:
+
+```go
+var a, b, c Person
+var r1, r2 Knows
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&a),
+        db.Related(&r1, db.To, &b),
+        db.Related(&r2, db.To, &c),
+    ),
+).Return(&a, &b, &c)
+```
+
+Generates:
+
+```cypher
+MATCH (a:Person)-[r1:KNOWS]->(b:Person)-[r2:KNOWS]->(c:Person)
+RETURN a, b, c
+```
+
+## Accessing Relationship Properties
+
+Use `db.Qual()` to access relationship properties:
+
+```go
+var person, friend Person
+var knows Knows
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(&knows, db.To, &friend),
+    ),
+).Return(
+    db.Qual(&person, "name"),
+    db.Qual(&knows, "since"),
+    db.Qual(&friend, "name"),
+)
+```
+
+Generates:
+
+```cypher
+MATCH (person:Person)-[knows:KNOWS]->(friend:Person)
+RETURN person.name, knows.since, friend.name
+```

@@ -1,0 +1,317 @@
+---
+title: Struct Tags
+description: Complete reference for neogo struct tags
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Struct Tags
+
+neogo uses the `neo4j` struct tag to configure how Go structs map to Neo4j nodes and relationships.
+
+## Tag Syntax
+
+```go
+`neo4j:"<name>,<option1>,<option2:value>,..."`
+```
+
+- **name**: The property name in Neo4j (or label/type for embedded base types)
+- **options**: Comma-separated configuration options
+
+## Base Type Tags
+
+### Node Label
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`  // Label: Person
+}
+
+// Multiple labels via embedding
+type Actor struct {
+    Person `neo4j:"Actor"`  // Labels: Person, Actor
+}
+```
+
+### Relationship Type
+
+```go
+type ActedIn struct {
+    neogo.Relationship `neo4j:"ACTED_IN"`  // Type: ACTED_IN
+}
+```
+
+### Abstract Node Label
+
+```go
+type BaseOrganism struct {
+    neogo.Abstract `neo4j:"Organism"`  // Abstract label: Organism
+    neogo.Node
+}
+```
+
+## Property Tags
+
+### Basic Property Mapping
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    Name string `neo4j:"name"`     // Property: name
+    Age  int    `neo4j:"age"`      // Property: age
+}
+```
+
+### Skip Property
+
+```go
+Email string `neo4j:"-"`  // Not stored in Neo4j
+```
+
+### No Tag (Auto-naming)
+
+```go
+FirstName string  // Property: first_name (snake_case conversion)
+```
+
+## Index Tags
+
+| Tag | Description | Example |
+|-----|-------------|---------|
+| `index` | Range index (default) | `neo4j:"name,index"` |
+| `index:<name>` | Named range index | `neo4j:"name,index:person_name_idx"` |
+| `text` | Text index | `neo4j:"title,text"` |
+| `text:<name>` | Named text index | `neo4j:"title,text:article_title"` |
+| `point` | Point/geo index | `neo4j:"location,point"` |
+| `fulltext` | Fulltext index | `neo4j:"content,fulltext"` |
+| `fulltext:<name>` | Named fulltext index | `neo4j:"content,fulltext:search_idx"` |
+| `vector:<dims>` | Vector index | `neo4j:"embedding,vector:1536"` |
+| `vector:<dims>:<similarity>` | Vector with similarity | `neo4j:"embedding,vector:1536:cosine"` |
+| `vector:<name>:<dims>:<similarity>` | Named vector index | `neo4j:"embedding,vector:my_idx:1536:cosine"` |
+
+### Examples
+
+```go
+type Article struct {
+    neogo.Node `neo4j:"Article"`
+
+    // Range indexes
+    Slug      string `neo4j:"slug,index"`
+    CreatedAt int64  `neo4j:"created_at,index:article_date_idx"`
+
+    // Text index for string matching
+    Title string `neo4j:"title,text"`
+
+    // Fulltext for search (same name = composite)
+    Headline string `neo4j:"headline,fulltext:article_search"`
+    Body     string `neo4j:"body,fulltext:article_search"`
+
+    // Vector for AI/ML
+    Embedding []float64 `neo4j:"embedding,vector:1536:cosine"`
+}
+```
+
+## Constraint Tags
+
+| Tag | Description | Example |
+|-----|-------------|---------|
+| `unique` | Unique constraint | `neo4j:"email,unique"` |
+| `unique:<name>` | Named unique constraint | `neo4j:"email,unique:user_email_uniq"` |
+| `notNull` | Not null constraint | `neo4j:"name,notNull"` |
+| `notnull` | Alias for notNull | `neo4j:"name,notnull"` |
+| `not_null` | Alias for notNull | `neo4j:"name,not_null"` |
+| `notNull:<name>` | Named not null | `neo4j:"name,notNull:user_name_required"` |
+| `nodeKey:<name>` | Node key (composite unique) | `neo4j:"first,nodeKey:person_key"` |
+
+### Examples
+
+```go
+type User struct {
+    neogo.Node `neo4j:"User"`
+
+    // Unique constraints
+    ID       string `neo4j:"id,unique"`
+    Email    string `neo4j:"email,unique:user_email_unique"`
+    Username string `neo4j:"username,unique"`
+
+    // Not null constraint
+    Name string `neo4j:"name,notNull"`
+
+    // Node key (composite unique + not null)
+    TenantID string `neo4j:"tenant_id,nodeKey:user_tenant_key,priority:1"`
+    UserCode string `neo4j:"user_code,nodeKey:user_tenant_key,priority:2"`
+}
+```
+
+## Composite Index/Constraint Tags
+
+### Priority
+
+Use `priority:<n>` to order properties in composite indexes/constraints:
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    // Composite index: (last_name, first_name)
+    LastName  string `neo4j:"last_name,index:name_idx,priority:1"`
+    FirstName string `neo4j:"first_name,index:name_idx,priority:2"`
+}
+```
+
+Lower priority = earlier in the index. Default priority is 10.
+
+## Relationship Direction Tags
+
+For relationship structs, special tags indicate connected nodes:
+
+```go
+type ActedIn struct {
+    neogo.Relationship `neo4j:"ACTED_IN"`
+
+    Role string `neo4j:"role"`
+
+    // Reference to start node (actor)
+    Actor *Person `neo4j:"startNode"`
+
+    // Reference to end node (movie)
+    Movie *Movie `neo4j:"endNode"`
+}
+```
+
+<Aside type="note">
+  The `startNode` and `endNode` tags are used for relationship hydration when querying full patterns.
+</Aside>
+
+## Relationship Fields (on Nodes)
+
+Define relationships on nodes using `One[R]` for single relationships and `Many[R]` for collections.
+These are zero-cost abstractions - they carry type information at compile time only with no runtime overhead.
+
+### Using Relationship Structs
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    Name string `neo4j:"name"`
+
+    // Single outgoing relationship
+    BestRole neogo.One[ActedIn] `neo4j:"->"`
+
+    // Multiple outgoing relationships
+    ActedIn neogo.Many[ActedIn] `neo4j:"->"`
+
+    // Multiple incoming relationships
+    Followers neogo.Many[Follows] `neo4j:"<-"`
+}
+
+type Movie struct {
+    neogo.Node `neo4j:"Movie"`
+
+    Title string `neo4j:"title"`
+
+    // Incoming ACTED_IN relationships
+    Actors neogo.Many[ActedIn] `neo4j:"<-"`
+}
+```
+
+### Shorthand Syntax (Direct Node References)
+
+For simple relationships without properties, you can reference nodes directly
+and specify the relationship type in the tag:
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    Name string `neo4j:"name"`
+
+    // Outgoing FRIEND relationship to Person nodes
+    BestFriend neogo.One[Person] `neo4j:"BEST_FRIEND>"`
+
+    // Outgoing FRIENDS relationship to Person nodes
+    Friends neogo.Many[Person] `neo4j:"FRIENDS>"`
+
+    // Incoming FOLLOWS relationship from Person nodes
+    Followers neogo.Many[Person] `neo4j:"<FOLLOWS"`
+}
+```
+
+The `>` suffix indicates outgoing direction, `<` prefix indicates incoming direction.
+
+### Required Relationships
+
+Use the `required` option to mark relationships that must exist (for validation and schema):
+
+```go
+type Employee struct {
+    neogo.Node `neo4j:"Employee"`
+
+    Name string `neo4j:"name"`
+
+    // Required: every employee must have a manager
+    Manager neogo.One[Employee] `neo4j:"REPORTS_TO>,required"`
+
+    // Optional: mentor is not required
+    Mentor neogo.One[Employee] `neo4j:"MENTORED_BY>"`
+}
+```
+
+## Complete Tag Reference
+
+| Tag | Context | Description |
+|-----|---------|-------------|
+| `<label>` | Embedded Node/Abstract | Neo4j label |
+| `<type>` | Embedded Relationship | Neo4j relationship type |
+| `<property>` | Field | Neo4j property name |
+| `-` | Field | Skip/ignore field |
+| `index` | Field | Create range index |
+| `index:<name>` | Field | Named range index |
+| `text` | Field | Create text index |
+| `text:<name>` | Field | Named text index |
+| `point` | Field | Create point index |
+| `point:<name>` | Field | Named point index |
+| `fulltext` | Field | Create fulltext index |
+| `fulltext:<name>` | Field | Named fulltext index |
+| `vector:<dims>` | Field | Create vector index |
+| `vector:<dims>:<sim>` | Field | Vector with similarity |
+| `vector:<name>:<dims>:<sim>` | Field | Named vector index |
+| `unique` | Field | Unique constraint |
+| `unique:<name>` | Field | Named unique constraint |
+| `notNull` | Field | Not null constraint |
+| `notNull:<name>` | Field | Named not null |
+| `nodeKey:<name>` | Field | Node key constraint |
+| `priority:<n>` | Field | Order in composite index/constraint |
+| `startNode` | Rel Field | Reference to start node |
+| `endNode` | Rel Field | Reference to end node |
+| `->` | Node Field | Outgoing relationships |
+| `<-` | Node Field | Incoming relationships |
+
+## Tag Combinations
+
+Multiple options can be combined:
+
+```go
+type Product struct {
+    neogo.Node `neo4j:"Product"`
+
+    // Unique, not null, with custom name
+    SKU string `neo4j:"sku,unique:product_sku_unique,notNull"`
+
+    // Indexed and required
+    Name string `neo4j:"name,index,notNull"`
+
+    // Part of composite index with priority
+    Category  string `neo4j:"category,index:cat_subcat_idx,priority:1"`
+    SubCategory string `neo4j:"sub_category,index:cat_subcat_idx,priority:2"`
+}
+```
+
+## See Also
+
+- [Nodes](/models/nodes/) - Declaring node types
+- [Relationships](/models/relationships/) - Declaring relationship types
+- [Indexes](/schema/indexes/) - Index details
+- [Constraints](/schema/constraints/) - Constraint details

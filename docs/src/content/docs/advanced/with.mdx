@@ -1,0 +1,387 @@
+---
+title: WITH & Aggregation
+description: Using WITH for query chaining, variable scoping, and aggregations
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+The `WITH` clause passes results from one part of a query to the next. It's essential for aggregations, pagination, and complex multi-step queries.
+
+## Basic WITH
+
+### Passing Variables
+
+```go
+var person Person
+var friend Person
+
+cy := c.Match(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).With(&person).
+    Match(
+        db.Patterns(
+            db.Node(&person),
+            db.Related(nil, db.To, &friend),
+        ),
+    ).Return(&friend)
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person {name: "Alice"})
+WITH person
+MATCH (person)-[]->(friend:Person)
+RETURN friend
+```
+
+### Multiple Variables
+
+```go
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(&worksAt, db.To, &company),
+    ),
+).With(&person, &company).
+    Match(
+        db.Patterns(
+            db.Node(&person),
+            db.Related(&knows, db.To, &colleague),
+        ),
+    ).Return(&person, &company, &colleague)
+```
+
+## Aggregation with WITH
+
+### COUNT
+
+```go
+var person Person
+var friend Person
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(nil, db.To, &friend),
+    ),
+).With(
+    &person,
+    db.Alias(db.Lit("count(friend)"), "friendCount"),
+).Return(&person, db.Var("friendCount"))
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person)-[]->(friend:Person)
+WITH person, count(friend) AS friendCount
+RETURN person, friendCount
+```
+
+### COLLECT
+
+```go
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(nil, db.To, &friend),
+    ),
+).With(
+    &person,
+    db.Alias(db.Lit("collect(friend.name)"), "friendNames"),
+).Return(&person, db.Var("friendNames"))
+```
+
+### Multiple Aggregations
+
+```go
+var product Product
+var review Review
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&product),
+        db.Related(db.Var("HAS_REVIEW"), db.From, &review),
+    ),
+).With(
+    &product,
+    db.Alias(db.Lit("count(review)"), "reviewCount"),
+    db.Alias(db.Lit("avg(review.rating)"), "avgRating"),
+    db.Alias(db.Lit("max(review.rating)"), "maxRating"),
+    db.Alias(db.Lit("min(review.rating)"), "minRating"),
+).Return(&product, db.Var("reviewCount"), db.Var("avgRating"))
+```
+
+## Common Aggregation Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `count()` | Count items | `count(n)` |
+| `collect()` | Collect into list | `collect(n.name)` |
+| `sum()` | Sum numeric values | `sum(n.amount)` |
+| `avg()` | Average | `avg(n.score)` |
+| `min()` | Minimum value | `min(n.date)` |
+| `max()` | Maximum value | `max(n.price)` |
+| `stdev()` | Standard deviation | `stdev(n.value)` |
+| `percentile*()` | Percentiles | `percentileCont(n.score, 0.5)` |
+
+## Filtering with WITH
+
+### WHERE After WITH
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(nil, db.To, db.Node(nil)),
+    ),
+).With(
+    &person,
+    db.Alias(db.Lit("count(*) as connections"), "connections"),
+).Where(
+    db.Cond(db.Var("connections"), "", db.GreaterThan, 5),
+).Return(&person, db.Var("connections"))
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person)-->()
+WITH person, count(*) as connections
+WHERE connections > 5
+RETURN person, connections
+```
+
+### HAVING-style Filtering
+
+```go
+var company Company
+var employee Person
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&company),
+        db.Related(db.Var("EMPLOYS"), db.To, &employee),
+    ),
+).With(
+    &company,
+    db.Alias(db.Lit("count(employee)"), "employeeCount"),
+    db.Alias(db.Lit("avg(employee.salary)"), "avgSalary"),
+).Where(
+    db.And(
+        db.Cond(db.Var("employeeCount"), "", db.GreaterThan, 10),
+        db.Cond(db.Var("avgSalary"), "", db.GreaterThan, 50000),
+    ),
+).Return(&company, db.Var("employeeCount"), db.Var("avgSalary"))
+```
+
+## Pagination with WITH
+
+### LIMIT and SKIP
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person),
+).With(&person).
+    OrderBy(db.Desc(db.Qual(&person, "created_at"))).
+    Skip(20).
+    Limit(10).
+    Return(&person)
+```
+
+### Top-N per Group
+
+```go
+var company Company
+var employee Person
+
+// Top 3 paid employees per company
+cy := c.Match(
+    db.Patterns(
+        db.Node(&company),
+        db.Related(db.Var("EMPLOYS"), db.To, &employee),
+    ),
+).With(
+    &company,
+    &employee,
+).OrderBy(
+    db.Asc(db.Qual(&company, "name")),
+    db.Desc(db.Qual(&employee, "salary")),
+).With(
+    &company,
+    db.Alias(db.Lit("collect(employee)[0..3]"), "topEmployees"),
+).Return(&company, db.Var("topEmployees"))
+```
+
+## Variable Scoping
+
+<Aside type="caution">
+Variables not included in WITH are not available in subsequent clauses. This is how you control variable scope.
+</Aside>
+
+### Dropping Variables
+
+```go
+var person, friend, fof Person
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person, db.Props{"name": "Alice"}),
+        db.Related(nil, db.To, &friend),
+    ),
+).With(&friend).  // person is dropped
+    Match(
+        db.Patterns(
+            db.Node(&friend),
+            db.Related(nil, db.To, &fof),
+        ),
+    ).Return(&fof)  // Only friend and fof available
+```
+
+### Renaming Variables
+
+```go
+cy := c.Match(
+    db.Node(&person),
+).With(
+    db.Alias(&person, "p"),
+).Return(db.Var("p"))
+```
+
+## WITH DISTINCT
+
+Remove duplicates:
+
+```go
+var person, friend Person
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(nil, db.Either, &friend),
+    ),
+).WithDistinct(&friend).
+    Return(&friend)
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person)-[]-(friend:Person)
+WITH DISTINCT friend
+RETURN friend
+```
+
+## Chaining Query Parts
+
+### Multi-Step Queries
+
+```go
+var person Person
+var company Company
+var product Product
+
+cy := c.Match(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).With(&person).
+    Match(
+        db.Patterns(
+            db.Node(&person),
+            db.Related(db.Var("WORKS_AT"), db.To, &company),
+        ),
+    ).With(&person, &company).
+    Match(
+        db.Patterns(
+            db.Node(&company),
+            db.Related(db.Var("SELLS"), db.To, &product),
+        ),
+    ).Return(&person, &company, db.Lit("collect(product) as products"))
+```
+
+### Intermediate Processing
+
+```go
+var order Order
+var item Item
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&order),
+        db.Related(db.Var("CONTAINS"), db.To, &item),
+    ),
+).With(
+    &order,
+    db.Alias(db.Lit("sum(item.price * item.quantity)"), "subtotal"),
+).With(
+    &order,
+    db.Var("subtotal"),
+    db.Alias(db.Lit("subtotal * 0.1"), "tax"),
+).With(
+    &order,
+    db.Var("subtotal"),
+    db.Var("tax"),
+    db.Alias(db.Lit("subtotal + tax"), "total"),
+).Return(&order, db.Var("subtotal"), db.Var("tax"), db.Var("total"))
+```
+
+## Common Patterns
+
+### Grouping
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person),
+).With(
+    db.Qual(&person, "country"),
+    db.Alias(db.Lit("count(*)"), "personCount"),
+    db.Alias(db.Lit("avg(person.age)"), "avgAge"),
+).Return(
+    db.Qual(&person, "country"),
+    db.Var("personCount"),
+    db.Var("avgAge"),
+)
+```
+
+### Subquery-like Behavior
+
+```go
+var person Person
+var topFriends Person
+
+// Get top 5 most connected friends
+cy := c.Match(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).With(&person).
+    Match(
+        db.Patterns(
+            db.Node(&person),
+            db.Related(nil, db.To, &topFriends),
+        ),
+    ).
+    Match(
+        db.Patterns(
+            db.Node(&topFriends),
+            db.Related(nil, db.Either, db.Node(nil)),
+        ),
+    ).With(
+        &topFriends,
+        db.Alias(db.Lit("count(*) as connections"), "connections"),
+    ).OrderBy(db.Desc(db.Var("connections"))).
+    Limit(5).
+    Return(&topFriends, db.Var("connections"))
+```
+
+## Best Practices
+
+<Aside type="tip" title="WITH Guidelines">
+
+1. **Pass only needed variables**: Dropping unused variables improves performance
+2. **Aggregate early**: Reduce data size before continuing the query
+3. **Use WITH for pagination**: Apply LIMIT early to reduce work
+4. **Name aggregations clearly**: Use meaningful aliases
+5. **Consider query plans**: WITH creates optimization barriers
+
+</Aside>

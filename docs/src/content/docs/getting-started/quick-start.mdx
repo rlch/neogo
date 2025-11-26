@@ -1,0 +1,296 @@
+---
+title: Quick Start
+description: Build your first neogo queries
+---
+
+import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+# Quick Start
+
+This guide walks you through building your first neogo queries. We'll cover both approaches: **raw Cypher** (recommended for production) and the **fluent builder** (great for simple queries).
+
+## Define Your Models
+
+<Steps>
+
+1. **Define a Node**
+
+   Create a Go struct that embeds `neogo.Node` and use struct tags to map fields to Neo4j properties:
+
+   ```go
+   type Person struct {
+       neogo.Node `neo4j:"Person"`
+
+       Name string `neo4j:"name"`
+       Age  int    `neo4j:"age"`
+   }
+   ```
+
+2. **Define a Relationship**
+
+   Similarly, create relationship types by embedding `neogo.Relationship`:
+
+   ```go
+   type Knows struct {
+       neogo.Relationship `neo4j:"KNOWS"`
+
+       Since int `neo4j:"since"`
+   }
+   ```
+
+3. **Create the Driver**
+
+   ```go
+   driver, err := neogo.New(
+       "neo4j://localhost:7687",
+       neo4j.BasicAuth("neo4j", "password", ""),
+       neogo.WithTypes(&Person{}, &Knows{}),
+   )
+   if err != nil {
+       log.Fatal(err)
+   }
+   defer driver.DB().Close(ctx)
+   ```
+
+</Steps>
+
+## Writing Queries
+
+<Tabs>
+<TabItem label="Raw Cypher (Recommended)">
+
+The `Cypher()` method lets you write raw Cypher while neogo handles parameter binding and result mapping:
+
+### Query with Result Binding
+
+```go
+var people []*Person
+
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person)
+        WHERE p.age > $minAge
+    `).
+    Return(db.Qual(&people, "p")).
+    RunWithParams(ctx, map[string]any{
+        "minAge": 18,
+    })
+```
+
+### Create with Parameters
+
+```go
+err := driver.Exec().
+    Cypher(`
+        CREATE (p:Person {name: $name, age: $age})
+    `).
+    RunWithParams(ctx, map[string]any{
+        "name": "Alice",
+        "age":  30,
+    })
+```
+
+### Complex Query with Relationships
+
+```go
+var results []struct {
+    Name        string `json:"name"`
+    FriendCount int    `json:"friendCount"`
+}
+
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person)-[:KNOWS]->(friend)
+        WITH p, count(friend) AS cnt
+        WITH {name: p.name, friendCount: cnt} AS data
+    `).
+    Return(db.Qual(&results, "data")).
+    Run(ctx)
+```
+
+### Batch Operations with UNWIND
+
+```go
+people := []map[string]any{
+    {"name": "Alice", "age": 30},
+    {"name": "Bob", "age": 25},
+}
+
+err := driver.Exec().
+    Cypher(`
+        UNWIND $people AS person
+        CREATE (p:Person)
+        SET p = person
+    `).
+    RunWithParams(ctx, map[string]any{
+        "people": people,
+    })
+```
+
+</TabItem>
+<TabItem label="Fluent Builder">
+
+The fluent builder is useful for simple queries and learning:
+
+### Query Nodes
+
+```go
+var people []Person
+
+err := driver.Exec().
+    Match(db.Node(&Person{})).
+    Return(db.Qual(&people, "person")).
+    Run(ctx)
+
+// Generated: MATCH (person:Person) RETURN person
+```
+
+### Query with Conditions
+
+```go
+var person Person
+
+err := driver.Exec().
+    Match(db.Node(&person)).
+    Where(db.Cond(&person.Age, ">", 18)).
+    Return(&person).
+    Run(ctx)
+
+// Generated: MATCH (person:Person) WHERE person.age > $v1 RETURN person
+```
+
+### Create Nodes
+
+```go
+person := Person{Name: "Alice", Age: 30}
+person.GenerateID()
+
+err := driver.Exec().
+    Create(db.Node(&person)).
+    Return(&person).
+    Run(ctx)
+
+// Generated: CREATE (person:Person {id: $person_id, name: $person_name, age: $person_age}) RETURN person
+```
+
+### Create Relationships
+
+```go
+var alice, bob Person
+knows := Knows{Since: 2020}
+
+err := driver.Exec().
+    Match(db.Patterns(
+        db.Node(db.Qual(&alice, "a", db.Props{"name": "'Alice'"})),
+        db.Node(db.Qual(&bob, "b", db.Props{"name": "'Bob'"})),
+    )).
+    Create(db.Node(&alice).To(&knows, &bob)).
+    Return(&knows).
+    Run(ctx)
+```
+
+</TabItem>
+</Tabs>
+
+## Result Binding with db.Qual
+
+The `db.Qual(&target, "expression")` function binds Cypher expressions to Go variables:
+
+```go
+// Bind a node
+var person Person
+db.Qual(&person, "p")
+
+// Bind a property
+var name string
+db.Qual(&name, "p.name")
+
+// Bind an aggregation
+var count int64
+db.Qual(&count, "count(p)")
+
+// Bind a collection
+var people []*Person
+db.Qual(&people, "collect(p)")
+
+// Bind a map/struct
+var data struct {
+    ID    string `json:"id"`
+    Count int    `json:"count"`
+}
+db.Qual(&data, "{id: p.id, count: count(*)}")
+```
+
+## Update and Delete
+
+<Tabs>
+<TabItem label="Raw Cypher">
+
+```go
+// Update
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person {id: $id})
+        SET p.age = $newAge
+    `).
+    RunWithParams(ctx, map[string]any{
+        "id":     "person-123",
+        "newAge": 31,
+    })
+
+// Delete
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person {id: $id})
+        DETACH DELETE p
+    `).
+    RunWithParams(ctx, map[string]any{
+        "id": "person-123",
+    })
+```
+
+</TabItem>
+<TabItem label="Fluent Builder">
+
+```go
+// Update
+var person Person
+err := driver.Exec().
+    Match(db.Node(&person)).
+    Where(db.Cond(&person.Name, "=", "Alice")).
+    Set(db.SetPropValue(&person.Age, 31)).
+    Return(&person).
+    Run(ctx)
+
+// Delete
+err := driver.Exec().
+    Match(db.Node(&person)).
+    Where(db.Cond(&person.Name, "=", "Alice")).
+    DetachDelete(&person).
+    Run(ctx)
+```
+
+</TabItem>
+</Tabs>
+
+## Debug Your Queries
+
+Use `.Print()` to see the generated Cypher:
+
+```go
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) WHERE p.age > $minAge`).
+    Return(db.Qual(&people, "p")).
+    Print().  // Prints the Cypher query to stdout
+    RunWithParams(ctx, map[string]any{"minAge": 18})
+```
+
+<Aside type="tip">
+  `.Print()` is invaluable for debugging. It shows exactly what Cypher will be executed.
+</Aside>
+
+## Next Steps
+
+- [Raw Cypher](/crud/cypher/) - Deep dive into the recommended query approach
+- [Declaring Models](/models/overview/) - Learn about nodes, relationships, and abstract types
+- [Transactions](/transactions/transactions/) - Managing transactions

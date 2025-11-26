@@ -1,0 +1,252 @@
+---
+title: Field Tags
+description: Comprehensive reference for struct field tags in neogo
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+neogo uses Go struct tags to control how fields are serialized to Neo4j properties and how schema elements like indexes and constraints are created.
+
+## Property Tags
+
+### The `json` Tag
+
+The primary tag for property mapping is `json`, following Go conventions:
+
+```go
+type Person struct {
+    // Maps to "id" property
+    ID string `json:"id"`
+    
+    // Maps to "full_name" property
+    FullName string `json:"full_name"`
+    
+    // Omit if zero value
+    Nickname string `json:"nickname,omitempty"`
+    
+    // Never serialize to Neo4j
+    Internal string `json:"-"`
+}
+```
+
+#### Options
+
+| Option | Description |
+|--------|-------------|
+| `json:"name"` | Property name in Neo4j |
+| `json:"name,omitempty"` | Omit if zero value |
+| `json:"-"` | Never include in queries |
+| `json:",omitempty"` | Use field name, omit if empty |
+
+### The `neo4j` Tag
+
+For Neo4j-specific behavior:
+
+```go
+type Person struct {
+    // Primary key field
+    ID string `json:"id" neo4j:"id"`
+    
+    // Skip in certain operations
+    Computed string `json:"computed" neo4j:"readonly"`
+}
+```
+
+## Index Tags
+
+Define indexes using the `index` tag:
+
+```go
+type Person struct {
+    Email string `json:"email" index:"Person,unique"`
+    Name  string `json:"name" index:"Person"`
+    Age   int    `json:"age" index:"Person,range"`
+}
+```
+
+### Index Types
+
+| Tag Value | Index Type | Use Case |
+|-----------|-----------|----------|
+| `index:"Label"` | Range index | General purpose |
+| `index:"Label,unique"` | Unique constraint | Enforcing uniqueness |
+| `index:"Label,text"` | Text index | Full-text search |
+| `index:"Label,point"` | Point index | Spatial queries |
+| `index:"Label,range"` | Range index (explicit) | Numeric ranges |
+
+### Composite Indexes
+
+For multi-property indexes, use the same index name:
+
+```go
+type Person struct {
+    FirstName string `json:"first_name" index:"Person_name"`
+    LastName  string `json:"last_name" index:"Person_name"`
+}
+```
+
+This creates a composite index on both properties.
+
+## Constraint Tags
+
+Define constraints using the `constraint` tag:
+
+```go
+type Person struct {
+    ID    string `json:"id" constraint:"Person,unique"`
+    Email string `json:"email" constraint:"Person,unique"`
+}
+```
+
+### Constraint Types
+
+| Tag Value | Constraint Type | Description |
+|-----------|-----------------|-------------|
+| `constraint:"Label,unique"` | Uniqueness | Property must be unique |
+| `constraint:"Label,exists"` | Existence | Property must exist (Enterprise) |
+| `constraint:"Label,key"` | Node Key | Unique + Exists (Enterprise) |
+
+## Relationship Field Tags
+
+For relationship structs:
+
+```go
+type WorksAt struct {
+    Since    time.Time `json:"since"`
+    Position string    `json:"position"`
+    Salary   float64   `json:"salary,omitempty"`
+}
+
+func (w *WorksAt) Relationship() *db.RelationshipPattern {
+    return db.Rel("WORKS_AT")
+}
+```
+
+Relationship constraints:
+
+```go
+type WorksAt struct {
+    Since time.Time `json:"since" constraint:"WORKS_AT,exists"`
+}
+```
+
+## Type Support
+
+### Supported Go Types
+
+| Go Type | Neo4j Type | Notes |
+|---------|------------|-------|
+| `string` | String | Direct mapping |
+| `int`, `int64` | Integer | Direct mapping |
+| `float64` | Float | Direct mapping |
+| `bool` | Boolean | Direct mapping |
+| `time.Time` | DateTime | Automatic conversion |
+| `[]T` | List | Where T is supported |
+| `map[string]T` | Map | Where T is supported |
+
+### Custom Types
+
+Implement `neo4j.Valuer` and `neo4j.Scanner` for custom serialization:
+
+```go
+type Status string
+
+const (
+    StatusActive   Status = "active"
+    StatusInactive Status = "inactive"
+)
+
+// Status is automatically serialized as a string
+type User struct {
+    Status Status `json:"status"`
+}
+```
+
+### Pointer Types
+
+Pointer types indicate optional properties:
+
+```go
+type Person struct {
+    // Required - will error if missing
+    Name string `json:"name"`
+    
+    // Optional - nil if not present
+    Nickname *string `json:"nickname"`
+    Age      *int    `json:"age"`
+}
+```
+
+## Embedded Struct Tags
+
+Embedded structs inherit their fields' tags:
+
+```go
+type Timestamps struct {
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+}
+
+type Person struct {
+    Timestamps          // All Timestamps fields included
+    Name string `json:"name"`
+}
+
+// Person has: created_at, updated_at, name properties
+```
+
+<Aside type="caution">
+If embedded struct fields conflict with parent fields, the parent field takes precedence.
+</Aside>
+
+## Tag Combinations
+
+Common tag combinations:
+
+```go
+type User struct {
+    // Unique identifier with constraint
+    ID string `json:"id" constraint:"User,unique"`
+    
+    // Indexed for fast lookups
+    Email string `json:"email" index:"User,unique"`
+    
+    // Optional indexed field
+    Phone *string `json:"phone,omitempty" index:"User"`
+    
+    // Computed, never set by application
+    Score float64 `json:"score" neo4j:"readonly"`
+    
+    // Internal only
+    PasswordHash string `json:"-"`
+}
+```
+
+## Migration Behavior
+
+When using schema auto-migration:
+
+1. **Indexes** are created if they don't exist
+2. **Constraints** are created if they don't exist
+3. **Changes** to existing indexes/constraints require manual migration
+
+```go
+// Run migration to sync schema
+err := neogo.AutoMigrate(ctx, driver,
+    &Person{},
+    &Company{},
+    &WorksAt{},
+)
+```
+
+<Aside type="note">
+Auto-migration only adds schema elements. It never removes indexes or constraints to prevent data loss.
+</Aside>
+
+## Best Practices
+
+1. **Always use `json` tags**: Explicit property names prevent issues with Go naming
+2. **Use `omitempty` for optional fields**: Reduces storage and query complexity  
+3. **Index frequently queried properties**: Especially for `WHERE` clauses
+4. **Use constraints for data integrity**: Prevent duplicate IDs, emails, etc.
+5. **Consider pointer types for optional data**: Distinguishes "not set" from "empty"

@@ -1,0 +1,362 @@
+---
+title: UNWIND
+description: Expanding lists into rows with UNWIND
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+`UNWIND` expands a list into individual rows, enabling you to work with each element separately. It's essential for bulk operations and list processing.
+
+## Basic UNWIND
+
+### Expanding a List
+
+```go
+names := []string{"Alice", "Bob", "Charlie"}
+
+cy := c.Unwind(names, "name").
+    Return(db.Var("name"))
+```
+
+Generated Cypher:
+```cypher
+UNWIND $p0 AS name
+RETURN name
+```
+
+### UNWIND with MATCH
+
+```go
+ids := []string{"id1", "id2", "id3"}
+
+var person Person
+
+cy := c.Unwind(ids, "id").
+    Match(
+        db.Node(&person, db.Props{"id": db.Var("id")}),
+    ).Return(&person)
+```
+
+Generated Cypher:
+```cypher
+UNWIND $p0 AS id
+MATCH (person:Person {id: id})
+RETURN person
+```
+
+## Bulk Operations
+
+### Bulk Create
+
+```go
+people := []map[string]any{
+    {"name": "Alice", "age": 30},
+    {"name": "Bob", "age": 25},
+    {"name": "Charlie", "age": 35},
+}
+
+var person Person
+
+cy := c.Unwind(people, "data").
+    Create(
+        db.Node(&person, db.Props{
+            "name": db.Qual("data", "name"),
+            "age":  db.Qual("data", "age"),
+        }),
+    ).Return(&person)
+```
+
+Generated Cypher:
+```cypher
+UNWIND $p0 AS data
+CREATE (person:Person {name: data.name, age: data.age})
+RETURN person
+```
+
+### Bulk Update
+
+```go
+updates := []map[string]any{
+    {"id": "1", "score": 100},
+    {"id": "2", "score": 85},
+}
+
+var person Person
+
+cy := c.Unwind(updates, "update").
+    Match(
+        db.Node(&person, db.Props{"id": db.Qual("update", "id")}),
+    ).Set(
+        db.SetProp(&person, "score", db.Qual("update", "score")),
+    ).Return(&person)
+```
+
+### Bulk Delete
+
+```go
+idsToDelete := []string{"id1", "id2", "id3"}
+
+var person Person
+
+cy := c.Unwind(idsToDelete, "id").
+    Match(
+        db.Node(&person, db.Props{"id": db.Var("id")}),
+    ).DetachDelete(&person)
+```
+
+## UNWIND with Relationships
+
+### Create Multiple Relationships
+
+```go
+relationships := []map[string]any{
+    {"from": "alice", "to": "bob", "since": 2020},
+    {"from": "alice", "to": "charlie", "since": 2021},
+}
+
+var person, friend Person
+var knows Knows
+
+cy := c.Unwind(relationships, "rel").
+    Match(
+        db.Node(&person, db.Props{"name": db.Qual("rel", "from")}),
+    ).Match(
+        db.Node(&friend, db.Props{"name": db.Qual("rel", "to")}),
+    ).Create(
+        db.Patterns(
+            db.Node(&person),
+            db.Related(&knows, db.To, &friend, db.Props{
+                "since": db.Qual("rel", "since"),
+            }),
+        ),
+    ).Return(&person, &knows, &friend)
+```
+
+### Bulk MERGE Relationships
+
+```go
+connections := []map[string]any{
+    {"personId": "1", "companyId": "c1", "role": "Engineer"},
+    {"personId": "2", "companyId": "c1", "role": "Manager"},
+}
+
+var person Person
+var company Company
+var worksAt WorksAt
+
+cy := c.Unwind(connections, "conn").
+    Match(
+        db.Node(&person, db.Props{"id": db.Qual("conn", "personId")}),
+    ).Match(
+        db.Node(&company, db.Props{"id": db.Qual("conn", "companyId")}),
+    ).Merge(
+        db.Patterns(
+            db.Node(&person),
+            db.Related(&worksAt, db.To, &company),
+        ),
+    ).Set(
+        db.SetProp(&worksAt, "role", db.Qual("conn", "role")),
+    )
+```
+
+## UNWIND with WITH
+
+### Process in Batches
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person),
+).With(db.Lit("collect(person) as people")).
+    Unwind(db.Var("people"), "p").
+    Return(db.Var("p"))
+```
+
+### Flatten Nested Lists
+
+```go
+cy := c.Match(
+    db.Node(&person),
+).With(
+    &person,
+    db.Lit("person.tags as tags"),
+).Unwind(db.Var("tags"), "tag").
+    Return(&person, db.Var("tag"))
+```
+
+## UNWIND for List Operations
+
+### Enumerate with Index
+
+```go
+items := []string{"a", "b", "c"}
+
+cy := c.With(db.Lit("range(0, size($items) - 1) as indices")).
+    Unwind(db.Var("indices"), "i").
+    Return(
+        db.Var("i"),
+        db.Lit("$items[i] as item"),
+    )
+```
+
+### Cross Product
+
+```go
+list1 := []string{"a", "b"}
+list2 := []int{1, 2, 3}
+
+cy := c.Unwind(list1, "x").
+    Unwind(list2, "y").
+    Return(db.Var("x"), db.Var("y"))
+```
+
+This produces:
+```
+x | y
+-----
+a | 1
+a | 2
+a | 3
+b | 1
+b | 2
+b | 3
+```
+
+## UNWIND with CASE
+
+### Conditional Processing
+
+```go
+data := []map[string]any{
+    {"type": "person", "name": "Alice"},
+    {"type": "company", "name": "Acme"},
+}
+
+cy := c.Unwind(data, "item").
+    With(
+        db.Var("item"),
+        db.Lit(`
+            CASE item.type
+                WHEN 'person' THEN ['Person']
+                WHEN 'company' THEN ['Company']
+                ELSE []
+            END as labels
+        `),
+    ).Return(db.Var("item"), db.Var("labels"))
+```
+
+## Handling Empty Lists
+
+<Aside type="caution">
+UNWIND on an empty list produces zero rows, which can cause the entire query to return nothing.
+</Aside>
+
+### Safe UNWIND with COALESCE
+
+```go
+tags := []string{} // Empty list
+
+cy := c.Unwind(
+    db.Lit("COALESCE($tags, [null])"), "tag",
+).Return(db.Var("tag"))
+```
+
+### Check Before UNWIND
+
+```go
+cy := c.With(db.Lit("$items as items")).
+    With(
+        db.Var("items"),
+        db.Lit("size(items) > 0 as hasItems"),
+    ).Where(db.Cond(db.Var("hasItems"), "", db.Equal, true)).
+    Unwind(db.Var("items"), "item").
+    Return(db.Var("item"))
+```
+
+## Common Patterns
+
+### Import Data
+
+```go
+type ImportRow struct {
+    Name  string `json:"name"`
+    Email string `json:"email"`
+    Age   int    `json:"age"`
+}
+
+rows := []ImportRow{
+    {Name: "Alice", Email: "alice@example.com", Age: 30},
+    {Name: "Bob", Email: "bob@example.com", Age: 25},
+}
+
+var person Person
+
+cy := c.Unwind(rows, "row").
+    Merge(
+        db.Node(&person, db.Props{"email": db.Qual("row", "email")}),
+    ).OnCreate(
+        db.SetProp(&person, "name", db.Qual("row", "name")),
+        db.SetProp(&person, "age", db.Qual("row", "age")),
+        db.SetPropValue(&person, "created_at", time.Now()),
+    ).OnMatch(
+        db.SetProp(&person, "name", db.Qual("row", "name")),
+        db.SetProp(&person, "age", db.Qual("row", "age")),
+        db.SetPropValue(&person, "updated_at", time.Now()),
+    ).Return(&person)
+```
+
+### Tag Processing
+
+```go
+var product Product
+
+cy := c.Match(
+    db.Node(&product),
+).Unwind(db.Qual(&product, "tags"), "tag").
+    With(
+        db.Var("tag"),
+        db.Alias(db.Lit("count(*)"), "count"),
+    ).OrderBy(db.Desc(db.Var("count"))).
+    Limit(10).
+    Return(db.Var("tag"), db.Var("count"))
+```
+
+## Performance Tips
+
+<Aside type="tip" title="UNWIND Performance">
+
+1. **Batch size matters**: For large imports, process in batches of 1000-10000
+2. **Use parameters**: Always parameterize the list, don't inline values
+3. **Index lookup properties**: Ensure properties used in MATCH are indexed
+4. **Limit result size**: Use WITH...LIMIT if intermediate results are large
+
+</Aside>
+
+### Batched Processing Example
+
+```go
+func ImportInBatches(ctx context.Context, driver neo4j.Driver, allData []map[string]any) error {
+    batchSize := 1000
+    
+    for i := 0; i < len(allData); i += batchSize {
+        end := i + batchSize
+        if end > len(allData) {
+            end = len(allData)
+        }
+        batch := allData[i:end]
+        
+        _, err := neo4j.ExecuteQuery(ctx, driver,
+            `UNWIND $batch AS row
+             MERGE (p:Person {email: row.email})
+             SET p += row`,
+            map[string]any{"batch": batch},
+            neo4j.EagerResultTransformer,
+        )
+        if err != nil {
+            return err
+        }
+    }
+    return nil
+}
+```

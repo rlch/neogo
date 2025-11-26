@@ -1,0 +1,199 @@
+---
+title: Nodes
+description: Defining node structs with labels and properties in neogo
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Nodes are the fundamental building blocks of a Neo4j graph. In neogo, you define nodes as Go structs that implement the `db.INode` interface.
+
+## Basic Node Definition
+
+To define a node, create a struct and implement the `Node()` method which returns a `*db.NodePattern`:
+
+```go
+import "github.com/rlch/neogo/db"
+
+type Person struct {
+    ID   string `json:"id"`
+    Name string `json:"name"`
+    Age  int    `json:"age"`
+}
+
+func (p *Person) Node() *db.NodePattern {
+    return db.Node("Person")
+}
+```
+
+The label passed to `db.Node()` determines the Neo4j label for this node type.
+
+## Node Interface
+
+The `db.INode` interface requires a single method:
+
+```go
+type INode interface {
+    Node() *db.NodePattern
+}
+```
+
+This method defines the label(s) for the node when used in Cypher queries.
+
+## Properties with Tags
+
+Use the `json` tag to map struct fields to Neo4j properties. The `neo4j` tag provides additional control:
+
+```go
+type Person struct {
+    // Maps to "id" property
+    ID string `json:"id"`
+    
+    // Maps to "full_name" property
+    Name string `json:"full_name"`
+    
+    // Ignored in Neo4j operations
+    Internal string `json:"-"`
+    
+    // Optional property (won't error if missing)
+    Nickname *string `json:"nickname,omitempty"`
+}
+```
+
+## Multiple Labels
+
+A node can have multiple labels by chaining them:
+
+```go
+func (e *Employee) Node() *db.NodePattern {
+    return db.Node("Person", "Employee")
+}
+```
+
+This generates nodes with both `:Person` and `:Employee` labels.
+
+## Embedded Structs for Label Inheritance
+
+You can use Go's struct embedding to create label hierarchies:
+
+```go
+type Person struct {
+    Name string `json:"name"`
+}
+
+func (p *Person) Node() *db.NodePattern {
+    return db.Node("Person")
+}
+
+type Employee struct {
+    Person           // Embeds Person's fields
+    EmployeeID string `json:"employee_id"`
+}
+
+func (e *Employee) Node() *db.NodePattern {
+    return db.Node("Person", "Employee")
+}
+```
+
+<Aside type="tip">
+Embedding allows you to query for all `Person` nodes while getting both `Person` and `Employee` results.
+</Aside>
+
+## Using Nodes in Queries
+
+Once defined, nodes can be used with `db.Node()` in pattern matching:
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person),
+).Return(&person)
+```
+
+This generates:
+
+```cypher
+MATCH (person:Person)
+RETURN person
+```
+
+## Binding Variables
+
+You can bind a node to a specific variable name:
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(db.Bind(&person, "p")),
+).Return(&person)
+```
+
+This generates:
+
+```cypher
+MATCH (p:Person)
+RETURN p
+```
+
+## Inline Properties
+
+Filter nodes by properties directly in the pattern:
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).Return(&person)
+```
+
+This generates:
+
+```cypher
+MATCH (person:Person {name: "Alice"})
+RETURN person
+```
+
+## Qualified References
+
+Access node properties using `db.Qual()`:
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person),
+).Return(
+    db.Qual(&person, "name"),
+    db.Qual(&person, "age"),
+)
+```
+
+This generates:
+
+```cypher
+MATCH (person:Person)
+RETURN person.name, person.age
+```
+
+## Anonymous Nodes
+
+For patterns where you don't need to capture the node:
+
+```go
+cy := c.Match(
+    db.Node(db.Var("Person")),
+).Return(db.Lit("count(*)"))
+```
+
+Or use an empty label for truly anonymous nodes:
+
+```go
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(db.Node(nil), db.To),  // Anonymous connected node
+    ),
+).Return(&person)
+```

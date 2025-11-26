@@ -1,0 +1,341 @@
+---
+title: Streaming
+description: Processing large result sets efficiently with streaming
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Streaming allows you to process query results one at a time without loading the entire result set into memory. This is essential for handling large datasets efficiently.
+
+## Stream Method
+
+### Basic Streaming
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person),
+).Return(&person)
+
+err := cy.Stream(ctx, session, func(result *PersonResult) error {
+    fmt.Printf("Processing: %s\n", result.Person.Name)
+    return nil
+})
+if err != nil {
+    return err
+}
+```
+
+### Stream vs All
+
+<Tabs>
+<TabItem label="Stream (Memory Efficient)">
+```go
+// Processes one result at a time
+err := cy.Stream(ctx, session, func(r *Result) error {
+    process(r)
+    return nil
+})
+```
+Memory usage: O(1) - constant
+</TabItem>
+<TabItem label="All (Loads Everything)">
+```go
+// Loads all results into memory first
+results, err := cy.All(ctx, session)
+for _, r := range results {
+    process(r)
+}
+```
+Memory usage: O(n) - linear with result size
+</TabItem>
+</Tabs>
+
+## Error Handling
+
+### Stop on Error
+
+Return an error to stop streaming:
+
+```go
+var processedCount int
+
+err := cy.Stream(ctx, session, func(r *PersonResult) error {
+    if err := process(r); err != nil {
+        return fmt.Errorf("failed at record %d: %w", processedCount, err)
+    }
+    processedCount++
+    return nil
+})
+
+if err != nil {
+    fmt.Printf("Processed %d records before error\n", processedCount)
+    return err
+}
+```
+
+### Early Termination
+
+Use a sentinel error to stop early without error:
+
+```go
+var ErrStopIteration = errors.New("stop iteration")
+
+var found *Person
+
+err := cy.Stream(ctx, session, func(r *PersonResult) error {
+    if r.Person.Email == targetEmail {
+        found = &r.Person
+        return ErrStopIteration
+    }
+    return nil
+})
+
+if err != nil && !errors.Is(err, ErrStopIteration) {
+    return err
+}
+
+if found != nil {
+    fmt.Printf("Found: %s\n", found.Name)
+}
+```
+
+## Streaming with Transactions
+
+### In Managed Transaction
+
+```go
+_, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    var person Person
+    cy := c.Match(db.Node(&person)).Return(&person)
+    
+    return nil, cy.Stream(ctx, tx, func(r *PersonResult) error {
+        return processInTransaction(r)
+    })
+})
+```
+
+### In Explicit Transaction
+
+```go
+tx, err := session.BeginTransaction(ctx)
+if err != nil {
+    return err
+}
+defer tx.Close(ctx)
+
+var person Person
+cy := c.Match(db.Node(&person)).Return(&person)
+
+err = cy.Stream(ctx, tx, func(r *PersonResult) error {
+    return process(r)
+})
+if err != nil {
+    tx.Rollback(ctx)
+    return err
+}
+
+return tx.Commit(ctx)
+```
+
+## Batch Processing
+
+### Process in Batches
+
+```go
+const batchSize = 100
+var batch []*Person
+
+err := cy.Stream(ctx, session, func(r *PersonResult) error {
+    batch = append(batch, &r.Person)
+    
+    if len(batch) >= batchSize {
+        if err := processBatch(batch); err != nil {
+            return err
+        }
+        batch = batch[:0] // Reset slice
+    }
+    return nil
+})
+
+if err != nil {
+    return err
+}
+
+// Process remaining
+if len(batch) > 0 {
+    return processBatch(batch)
+}
+```
+
+### Parallel Batch Processing
+
+```go
+const batchSize = 100
+results := make(chan *Person, batchSize)
+errChan := make(chan error, 1)
+
+// Start processor goroutine
+go func() {
+    for person := range results {
+        if err := process(person); err != nil {
+            errChan <- err
+            return
+        }
+    }
+    errChan <- nil
+}()
+
+// Stream results
+err := cy.Stream(ctx, session, func(r *PersonResult) error {
+    select {
+    case results <- &r.Person:
+        return nil
+    case err := <-errChan:
+        return err
+    }
+})
+close(results)
+
+if err != nil {
+    return err
+}
+return <-errChan
+```
+
+## Aggregation During Streaming
+
+### Count
+
+```go
+var count int
+
+err := cy.Stream(ctx, session, func(r *PersonResult) error {
+    count++
+    return nil
+})
+
+fmt.Printf("Total: %d\n", count)
+```
+
+### Custom Aggregation
+
+```go
+var (
+    totalAge   int
+    count      int
+    maxAge     int
+    namesByAge = make(map[int][]string)
+)
+
+err := cy.Stream(ctx, session, func(r *PersonResult) error {
+    totalAge += r.Person.Age
+    count++
+    if r.Person.Age > maxAge {
+        maxAge = r.Person.Age
+    }
+    namesByAge[r.Person.Age] = append(namesByAge[r.Person.Age], r.Person.Name)
+    return nil
+})
+
+avgAge := float64(totalAge) / float64(count)
+fmt.Printf("Average age: %.2f, Max age: %d\n", avgAge, maxAge)
+```
+
+## Memory-Efficient Export
+
+### Export to File
+
+```go
+file, err := os.Create("people.json")
+if err != nil {
+    return err
+}
+defer file.Close()
+
+encoder := json.NewEncoder(file)
+first := true
+
+file.WriteString("[")
+
+err = cy.Stream(ctx, session, func(r *PersonResult) error {
+    if !first {
+        file.WriteString(",")
+    }
+    first = false
+    return encoder.Encode(r.Person)
+})
+
+file.WriteString("]")
+return err
+```
+
+### Stream to HTTP Response
+
+```go
+func (h *Handler) ExportPeople(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/x-ndjson")
+    
+    session := h.driver.NewSession(r.Context(), neo4j.SessionConfig{
+        AccessMode: neo4j.AccessModeRead,
+    })
+    defer session.Close(r.Context())
+    
+    var person Person
+    cy := c.Match(db.Node(&person)).Return(&person)
+    
+    encoder := json.NewEncoder(w)
+    
+    err := cy.Stream(r.Context(), session, func(result *PersonResult) error {
+        return encoder.Encode(result.Person)
+    })
+    
+    if err != nil {
+        // Can't change status code after streaming started
+        log.Printf("Stream error: %v", err)
+    }
+}
+```
+
+## Fetch Size
+
+### Configure Fetch Size
+
+Control how many records are fetched at a time:
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{
+    FetchSize: 1000, // Fetch 1000 records at a time
+})
+```
+
+| Fetch Size | Memory | Network Calls | Use Case |
+|------------|--------|---------------|----------|
+| Small (100) | Low | More | Limited memory |
+| Medium (1000) | Medium | Balanced | Default |
+| Large (10000) | High | Fewer | High throughput |
+
+## Performance Tips
+
+<Aside type="tip" title="Streaming Guidelines">
+
+1. **Use streaming for large results**: >1000 records
+2. **Set appropriate fetch size**: Balance memory vs network
+3. **Process inline**: Avoid storing all results
+4. **Handle errors properly**: Stop streaming on critical errors
+5. **Use batching**: For downstream systems that prefer batches
+6. **Monitor memory**: Even streaming can accumulate state
+
+</Aside>
+
+### When to Use Each Method
+
+| Scenario | Method | Reason |
+|----------|--------|--------|
+| < 100 results | `All()` | Simple, low overhead |
+| 100-1000 results | Either | Depends on memory constraints |
+| > 1000 results | `Stream()` | Memory efficiency |
+| Single result | `Single()` | Optimized for one record |
+| Export to file | `Stream()` | Constant memory |
+| Need random access | `All()` | Must load all data |

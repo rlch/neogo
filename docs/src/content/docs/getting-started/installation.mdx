@@ -1,0 +1,114 @@
+---
+title: Installation
+description: How to install neogo in your Go project
+---
+
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
+
+# Installation
+
+## Prerequisites
+
+- Go 1.21 or higher
+- A running Neo4j instance (4.x or 5.x)
+
+## Install neogo
+
+<Steps>
+
+1. **Add neogo to your project**
+
+   ```bash
+   go get github.com/rlch/neogo
+   ```
+
+2. **Import neogo in your code**
+
+   ```go
+   import (
+       "github.com/rlch/neogo"
+       "github.com/rlch/neogo/db"
+   )
+   ```
+
+3. **Set up the Neo4j driver**
+
+   neogo works with the official Neo4j Go driver. First, create a driver connection:
+
+   ```go
+   import "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+
+   driver, err := neo4j.NewDriverWithContext(
+       "neo4j://localhost:7687",
+       neo4j.BasicAuth("neo4j", "password", ""),
+   )
+   if err != nil {
+       log.Fatal(err)
+   }
+   defer driver.Close(ctx)
+   ```
+
+4. **Create a neogo client**
+
+   ```go
+   client := neogo.New(driver)
+   ```
+
+</Steps>
+
+## Verify Installation
+
+Run a simple query to verify everything is working:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+    "github.com/rlch/neogo"
+    "github.com/rlch/neogo/db"
+)
+
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+    Name string `neo4j:"name"`
+}
+
+func main() {
+    ctx := context.Background()
+
+    driver, err := neo4j.NewDriverWithContext(
+        "neo4j://localhost:7687",
+        neo4j.BasicAuth("neo4j", "password", ""),
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer driver.Close(ctx)
+
+    client := neogo.New(driver)
+
+    person := Person{Name: "Test"}
+    person.GenerateID()
+
+    // Create and immediately delete (just testing connection)
+    err = client.Exec().
+        Create(db.Node(&person)).
+        Return(&person).
+        Run(ctx)
+    
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Printf("Successfully created: %+v\n", person)
+}
+```
+
+## Next Steps
+
+Now that you have neogo installed, check out the [Quick Start](/getting-started/quick-start/) guide to start building queries.

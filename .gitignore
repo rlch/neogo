@@ -21,3 +21,7 @@ vendor/
 go.work
 
 goccy/
+
+# Node.js (docs site)
+node_modules/
+.astro/

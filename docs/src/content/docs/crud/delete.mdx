@@ -1,0 +1,371 @@
+---
+title: Delete
+description: Deleting nodes and relationships with DELETE and DETACH DELETE
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+neogo provides methods for removing nodes and relationships from your Neo4j database using `DELETE` and `DETACH DELETE`.
+
+## Deleting Nodes
+
+### Basic Delete
+
+Delete a node that has no relationships:
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).Delete(&person)
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person {name: "Alice"})
+DELETE person
+```
+
+<Aside type="caution">
+Deleting a node with existing relationships will fail. Use `DetachDelete` to remove the node and all its relationships.
+</Aside>
+
+### Detach Delete
+
+Delete a node and all its relationships:
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).DetachDelete(&person)
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person {name: "Alice"})
+DETACH DELETE person
+```
+
+## Deleting Relationships
+
+### Delete Specific Relationship
+
+```go
+var person, friend Person
+var knows Knows
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person, db.Props{"name": "Alice"}),
+        db.Related(&knows, db.To, &friend, db.Props{"name": "Bob"}),
+    ),
+).Delete(&knows)
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person {name: "Alice"})-[knows:KNOWS]->(friend:Person {name: "Bob"})
+DELETE knows
+```
+
+### Delete All Relationships of a Type
+
+```go
+var person Person
+var knows Knows
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person, db.Props{"name": "Alice"}),
+        db.Related(&knows, db.To, db.Node(nil)),
+    ),
+).Delete(&knows)
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person {name: "Alice"})-[knows:KNOWS]->()
+DELETE knows
+```
+
+### Delete All Relationships
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person, db.Props{"name": "Alice"}),
+        db.Related(db.Bind(nil, "r"), db.Either, db.Node(nil)),
+    ),
+).Delete(db.Var("r"))
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person {name: "Alice"})-[r]-()
+DELETE r
+```
+
+## Conditional Deletion
+
+### Delete with WHERE
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person),
+).Where(
+    db.And(
+        db.Cond(&person, "status", db.Equal, "inactive"),
+        db.Cond(&person, "last_login", db.LessThan, thirtyDaysAgo),
+    ),
+).DetachDelete(&person)
+```
+
+### Delete with Pattern Conditions
+
+```go
+var person Person
+var company Company
+
+// Delete people not working at any company
+cy := c.Match(
+    db.Node(&person),
+).Where(
+    db.Not(db.Exists(
+        db.Patterns(
+            db.Node(&person),
+            db.Related(db.Var("WORKS_AT"), db.To, &company),
+        ),
+    )),
+).Delete(&person)
+```
+
+## Deleting Multiple Elements
+
+### Delete Multiple Nodes
+
+```go
+var person, company Person
+
+cy := c.Match(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).Match(
+    db.Node(&company, db.Props{"name": "Defunct Corp"}),
+).DetachDelete(&person, &company)
+```
+
+### Delete Nodes and Relationships Together
+
+```go
+var person, friend Person
+var knows Knows
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person, db.Props{"name": "Alice"}),
+        db.Related(&knows, db.To, &friend),
+    ),
+).Delete(&knows, &person)
+```
+
+<Aside type="note">
+When deleting both relationships and nodes, delete the relationships first or use `DetachDelete`.
+</Aside>
+
+## Bulk Deletion
+
+### Delete All Nodes of a Type
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person),
+).DetachDelete(&person)
+```
+
+<Aside type="caution">
+This deletes ALL Person nodes. Always test with a RETURN clause first to verify what will be deleted.
+</Aside>
+
+### Delete with Limit
+
+Delete in batches to avoid memory issues:
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person),
+).Where(
+    db.Cond(&person, "status", db.Equal, "deleted"),
+).With(&person).
+    Limit(1000).
+    DetachDelete(&person)
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person)
+WHERE person.status = "deleted"
+WITH person
+LIMIT 1000
+DETACH DELETE person
+```
+
+### Delete with UNWIND
+
+```go
+idsToDelete := []string{"id1", "id2", "id3"}
+
+var person Person
+
+cy := c.Unwind(idsToDelete, "id").
+    Match(
+        db.Node(&person, db.Props{"id": db.Var("id")}),
+    ).DetachDelete(&person)
+```
+
+## Returning Deleted Data
+
+### Return Before Delete
+
+Return data about what was deleted:
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).Return(
+    db.Qual(&person, "name"),
+    db.Qual(&person, "email"),
+).Delete(&person)
+
+// Note: The RETURN must come before DELETE in execution
+// This requires careful query construction
+```
+
+### Count Deletions
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person),
+).Where(
+    db.Cond(&person, "status", db.Equal, "inactive"),
+).With(db.Lit("count(person) as count")).
+    Return(db.Var("count"))
+
+// Then run the actual delete
+cy2 := c.Match(
+    db.Node(&person),
+).Where(
+    db.Cond(&person, "status", db.Equal, "inactive"),
+).DetachDelete(&person)
+```
+
+## Safety Patterns
+
+### Preview Before Delete
+
+Always preview what will be deleted:
+
+```go
+var person Person
+
+// First, see what would be deleted
+preview := c.Match(
+    db.Node(&person),
+).Where(
+    db.Cond(&person, "created_at", db.LessThan, cutoffDate),
+).Return(&person).Limit(100)
+
+results, _ := preview.All(ctx, tx)
+fmt.Printf("Will delete %d nodes\n", len(results))
+
+// Then delete
+delete := c.Match(
+    db.Node(&person),
+).Where(
+    db.Cond(&person, "created_at", db.LessThan, cutoffDate),
+).DetachDelete(&person)
+```
+
+### Soft Delete Pattern
+
+Instead of deleting, mark as deleted:
+
+```go
+var person Person
+
+cy := c.Match(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).Set(
+    db.SetPropValue(&person, "deleted", true),
+    db.SetPropValue(&person, "deleted_at", time.Now()),
+).RemoveLabels(&person, "Active").
+    SetLabels(&person, "Deleted")
+```
+
+## Error Handling
+
+### Handling Constraint Errors
+
+```go
+_, err := cy.Run(ctx, tx)
+if err != nil {
+    // Check if deletion failed due to constraints
+    if neo4j.IsConstraintError(err) {
+        // Handle constraint violation
+    }
+    return err
+}
+```
+
+### Delete in Transaction
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{})
+defer session.Close(ctx)
+
+_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    // Delete relationships first
+    _, err := c.Match(
+        db.Patterns(
+            db.Node(&person, db.Props{"name": "Alice"}),
+            db.Related(db.Bind(nil, "r"), db.Either, db.Node(nil)),
+        ),
+    ).Delete(db.Var("r")).Run(ctx, tx)
+    if err != nil {
+        return nil, err  // Transaction will rollback
+    }
+    
+    // Then delete the node
+    _, err = c.Match(
+        db.Node(&person, db.Props{"name": "Alice"}),
+    ).Delete(&person).Run(ctx, tx)
+    
+    return nil, err
+})
+```
+
+## Best Practices
+
+<Aside type="tip" title="Deletion Guidelines">
+
+1. **Always preview first**: Use RETURN before DELETE to verify targets
+2. **Use DETACH DELETE carefully**: It removes all relationships
+3. **Delete in batches**: For large deletions, use LIMIT
+4. **Consider soft deletes**: Mark as deleted instead of removing
+5. **Use transactions**: Ensure atomicity for complex deletions
+6. **Backup first**: For critical data, backup before bulk deletes
+
+</Aside>

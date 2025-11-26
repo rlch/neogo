@@ -1,0 +1,279 @@
+---
+title: UNION
+description: Combining query results with UNION and UNION ALL
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+`UNION` combines the results of multiple queries into a single result set. neogo supports both `UNION` (removes duplicates) and `UNION ALL` (keeps all rows).
+
+## Basic UNION
+
+### UNION (Distinct Results)
+
+```go
+var person Person
+var company Company
+
+cy := c.Match(
+    db.Node(&person),
+).Return(
+    db.Alias(db.Qual(&person, "name"), "name"),
+).Union().Match(
+    db.Node(&company),
+).Return(
+    db.Alias(db.Qual(&company, "name"), "name"),
+)
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person)
+RETURN person.name AS name
+UNION
+MATCH (company:Company)
+RETURN company.name AS name
+```
+
+### UNION ALL (All Results)
+
+```go
+cy := c.Match(
+    db.Node(&person),
+).Return(
+    db.Alias(db.Qual(&person, "name"), "name"),
+).UnionAll().Match(
+    db.Node(&company),
+).Return(
+    db.Alias(db.Qual(&company, "name"), "name"),
+)
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person)
+RETURN person.name AS name
+UNION ALL
+MATCH (company:Company)
+RETURN company.name AS name
+```
+
+## Column Requirements
+
+<Aside type="caution">
+All queries in a UNION must return the same columns with the same names. Use aliases to ensure consistency.
+</Aside>
+
+### Matching Columns
+
+```go
+// ✅ Correct: Same column names
+cy := c.Match(db.Node(&person)).
+    Return(
+        db.Alias(db.Qual(&person, "name"), "entityName"),
+        db.Alias(db.Lit("'person'"), "entityType"),
+    ).Union().Match(db.Node(&company)).
+    Return(
+        db.Alias(db.Qual(&company, "name"), "entityName"),
+        db.Alias(db.Lit("'company'"), "entityType"),
+    )
+
+// ❌ Wrong: Different column names will error
+cy := c.Match(db.Node(&person)).
+    Return(db.Qual(&person, "name")).  // Returns "person.name"
+    Union().Match(db.Node(&company)).
+    Return(db.Qual(&company, "name"))  // Returns "company.name" - mismatch!
+```
+
+## Multiple UNIONs
+
+Chain multiple UNION clauses:
+
+```go
+var person Person
+var company Company
+var product Product
+
+cy := c.Match(db.Node(&person)).
+    Return(
+        db.Alias(db.Qual(&person, "name"), "name"),
+        db.Alias(db.Lit("'person'"), "type"),
+    ).UnionAll().Match(db.Node(&company)).
+    Return(
+        db.Alias(db.Qual(&company, "name"), "name"),
+        db.Alias(db.Lit("'company'"), "type"),
+    ).UnionAll().Match(db.Node(&product)).
+    Return(
+        db.Alias(db.Qual(&product, "name"), "name"),
+        db.Alias(db.Lit("'product'"), "type"),
+    )
+```
+
+## UNION with Complex Queries
+
+### With WHERE Clauses
+
+```go
+var employee, contractor Person
+
+cy := c.Match(db.Node(&employee)).
+    Where(db.Cond(&employee, "type", db.Equal, "employee")).
+    Return(
+        db.Alias(&employee, "worker"),
+        db.Alias(db.Qual(&employee, "department"), "dept"),
+    ).Union().Match(db.Node(&contractor)).
+    Where(db.Cond(&contractor, "type", db.Equal, "contractor")).
+    Return(
+        db.Alias(&contractor, "worker"),
+        db.Alias(db.Qual(&contractor, "client"), "dept"),
+    )
+```
+
+### With Relationships
+
+```go
+var person Person
+var company Company
+var worksAt, ownsSharesIn Relationship
+
+// People who work at OR own shares in companies
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(&worksAt, db.To, &company),
+    ),
+).Return(
+    db.Alias(&person, "person"),
+    db.Alias(&company, "company"),
+    db.Alias(db.Lit("'employee'"), "relationship"),
+).Union().Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(&ownsSharesIn, db.To, &company),
+    ),
+).Return(
+    db.Alias(&person, "person"),
+    db.Alias(&company, "company"),
+    db.Alias(db.Lit("'shareholder'"), "relationship"),
+)
+```
+
+## Use Cases
+
+### Search Across Types
+
+```go
+searchTerm := "alice"
+
+var person Person
+var company Company
+var product Product
+
+cy := c.Match(db.Node(&person)).
+    Where(db.Cond(&person, "name", db.Contains, searchTerm)).
+    Return(
+        db.Alias(db.Qual(&person, "name"), "name"),
+        db.Alias(db.Lit("'Person'"), "type"),
+        db.Alias(&person, "node"),
+    ).UnionAll().Match(db.Node(&company)).
+    Where(db.Cond(&company, "name", db.Contains, searchTerm)).
+    Return(
+        db.Alias(db.Qual(&company, "name"), "name"),
+        db.Alias(db.Lit("'Company'"), "type"),
+        db.Alias(&company, "node"),
+    ).UnionAll().Match(db.Node(&product)).
+    Where(db.Cond(&product, "name", db.Contains, searchTerm)).
+    Return(
+        db.Alias(db.Qual(&product, "name"), "name"),
+        db.Alias(db.Lit("'Product'"), "type"),
+        db.Alias(&product, "node"),
+    )
+```
+
+### Finding Multiple Relationship Types
+
+```go
+var person, other Person
+
+// Find all connections (friends, colleagues, family)
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person, db.Props{"name": "Alice"}),
+        db.Related(db.Var("FRIENDS_WITH"), db.Either, &other),
+    ),
+).Return(
+    db.Alias(&other, "connected"),
+    db.Alias(db.Lit("'friend'"), "relationship"),
+).Union().Match(
+    db.Patterns(
+        db.Node(&person, db.Props{"name": "Alice"}),
+        db.Related(db.Var("WORKS_WITH"), db.Either, &other),
+    ),
+).Return(
+    db.Alias(&other, "connected"),
+    db.Alias(db.Lit("'colleague'"), "relationship"),
+).Union().Match(
+    db.Patterns(
+        db.Node(&person, db.Props{"name": "Alice"}),
+        db.Related(db.Var("FAMILY"), db.Either, &other),
+    ),
+).Return(
+    db.Alias(&other, "connected"),
+    db.Alias(db.Lit("'family'"), "relationship"),
+)
+```
+
+## UNION vs UNION ALL
+
+| Feature | UNION | UNION ALL |
+|---------|-------|-----------|
+| Duplicates | Removed | Kept |
+| Performance | Slower (dedup) | Faster |
+| Use when | Need unique results | Need all results |
+
+```go
+// UNION - If same name appears in both, only shown once
+cy := c.Match(db.Node(&person)).Return(db.Qual(&person, "name")).
+    Union().
+    Match(db.Node(&company)).Return(db.Qual(&company, "name"))
+
+// UNION ALL - Same name can appear multiple times
+cy := c.Match(db.Node(&person)).Return(db.Qual(&person, "name")).
+    UnionAll().
+    Match(db.Node(&company)).Return(db.Qual(&company, "name"))
+```
+
+## Limitations
+
+<Aside type="caution" title="UNION Limitations">
+
+1. **Column names must match**: All queries must return same columns
+2. **Column types should match**: Mixing types may cause issues
+3. **ORDER BY placement**: Can only appear at the end of the entire UNION
+4. **WITH not allowed**: Can't use WITH in individual UNION parts
+
+</Aside>
+
+### ORDER BY with UNION
+
+```go
+cy := c.Match(db.Node(&person)).
+    Return(
+        db.Alias(db.Qual(&person, "name"), "name"),
+        db.Alias(db.Lit("'person'"), "type"),
+    ).Union().Match(db.Node(&company)).
+    Return(
+        db.Alias(db.Qual(&company, "name"), "name"),
+        db.Alias(db.Lit("'company'"), "type"),
+    ).OrderBy(db.Asc(db.Var("name")))  // Applies to entire result
+```
+
+Generated Cypher:
+```cypher
+MATCH (person:Person)
+RETURN person.name AS name, 'person' AS type
+UNION
+MATCH (company:Company)
+RETURN company.name AS name, 'company' AS type
+ORDER BY name ASC
+```

@@ -1,0 +1,249 @@
+---
+title: Auto Migration
+description: Automatically create indexes and constraints from your Go models
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+# Auto Migration
+
+neogo can automatically create indexes and constraints in Neo4j based on struct tags in your Go models. This is similar to GORM's AutoMigrate but for graph databases.
+
+<Aside type="caution">
+  Auto migration is **additive only** - it will never drop existing indexes or constraints. This ensures safety in production environments.
+</Aside>
+
+## Quick Start
+
+<Steps>
+
+1. **Define your models with schema tags**
+
+   ```go
+   type Person struct {
+       neogo.Node `neo4j:"Person"`
+
+       Email string `neo4j:"email,unique"`
+       Name  string `neo4j:"name,index"`
+   }
+   ```
+
+2. **Register types when creating the driver**
+
+   ```go
+   driver, err := neogo.New(
+       "neo4j://localhost:7687",
+       neo4j.BasicAuth("neo4j", "password", ""),
+       neogo.WithTypes(&Person{}),
+   )
+   ```
+
+3. **Run auto migration**
+
+   ```go
+   actions, err := driver.Schema().AutoMigrate(ctx)
+   if err != nil {
+       log.Fatal(err)
+   }
+   
+   for _, action := range actions {
+       fmt.Printf("Executed: %s (%s)\n", action.Name, action.Type)
+   }
+   ```
+
+</Steps>
+
+## Schema Interface
+
+The `Schema()` method returns an interface with these methods:
+
+```go
+type Schema interface {
+    // GetIndexes returns all indexes from the database
+    GetIndexes(ctx context.Context) ([]IndexInfo, error)
+
+    // GetConstraints returns all constraints from the database
+    GetConstraints(ctx context.Context) ([]ConstraintInfo, error)
+
+    // AutoMigrate creates missing indexes and constraints
+    // Additive only - never drops existing schema elements
+    AutoMigrate(ctx context.Context, types ...any) ([]MigrationAction, error)
+
+    // NeedsMigration checks if migration is needed
+    NeedsMigration(ctx context.Context, types ...any) (bool, []MigrationAction, error)
+}
+```
+
+## Checking Migration Status
+
+Before running migrations, you can check what would be created:
+
+```go
+needs, actions, err := driver.Schema().NeedsMigration(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+if needs {
+    fmt.Println("Pending migrations:")
+    for _, action := range actions {
+        fmt.Printf("  - %s: %s\n", action.Type, action.Name)
+        fmt.Printf("    Cypher: %s\n", action.Cypher)
+    }
+}
+```
+
+## Migrating Specific Types
+
+You can migrate only specific types:
+
+```go
+// Migrate only Person and Movie types
+actions, err := driver.Schema().AutoMigrate(ctx, &Person{}, &Movie{})
+```
+
+Or migrate all registered types:
+
+```go
+// Migrate all types registered with WithTypes()
+actions, err := driver.Schema().AutoMigrate(ctx)
+```
+
+## Introspecting Existing Schema
+
+### Get All Indexes
+
+```go
+indexes, err := driver.Schema().GetIndexes(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, idx := range indexes {
+    fmt.Printf("Index: %s\n", idx.Name)
+    fmt.Printf("  Type: %s\n", idx.Type)
+    fmt.Printf("  Entity: %s\n", idx.EntityType)
+    fmt.Printf("  Labels: %v\n", idx.LabelsOrTypes)
+    fmt.Printf("  Properties: %v\n", idx.Properties)
+    fmt.Printf("  State: %s\n", idx.State)
+}
+```
+
+### Get All Constraints
+
+```go
+constraints, err := driver.Schema().GetConstraints(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, con := range constraints {
+    fmt.Printf("Constraint: %s\n", con.Name)
+    fmt.Printf("  Type: %s\n", con.Type)
+    fmt.Printf("  Entity: %s\n", con.EntityType)
+    fmt.Printf("  Labels: %v\n", con.LabelsOrTypes)
+    fmt.Printf("  Properties: %v\n", con.Properties)
+}
+```
+
+## Migration Actions
+
+The `MigrationAction` struct tells you what was or will be executed:
+
+```go
+type MigrationAction struct {
+    Type   MigrationActionType // CREATE_INDEX or CREATE_CONSTRAINT
+    Name   string              // Schema element name
+    Cypher string              // The Cypher statement
+}
+```
+
+## Complete Example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+    "github.com/rlch/neogo"
+)
+
+type User struct {
+    neogo.Node `neo4j:"User"`
+
+    ID       string `neo4j:"id,unique"`
+    Email    string `neo4j:"email,unique"`
+    Username string `neo4j:"username,index"`
+    Bio      string `neo4j:"bio,fulltext:user_bio_search"`
+}
+
+type Post struct {
+    neogo.Node `neo4j:"Post"`
+
+    ID        string `neo4j:"id,unique"`
+    Title     string `neo4j:"title,index"`
+    Content   string `neo4j:"content,fulltext:post_content_search"`
+    CreatedAt int64  `neo4j:"created_at,index"`
+}
+
+func main() {
+    ctx := context.Background()
+
+    driver, err := neogo.New(
+        "neo4j://localhost:7687",
+        neo4j.BasicAuth("neo4j", "password", ""),
+        neogo.WithTypes(&User{}, &Post{}),
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer driver.DB().Close(ctx)
+
+    // Check what needs migration
+    needs, pending, err := driver.Schema().NeedsMigration(ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    if !needs {
+        fmt.Println("Schema is up to date!")
+        return
+    }
+
+    fmt.Printf("Found %d pending migrations:\n", len(pending))
+    for _, action := range pending {
+        fmt.Printf("  - [%s] %s\n", action.Type, action.Name)
+    }
+
+    // Run migrations
+    fmt.Println("\nRunning migrations...")
+    executed, err := driver.Schema().AutoMigrate(ctx)
+    if err != nil {
+        log.Fatalf("Migration failed: %v", err)
+    }
+
+    fmt.Printf("\nSuccessfully executed %d migrations\n", len(executed))
+}
+```
+
+## Best Practices
+
+1. **Run migrations at startup**: Check and apply migrations when your application starts
+2. **Log migration actions**: Keep track of what schema changes were applied
+3. **Test migrations**: Run migrations in a test environment first
+4. **Use explicit names**: Name your indexes and constraints for clarity
+5. **Review before production**: Use `NeedsMigration()` to review changes before applying
+
+<Aside type="tip">
+  In CI/CD pipelines, you can use `NeedsMigration()` to fail the build if there are pending migrations that haven't been reviewed.
+</Aside>
+
+## See Also
+
+- [Indexes](/schema/indexes/) - Detailed index configuration
+- [Constraints](/schema/constraints/) - Detailed constraint configuration
+- [Struct Tags](/reference/struct-tags/) - Complete tag reference

@@ -1,0 +1,277 @@
+---
+title: Abstract Nodes
+description: Using abstract nodes for polymorphic queries with Implementers()
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Abstract nodes allow you to define a common interface for multiple node types, enabling polymorphic queries. This is similar to interfaces or abstract classes in object-oriented programming.
+
+## The Problem
+
+In Neo4j, you might have multiple node types that share common properties:
+
+```cypher
+(:Person {name: "Alice", age: 30})
+(:Company {name: "Acme Corp", founded: 1990})
+(:Product {name: "Widget", price: 99.99})
+```
+
+All have a `name` property, but are different types. How do you query all "nameable" things?
+
+## Defining Abstract Nodes
+
+An abstract node is a struct that implements both `db.INode` and `db.IAbstract`:
+
+```go
+// Abstract node interface
+type Named struct {
+    Name string `json:"name"`
+}
+
+func (n *Named) Node() *db.NodePattern {
+    return db.Node("Named")  // Base label
+}
+
+func (n *Named) Implementers() db.Implementers {
+    return db.Implementers{
+        &Person{},
+        &Company{},
+        &Product{},
+    }
+}
+```
+
+## Concrete Implementations
+
+Each concrete type embeds the abstract node:
+
+```go
+type Person struct {
+    Named        // Embeds Named
+    Age int `json:"age"`
+}
+
+func (p *Person) Node() *db.NodePattern {
+    return db.Node("Named", "Person")
+}
+
+type Company struct {
+    Named          // Embeds Named
+    Founded int `json:"founded"`
+}
+
+func (c *Company) Node() *db.NodePattern {
+    return db.Node("Named", "Company")
+}
+
+type Product struct {
+    Named           // Embeds Named
+    Price float64 `json:"price"`
+}
+
+func (p *Product) Node() *db.NodePattern {
+    return db.Node("Named", "Product")
+}
+```
+
+<Aside type="caution">
+All implementers must include the abstract node's label(s) in their `Node()` method for the hierarchy to work correctly.
+</Aside>
+
+## Querying Abstract Nodes
+
+When you query using the abstract node type, neogo knows how to deserialize the results into the correct concrete types:
+
+```go
+var named Named
+
+results, err := c.Match(
+    db.Node(&named),
+).Return(&named).All(ctx, tx)
+
+for _, result := range results {
+    switch v := result.Named.(type) {
+    case *Person:
+        fmt.Printf("Person: %s, age %d\n", v.Name, v.Age)
+    case *Company:
+        fmt.Printf("Company: %s, founded %d\n", v.Name, v.Founded)
+    case *Product:
+        fmt.Printf("Product: %s, price $%.2f\n", v.Name, v.Price)
+    }
+}
+```
+
+## The IAbstract Interface
+
+```go
+type IAbstract interface {
+    INode
+    Implementers() Implementers
+}
+
+type Implementers []INode
+```
+
+The `Implementers()` method returns a slice of all concrete types that implement this abstract node.
+
+## Label-Based Discrimination
+
+neogo uses Neo4j labels to determine which concrete type to instantiate. When reading a node:
+
+1. neogo fetches the node's labels from Neo4j
+2. It checks each implementer's labels
+3. It instantiates the implementer whose labels best match
+
+```go
+// If Neo4j returns labels: ["Named", "Person"]
+// neogo will instantiate a *Person
+
+// If Neo4j returns labels: ["Named", "Company"]
+// neogo will instantiate a *Company
+```
+
+## Nested Abstract Nodes
+
+You can create hierarchies of abstract nodes:
+
+```go
+// Base abstract
+type Entity struct {
+    ID string `json:"id"`
+}
+
+func (e *Entity) Node() *db.NodePattern {
+    return db.Node("Entity")
+}
+
+func (e *Entity) Implementers() db.Implementers {
+    return db.Implementers{
+        &LivingEntity{},  // Another abstract!
+        &Building{},
+    }
+}
+
+// Mid-level abstract
+type LivingEntity struct {
+    Entity
+    BirthDate time.Time `json:"birth_date"`
+}
+
+func (l *LivingEntity) Node() *db.NodePattern {
+    return db.Node("Entity", "LivingEntity")
+}
+
+func (l *LivingEntity) Implementers() db.Implementers {
+    return db.Implementers{
+        &Person{},
+        &Animal{},
+    }
+}
+
+// Concrete types
+type Person struct {
+    LivingEntity
+    Name string `json:"name"`
+}
+
+func (p *Person) Node() *db.NodePattern {
+    return db.Node("Entity", "LivingEntity", "Person")
+}
+
+type Animal struct {
+    LivingEntity
+    Species string `json:"species"`
+}
+
+func (a *Animal) Node() *db.NodePattern {
+    return db.Node("Entity", "LivingEntity", "Animal")
+}
+
+type Building struct {
+    Entity
+    Address string `json:"address"`
+}
+
+func (b *Building) Node() *db.NodePattern {
+    return db.Node("Entity", "Building")
+}
+```
+
+## Abstract Nodes in Relationships
+
+Abstract nodes work seamlessly in relationship patterns:
+
+```go
+type Person struct {
+    Named
+    Age int `json:"age"`
+}
+
+type Owns struct{}
+
+func (o *Owns) Relationship() *db.RelationshipPattern {
+    return db.Rel("OWNS")
+}
+
+// Query: What does each person own?
+var person Person
+var owns Owns
+var owned Named  // Abstract - could be Company, Product, etc.
+
+cy := c.Match(
+    db.Patterns(
+        db.Node(&person),
+        db.Related(&owns, db.To, &owned),
+    ),
+).Return(&person, &owned)
+```
+
+## Best Practices
+
+<Aside type="tip" title="Design Tips">
+
+1. **Keep abstract nodes focused**: Include only truly shared properties
+2. **Use meaningful base labels**: The abstract label should describe the shared trait
+3. **Order labels consistently**: Put base labels first in `Node()` definitions
+4. **Register all implementers**: Missing implementers will cause deserialization errors
+
+</Aside>
+
+## Common Patterns
+
+### Union Types
+
+```go
+// SearchResult could be any searchable entity
+type SearchResult struct {
+    ID string `json:"id"`
+}
+
+func (s *SearchResult) Implementers() db.Implementers {
+    return db.Implementers{
+        &Person{},
+        &Article{},
+        &Comment{},
+    }
+}
+```
+
+### Soft Interfaces
+
+```go
+// Auditable tracks creation/modification
+type Auditable struct {
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+    CreatedBy string    `json:"created_by"`
+}
+
+func (a *Auditable) Implementers() db.Implementers {
+    return db.Implementers{
+        &Document{},
+        &User{},
+        &Setting{},
+    }
+}
+```

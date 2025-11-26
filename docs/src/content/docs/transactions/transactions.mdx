@@ -1,0 +1,358 @@
+---
+title: Transactions
+description: Managing explicit transactions for atomic operations
+---
+
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Transactions group multiple operations into atomic units. Either all operations succeed, or all are rolled back.
+
+## Transaction Types
+
+Neo4j supports three transaction types:
+
+| Type | Use Case | Retry | Rollback |
+|------|----------|-------|----------|
+| Auto-commit | Simple queries | No | No |
+| Managed | Most operations | Yes | Automatic |
+| Explicit | Fine control | Manual | Manual |
+
+## Managed Transactions
+
+### ExecuteRead
+
+For read-only transactions with automatic retry:
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{
+    AccessMode: neo4j.AccessModeRead,
+})
+defer session.Close(ctx)
+
+result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    var person Person
+    cy := c.Match(
+        db.Node(&person, db.Props{"name": "Alice"}),
+    ).Return(&person)
+    
+    return cy.Single(ctx, tx)
+})
+if err != nil {
+    return err
+}
+
+person := result.(*PersonResult)
+```
+
+### ExecuteWrite
+
+For write transactions with automatic retry:
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{
+    AccessMode: neo4j.AccessModeWrite,
+})
+defer session.Close(ctx)
+
+result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    var person Person
+    
+    cy := c.Create(
+        db.Node(&person, db.Props{
+            "name": "Alice",
+            "email": "alice@example.com",
+        }),
+    ).Return(&person)
+    
+    return cy.Single(ctx, tx)
+})
+```
+
+<Aside type="tip">
+Use `ExecuteRead` and `ExecuteWrite` for most operations. They handle retries for transient failures automatically.
+</Aside>
+
+## Multiple Operations in a Transaction
+
+### Atomic Operations
+
+```go
+result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    var alice, bob Person
+    var knows Knows
+    
+    // Create Alice
+    cy1 := c.Create(
+        db.Node(&alice, db.Props{"name": "Alice"}),
+    ).Return(&alice)
+    
+    r1, err := cy1.Single(ctx, tx)
+    if err != nil {
+        return nil, err // Transaction will rollback
+    }
+    
+    // Create Bob
+    cy2 := c.Create(
+        db.Node(&bob, db.Props{"name": "Bob"}),
+    ).Return(&bob)
+    
+    r2, err := cy2.Single(ctx, tx)
+    if err != nil {
+        return nil, err // Transaction will rollback
+    }
+    
+    // Create relationship
+    cy3 := c.Match(
+        db.Node(&alice, db.Props{"name": "Alice"}),
+    ).Match(
+        db.Node(&bob, db.Props{"name": "Bob"}),
+    ).Create(
+        db.Patterns(
+            db.Node(&alice),
+            db.Related(&knows, db.To, &bob),
+        ),
+    ).Return(&knows)
+    
+    _, err = cy3.Single(ctx, tx)
+    if err != nil {
+        return nil, err // Transaction will rollback
+    }
+    
+    return map[string]any{
+        "alice": r1.Alice,
+        "bob":   r2.Bob,
+    }, nil
+})
+```
+
+## Explicit Transactions
+
+For fine-grained control:
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{
+    AccessMode: neo4j.AccessModeWrite,
+})
+defer session.Close(ctx)
+
+tx, err := session.BeginTransaction(ctx)
+if err != nil {
+    return err
+}
+
+// Ensure cleanup
+defer func() {
+    if err != nil {
+        tx.Rollback(ctx)
+    }
+}()
+
+// Operation 1
+var person Person
+cy1 := c.Create(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).Return(&person)
+_, err = cy1.Single(ctx, tx)
+if err != nil {
+    return err
+}
+
+// Operation 2
+cy2 := c.Match(
+    db.Node(&person, db.Props{"name": "Alice"}),
+).Set(
+    db.SetPropValue(&person, "verified", true),
+)
+_, err = cy2.Run(ctx, tx)
+if err != nil {
+    return err
+}
+
+// Commit
+err = tx.Commit(ctx)
+return err
+```
+
+## Transaction Configuration
+
+### Timeout
+
+```go
+result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    // ...
+}, neo4j.WithTxTimeout(30*time.Second))
+```
+
+### Metadata
+
+```go
+result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    // ...
+}, neo4j.WithTxMetadata(map[string]any{
+    "app": "myapp",
+    "user": userID,
+}))
+```
+
+## Error Handling
+
+### Retryable Errors
+
+Managed transactions automatically retry on:
+- Transient errors (deadlocks, leader changes)
+- Service unavailability
+
+```go
+result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    // This will be retried on transient failures
+    return doWork(tx)
+})
+```
+
+### Non-Retryable Errors
+
+Return errors to stop retries:
+
+```go
+result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    // Validate input first
+    if !isValid(input) {
+        // This error won't be retried
+        return nil, fmt.Errorf("invalid input: %v", input)
+    }
+    
+    return doWork(tx)
+})
+```
+
+### Constraint Violations
+
+```go
+result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    var person Person
+    cy := c.Create(
+        db.Node(&person, db.Props{"email": email}),
+    ).Return(&person)
+    
+    r, err := cy.Single(ctx, tx)
+    if err != nil {
+        if neo4j.IsNeo4jError(err) {
+            neo4jErr := err.(*neo4j.Neo4jError)
+            if strings.Contains(neo4jErr.Code, "ConstraintValidation") {
+                return nil, fmt.Errorf("email already exists")
+            }
+        }
+        return nil, err
+    }
+    return r, nil
+})
+```
+
+## Transaction Patterns
+
+### Read-Modify-Write
+
+```go
+result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    var account Account
+    
+    // Read current balance
+    cy1 := c.Match(
+        db.Node(&account, db.Props{"id": accountID}),
+    ).Return(&account)
+    
+    r, err := cy1.Single(ctx, tx)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Check balance
+    if r.Account.Balance < amount {
+        return nil, fmt.Errorf("insufficient funds")
+    }
+    
+    // Update balance
+    cy2 := c.Match(
+        db.Node(&account, db.Props{"id": accountID}),
+    ).Set(
+        db.SetPropValue(&account, "balance", r.Account.Balance - amount),
+    ).Return(&account)
+    
+    return cy2.Single(ctx, tx)
+})
+```
+
+### Conditional Create (Check-Then-Act)
+
+```go
+result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    var user User
+    
+    // Check if exists
+    cy1 := c.Match(
+        db.Node(&user, db.Props{"email": email}),
+    ).Return(&user)
+    
+    existing, err := cy1.Single(ctx, tx)
+    if err == nil {
+        // User exists
+        return existing, nil
+    }
+    
+    if !errors.Is(err, neogo.ErrNotFound) {
+        return nil, err
+    }
+    
+    // Create new user
+    cy2 := c.Create(
+        db.Node(&user, db.Props{
+            "email": email,
+            "name":  name,
+        }),
+    ).Return(&user)
+    
+    return cy2.Single(ctx, tx)
+})
+```
+
+<Aside type="note">
+For idempotent creates, prefer `MERGE` over check-then-create patterns.
+</Aside>
+
+## Best Practices
+
+<Aside type="tip" title="Transaction Guidelines">
+
+1. **Keep transactions short**: Long transactions hold locks
+2. **Use managed transactions**: Auto-retry handles transient failures
+3. **Don't mix access modes**: Read in read transactions, write in write transactions
+4. **Handle all errors**: Return errors to trigger rollback
+5. **Avoid external calls**: Don't call APIs/services inside transactions
+6. **Idempotent operations**: Design for possible retries
+
+</Aside>
+
+### Anti-Patterns
+
+```go
+// ❌ Bad: External call in transaction
+result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    // Don't do this - HTTP call inside transaction
+    resp, err := http.Get("https://api.example.com/data")
+    if err != nil {
+        return nil, err
+    }
+    // ...
+})
+
+// ✅ Good: External call before transaction
+resp, err := http.Get("https://api.example.com/data")
+if err != nil {
+    return err
+}
+
+result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+    // Use data from external call
+    return createNode(tx, resp.Data)
+})
+```
