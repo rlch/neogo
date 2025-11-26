@@ -1,5 +1,21 @@
 package internal
 
+// binding.go provides value binding from Neo4j results to Go types.
+//
+// # Reflection Boundaries
+//
+// This file is the FALLBACK path for special cases that can't use zero-reflection codecs.
+// The primary hot path uses BindingPlan (binding_plan.go) which pre-compiles decoders.
+//
+// Reflection is used here ONLY for special cases:
+//   - Valuer interface implementations (custom unmarshaling)
+//   - Abstract node binding (polymorphic type lookup by labels)
+//   - Slice depth mismatches (wrapping single values in slices)
+//   - Empty interface targets (any/interface{})
+//
+// For normal struct/primitive binding, use BindingPlan.DecodeSingle() or
+// BindingPlan.DecodeMultiple() which delegate to zero-reflection codecs.
+
 import (
 	"errors"
 	"fmt"
@@ -218,16 +234,11 @@ func bindValuer[V neo4j.RecordValue](value V, to reflect.Value) (ok bool, err er
 	return true, nil
 }
 
-// isAbstractTarget checks if the target type is an abstract interface
+// isAbstractTarget checks if the target type is an abstract interface.
+// Delegates to isAbstractType (defined in binding_plan.go) which handles
+// pointer unwrapping and IAbstract interface checking.
 func (r *Registry) isAbstractTarget(toT reflect.Type) bool {
-	innerT := toT
-	for innerT.Kind() == reflect.Ptr {
-		innerT = innerT.Elem()
-	}
-	if innerT.Kind() != reflect.Interface {
-		return false
-	}
-	return toT.Implements(rAbstract) || (toT.Kind() == reflect.Ptr && toT.Elem().Implements(rAbstract))
+	return isAbstractType(toT)
 }
 
 // computeSliceDepthRuntime computes slice depth at runtime, checking actual element types

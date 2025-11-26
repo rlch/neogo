@@ -1,5 +1,20 @@
 package internal
 
+// Scope tracks variable bindings during Cypher query construction.
+//
+// # Reflection Usage
+//
+// This file uses reflection extensively for query building, which is ACCEPTABLE
+// because query building happens ONCE per query, not per-record. The hot path
+// (per-record deserialization) uses zero-reflection codecs in binding_plan.go
+// and internal/codec/.
+//
+// Reflection in this file is used for:
+//   - Tracking pointer addresses for identifier lookup (ptrAddr, names map)
+//   - Field binding during query construction (bindFields)
+//   - Type checking for nodes/relationships (nodeType, relationshipType)
+//   - Parameter serialization (addParameter, valueIdentifier)
+
 import (
 	"errors"
 	"fmt"

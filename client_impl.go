@@ -416,7 +416,7 @@ func (s *session) unmarshalRecords(
 		return nil
 	}
 
-	// For each binding, use pre-compiled plan if available
+	// For each binding, use pre-compiled plan (always available after Compile())
 	for key, binding := range cy.Bindings {
 		// Collect values for this key from all records
 		values := make([]any, n)
@@ -428,34 +428,23 @@ func (s *session) unmarshalRecords(
 			values[i] = value
 		}
 
-		// Try using pre-compiled plan (avoids per-record reflection)
-		if plan := cy.Plans[key]; plan != nil {
-			// Use plan metadata to decide path (no reflection needed)
-			if plan.IsSlice && !plan.IsSliceAbstract && plan.Decoder != nil {
-				// Fast path: use DecodeMultiple with pre-compiled decoder
-				slicePtr, err := normalizeSliceBinding(binding)
-				if err == nil {
-					if err := s.reg.Codecs().DecodeMultiple(values, slicePtr); err == nil {
-						continue // Success - next binding
-					}
-				}
+		plan := cy.Plans[key]
+
+		// Fast path: use plan's DecodeMultiple for non-abstract slice bindings
+		// This avoids all per-record reflection by using pre-compiled decoder
+		if plan != nil && plan.IsSlice && !plan.IsSliceAbstract && plan.Decoder != nil {
+			if err := plan.DecodeMultiple(values); err == nil {
+				continue // Success - next binding
 			}
-			// Fall through to reflection path for abstract/valuer types
-		} else {
-			// No plan - try zero-reflection batch decode (legacy path)
-			slicePtr, err := normalizeSliceBinding(binding)
-			if err == nil && !isAbstractSliceBinding(slicePtr) {
-				if err := s.reg.Codecs().DecodeMultiple(values, slicePtr); err == nil {
-					continue // Success - next binding
-				}
-			}
+			// On error, fall through to fallback
 		}
 
 		// Reflection fallback for special cases:
-		// - Valuer interface implementations
-		// - Abstract node (polymorphic) bindings
+		// - Abstract node (polymorphic) bindings (need runtime label lookup)
+		// - Valuer interface implementations (need interface assertion)
 		// - Complex pointer chains
-		if err := s.unmarshalRecordsFallback(key, values, binding); err != nil {
+		// - Errors from fast path
+		if err := s.unmarshalRecordsFallback(key, values, binding, plan); err != nil {
 			return err
 		}
 	}
@@ -463,62 +452,11 @@ func (s *session) unmarshalRecords(
 	return nil
 }
 
-// normalizeSliceBinding unwraps pointer chains (e.g., **[]T, ***[]T) to get *[]T
-// Returns the normalized slice pointer or error if binding is not a slice type.
-// Uses reflection once per binding (not per record).
-func normalizeSliceBinding(binding any) (any, error) {
-	v := reflect.ValueOf(binding)
-	if v.Kind() != reflect.Ptr {
-		return nil, fmt.Errorf("binding must be a pointer")
-	}
-
-	// Unwrap pointer chain until we find the slice
-	for {
-		elem := v.Elem()
-		switch elem.Kind() {
-		case reflect.Ptr:
-			if elem.IsNil() {
-				elem.Set(reflect.New(elem.Type().Elem()))
-			}
-			v = elem
-		case reflect.Slice:
-			// v is *[]T, which is what DecodeMultiple expects
-			return v.Interface(), nil
-		default:
-			return nil, fmt.Errorf("expected slice, got %v", elem.Kind())
-		}
-	}
-}
-
-// isAbstractSliceBinding checks if the slice element type (or nested element type)
-// is an abstract interface that requires polymorphic lookup. Uses reflection once per binding.
-func isAbstractSliceBinding(slicePtr any) bool {
-	v := reflect.ValueOf(slicePtr)
-	if v.Kind() != reflect.Ptr {
-		return false
-	}
-	sliceT := v.Elem().Type()
-	if sliceT.Kind() != reflect.Slice {
-		return false
-	}
-	// Unwind nested slices to get the innermost element type
-	elemT := sliceT.Elem()
-	for elemT.Kind() == reflect.Slice {
-		elemT = elemT.Elem()
-	}
-	// Check if element type is an interface that implements IAbstract
-	if elemT.Kind() != reflect.Interface {
-		return false
-	}
-	rAbstract := reflect.TypeOf((*internal.IAbstract)(nil)).Elem()
-	return elemT.Implements(rAbstract)
-}
-
-// unmarshalRecordsFallback handles special cases that DecodeMultiple can't:
+// unmarshalRecordsFallback handles special cases that plan.DecodeMultiple can't:
 // - Valuer interface implementations
 // - Abstract node (polymorphic) bindings
 // - Complex types requiring runtime inspection
-func (s *session) unmarshalRecordsFallback(key string, values []any, binding any) error {
+func (s *session) unmarshalRecordsFallback(key string, values []any, binding any, plan *internal.BindingPlan) error {
 	n := len(values)
 
 	// Use reflect to allocate the slice - once per binding, not per record
@@ -537,8 +475,15 @@ func (s *session) unmarshalRecordsFallback(key string, values []any, binding any
 		return fmt.Errorf("binding for key %q must be a pointer to slice, got %v", key, sliceV.Kind())
 	}
 
-	// Allocate the slice
-	sliceV.Set(reflect.MakeSlice(sliceV.Type(), n, n))
+	// Allocate the slice using plan's allocator if available (Phase 6)
+	// This uses pre-compiled allocator closure, avoiding reflect.MakeSlice per call
+	if plan != nil && plan.SliceAllocator != nil {
+		slice := plan.SliceAllocator(n)
+		sliceV.Set(reflect.ValueOf(slice))
+	} else {
+		// Fallback to reflection-based allocation
+		sliceV.Set(reflect.MakeSlice(sliceV.Type(), n, n))
+	}
 
 	// Decode each value into the slice
 	for i, value := range values {
@@ -549,9 +494,16 @@ func (s *session) unmarshalRecordsFallback(key string, values []any, binding any
 			continue
 		}
 
-		// Allocate pointer elements if needed
+		// Allocate pointer elements using plan's allocator if available
 		if elemV.Kind() == reflect.Ptr && elemV.IsNil() {
-			elemV.Set(reflect.New(elemV.Type().Elem()))
+			if plan != nil && plan.ElemAllocator != nil {
+				// Use pre-compiled allocator (avoids reflect.New per element)
+				elemPtr := plan.ElemAllocator()
+				elemV.Set(reflect.NewAt(elemV.Type().Elem(), elemPtr))
+			} else {
+				// Fallback to reflection-based allocation
+				elemV.Set(reflect.New(elemV.Type().Elem()))
+			}
 		}
 
 		// Use BindValue which handles Valuer, abstract nodes, etc.
@@ -575,6 +527,25 @@ func (s *session) unmarshalRecord(
 		if !ok {
 			return fmt.Errorf("no value associated with key %q", key)
 		}
+
+		// Try using pre-compiled plan for zero-reflection decode (Phase 6)
+		if plan := cy.Plans[key]; plan != nil {
+			// Fast path for non-slice, non-abstract bindings with pre-compiled decoder
+			if !plan.IsSlice && !plan.IsAbstract && plan.Decoder != nil {
+				if err := plan.DecodeSingle(value); err == nil {
+					continue // Success - next binding
+				}
+				// Fall through to reflection path on error
+			}
+			// Slice bindings in single-record case need special handling
+			// (wrapping single value in slice) - fall through to Bind
+		}
+
+		// Reflection fallback for special cases:
+		// - Abstract node (polymorphic) bindings
+		// - Valuer interface implementations
+		// - Slice bindings that need single-value wrapping
+		// - Complex pointer chains
 		if err := s.reg.Bind(value, binding); err != nil {
 			return fmt.Errorf("error binding key %q: %w", key, err)
 		}
