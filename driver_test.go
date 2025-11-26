@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
 
 	"github.com/rlch/neogo/builder"
@@ -22,29 +24,6 @@ func newTestDriver(neo4jDriver neo4j.DriverWithContext) Driver {
 	}
 }
 
-func connectNeo4J(ctx context.Context) (neo4j.DriverWithContext, func(context.Context) error) {
-	// Connect to task-managed Neo4j container at localhost:7687
-	driver, err := neo4j.NewDriverWithContext(
-		"bolt://localhost:7687",
-		neo4j.BasicAuth("neo4j", "password", ""),
-	)
-	if err != nil {
-		panic(fmt.Errorf("failed to connect to Neo4j: %w", err))
-	}
-
-	// Verify connection
-	if err := driver.VerifyConnectivity(ctx); err != nil {
-		panic(fmt.Errorf("failed to verify Neo4j connectivity: %w", err))
-	}
-
-	// Return cleanup function
-	cleanup := func(ctx context.Context) error {
-		return driver.Close(ctx)
-	}
-
-	return driver, cleanup
-}
-
 type Person struct {
 	Node `neo4j:"Person"`
 
@@ -54,12 +33,13 @@ type Person struct {
 }
 
 func TestDriver(t *testing.T) {
-	t.Skip("Test requires Neo4j setup - needs mocking implementation")
 	ctx := context.Background()
-	neo4j, _ := connectNeo4J(ctx)
-	d := newTestDriver(neo4j)
+	nc := startNeo4jContainer(ctx, t)
+	defer nc.Close(ctx, t)
 
-	// First create a test entity
+	d := nc.NewTestDriver(t)
+
+	// First create test entities
 	err := d.Exec().
 		Cypher(`
 		CREATE (n:TestNode {id: "test-123"})
@@ -67,24 +47,21 @@ func TestDriver(t *testing.T) {
 		CREATE (n)-[:HAS_CHILD]->(c)
 		`).
 		Run(ctx)
-	if err != nil {
-		t.Errorf("failed to create test nodes: %s", err)
-	}
+	require.NoError(t, err, "failed to create test nodes")
+
 	var count int
 
-	// Now try to delete it
+	// Now try to delete and return count
 	err = d.Exec().
 		Cypher(`
 		MATCH (n:TestNode {id: "test-123"})-[:HAS_CHILD]->(c:TestChild)
-    WITH count(n) AS count, n, c
+		WITH count(n) AS cnt, n, c
 		DETACH DELETE n, c
 		`).
-		Return(db.Qual(&count, "count"), "c").
+		Return(db.Qual(&count, "cnt")).
 		Run(ctx)
-	if err != nil {
-		t.Errorf("failed to delete test nodes: %s", err)
-	}
-	fmt.Println("count", count)
+	require.NoError(t, err, "failed to delete test nodes")
+	assert.Equal(t, 1, count)
 }
 
 func ExampleDriver() {

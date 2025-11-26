@@ -19,24 +19,52 @@ This document tracks design decisions and implementation plans for neogo's ORM f
 - [x] `GenerateConstraintCypher()` - generates CREATE CONSTRAINT statements
 - [x] Comprehensive tests for all parsing and generation
 
-### Phase 2: Registry Integration 🔲 TODO
-- [ ] Add `SchemaMeta` to `RegisteredNode`
-- [ ] Add `SchemaMeta` to `RegisteredRelationship`
-- [ ] Extract schema during `RegisterNode()` / `RegisterRelationship()`
-- [ ] Auto-add unique constraint for `Node.ID` field
+### Phase 2: Registry Integration ✅ COMPLETE
+- [x] `CodecRegistry` is single source of truth for all type data
+- [x] `nodeMeta`/`relMeta` maps store Neo4j-specific metadata
+- [x] `Neo4jNodeMetadata.Schema` field with aggregated indexes/constraints
+- [x] `RelationshipStructMeta.Schema` field for relationship schema
+- [x] Schema extracted during `RegisterTypes()` in one pass
+- [x] Auto-add `unique_{Label}_id` constraint for nodes with ID field
+- [x] `RegisteredNode`/`RegisteredRelationship` are thin wrappers with delegation
+- [x] `Labels()`, `FieldsToProps()`, `Schema()`, `Type()` delegation methods
 
-### Phase 3: Schema Interface 🔲 TODO
-- [ ] Add `Schema` interface to Driver
-- [ ] Implement `GetIndexes()` - SHOW INDEXES introspection
-- [ ] Implement `GetConstraints()` - SHOW CONSTRAINTS introspection
-- [ ] Implement `AutoMigrate()` - additive schema migration
-- [ ] Implement `NeedsMigration()` - check if migration needed
+### Phase 3: Schema Interface ✅ COMPLETE
+- [x] Add `Schema` interface to Driver (`schema.go`)
+- [x] Implement `GetIndexes()` - SHOW INDEXES introspection
+- [x] Implement `GetConstraints()` - SHOW CONSTRAINTS introspection
+- [x] Implement `AutoMigrate()` - additive schema migration (returns executed actions)
+- [x] Implement `NeedsMigration()` - check if migration needed
+- [x] `IndexInfo` and `ConstraintInfo` types for DB schema representation
+- [x] `MigrationAction` type for pending/executed changes
+- [x] Implementation in `schema_impl.go`
 
-### Phase 4: Testing 🔲 TODO
-- [ ] Integration tests with real Neo4j
-- [ ] Test AutoMigrate idempotency
-- [ ] Test composite indexes/constraints
-- [ ] Test relationship indexes
+### Phase 4: Testing ✅ COMPLETE
+- [x] Unit tests for Phase 2 (Schema delegation) in `internal/registry_test.go`:
+  - [x] `TestRegisteredNodeSchema` - tests Schema() delegation for nodes
+  - [x] `TestRegisteredRelationshipSchema` - tests Schema() delegation for relationships
+  - [x] `TestRegisteredAbstractNodeSchema` - tests Schema() for abstract nodes
+  - [x] `TestSchemaWithNestedLabels` - tests schema with inheritance
+- [x] Unit tests for Phase 3 (Migration logic) in `schema_test.go`:
+  - [x] `TestMigrationLogic_*` - comprehensive migration logic tests
+  - [x] `TestSchemaFromRegistry` - tests schema collection from registry
+  - [x] `TestMigrationActionTypes` - tests action type constants
+  - [x] `TestIndexInfo/TestConstraintInfo` - tests info types
+  - [x] `TestIndexTypeConstants/TestConstraintTypeConstants` - tests re-exported constants
+  - [x] Edge case tests: empty DB, partial migration, fully migrated, additive only, etc.
+- [x] Integration tests with real Neo4j in `schema_integration_test.go`:
+  - [x] `TestSchemaIntegration_GetIndexes` - SHOW INDEXES parsing
+  - [x] `TestSchemaIntegration_GetConstraints` - SHOW CONSTRAINTS parsing
+  - [x] `TestSchemaIntegration_AutoMigrate` - CREATE INDEX/CONSTRAINT execution
+    - Basic node schema (unique, index, notNull)
+    - Fulltext indexes
+    - Composite indexes
+    - Node key constraints
+    - Relationship indexes/constraints
+    - Idempotency (running twice succeeds)
+  - [x] `TestSchemaIntegration_NeedsMigration` - migration detection
+  - [x] `TestSchemaIntegration_RoundTrip` - full migration cycle
+  - Uses testcontainers-go with Neo4j Enterprise for full feature coverage
 
 ---
 

@@ -783,22 +783,15 @@ func TestRun(t *testing.T) {
 }
 
 func TestRunSummary(t *testing.T) {
-	// TODO: Setup mocks
-	t.Skip("Test requires Neo4j setup - needs mocking implementation")
 	ctx := context.Background()
-	neo4jDriver, cancel := connectNeo4J(ctx)
-	d := &driver{
-		reg:              internal.NewRegistry(),
-		db:               neo4jDriver,
-		sessionSemaphore: semaphore.NewWeighted(100),
-	}
-	t.Cleanup(func() {
-		if err := cancel(ctx); err != nil {
-			t.Fatal(err)
-		}
-	})
+	nc := startNeo4jContainer(ctx, t)
+	defer nc.Close(ctx, t)
+
+	d := nc.NewTestDriver(t, &Person{})
 
 	t.Run("reports correct summary", func(t *testing.T) {
+		nc.CleanupData(ctx, t)
+
 		var p Person
 		p.ID = "Jessie"
 		summary, err := d.Exec().
@@ -806,26 +799,18 @@ func TestRunSummary(t *testing.T) {
 			Set(db.SetPropValue(&p.Name, &p.ID)).
 			Return(&p).
 			RunSummary(ctx)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, p.ID, p.Name)
 		assert.Equal(t, 1, summary.Counters().NodesCreated())
 	})
 }
 
 func TestResultImpl(t *testing.T) {
-	t.Skip("Test requires complex Neo4j error simulation - needs enhanced mocking implementation")
 	ctx := context.Background()
-	d, m := newHybridDriver(t, ctx)
-	// First test expects 2 records (range(0,1))
-	m.BindRecords([]map[string]any{{"i": 0}, {"i": 1}})
-	// Second test expects 1 record (range(0,0))
-	m.BindRecords([]map[string]any{{"i": 0}})
-	// Third test expects 1 record (range(0,0))
-	m.BindRecords([]map[string]any{{"i": 0}})
-	// Fourth test - error handling test, expects no records
-	m.Bind(nil)
-	readSession := d.ReadSession(ctx)
-	session := &session{session: readSession.Session()}
+	nc := startNeo4jContainer(ctx, t)
+	defer nc.Close(ctx, t)
+
+	d := nc.NewTestDriver(t)
 
 	t.Run("Peek", func(t *testing.T) {
 		var num int
@@ -865,35 +850,6 @@ func TestResultImpl(t *testing.T) {
 					return r.Err()
 				})
 			assert.NoError(t, err)
-		})
-
-		t.Run("should throw error when there is error in resultWithContext", func(t *testing.T) {
-			var n []any
-			c := internal.NewCypherClient(internal.NewRegistry())
-			cy, err := c.
-				Match(db.Node(db.Var(n, db.Name("n")))).
-				Return(n).
-				Compile()
-			assert.NoError(t, err)
-			params, err := canonicalizeParams(internal.NewRegistry().Codecs(), cy.Parameters)
-			assert.NoError(t, err)
-
-			r := runnerImpl{session: session}
-			_, err = r.executeTransaction(ctx, cy, func(tx neo4j.ManagedTransaction) (any, error) {
-				var result neo4j.ResultWithContext
-				result, err = tx.Run(ctx, cy.Cypher, params)
-				assert.NoError(t, err)
-				_, resultErr := result.Single(ctx)
-				assert.Error(t, resultErr)
-
-				var res builder.Result = &resultImpl{
-					ResultWithContext: result,
-					compiled:          cy,
-				}
-				assert.ErrorIs(t, res.Err(), resultErr)
-				return nil, res.Err()
-			})
-			assert.Error(t, err)
 		})
 	})
 

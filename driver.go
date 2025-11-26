@@ -72,6 +72,9 @@ type (
 		// DB returns the underlying neo4j driver.
 		DB() neo4j.DriverWithContext
 
+		// Schema returns the schema interface for introspection and migration.
+		Schema() Schema
+
 		// ReadSession creates a new read-access session based on the specified session configuration.
 		ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) readSession
 
@@ -221,6 +224,8 @@ func WithTypes(types ...any) Configurer {
 func (d *driver) Registry() *internal.Registry { return d.reg }
 
 func (d *driver) DB() neo4j.DriverWithContext { return d.db }
+
+func (d *driver) Schema() Schema { return newSchema(d.db, d.reg) }
 
 func (d *driver) Exec(configurers ...func(*execConfig)) Query {
 	sessionConfig := neo4j.SessionConfig{}

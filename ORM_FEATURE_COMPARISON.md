@@ -24,7 +24,7 @@ This document compares neogo's current capabilities against GORM (the most popul
 | **Associations** |||||
 || Belongs To | ✅ | ❌ | |
 || Has One | ✅ | ⚠️ | Via relationship structs |
-|| Has Many | ✅ | ⚠️ | Via `Many[T]` |
+|| Has Many | ✅ | ⚠️ | Via `[]*T` slice |
 || Many To Many | ✅ | ⚠️ | Via relationship structs |
 || Eager loading (Preload) | ✅ | ❌ | `Preload("Orders")` |
 || Association mode | ✅ | ❌ | `Append()`, `Replace()`, `Clear()` |
@@ -235,15 +235,16 @@ type AfterFinder interface { AfterFind() error }
 type Person struct {
     neogo.Node `neo4j:"Person"`
     
-    Name   string   `neo4j:"name"`
-    Movies Many[Movie] `neo4j:"rel=ACTED_IN,dir=->"`
+    Name   string    `neo4j:"name"`
+    Movies []*Movie  `neo4j:"->"`  // Outgoing relationships
 }
 
 // Current: Manual pattern matching
 var person Person
+var movies []*Movie
 driver.Exec().
-    Match(db.Node(&person).To(db.Var(&person.Movies.V), db.Qual(&person.Movies.S, "movies"))).
-    Return(&person, &person.Movies.S).
+    Match(db.Node(&person).To(ActedIn{}, db.Qual(&movies, "movies"))).
+    Return(&person, &movies).
     Run(ctx)
 
 // Proposed: Preload syntax
@@ -392,9 +393,9 @@ type Person struct {
     // Skip field
     Internal string `neo4j:"-"`
     
-    // Relationship (existing)
-    Friends Many[Person] `neo4j:"rel=FRIENDS_WITH,dir=->"`
-}
+    // Relationships
+    Friends []*Person `neo4j:"->"`  // Outgoing relationship
+    }
 ```
 
 **Supported Options:**

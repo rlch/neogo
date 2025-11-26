@@ -328,16 +328,8 @@ func (r *CodecRegistry) registerRelationshipField(field reflect.StructField, dir
 
 	// Check if it's a slice type (many relationship)
 	if relType.Kind() == reflect.Slice {
-		// Direct slice like []*simpleRelationship
-		relType = relType.Elem() // Get *simpleRelationship from []*simpleRelationship
+		relType = relType.Elem() // Get *T from []*T
 		isMany = true
-	} else if relType.Kind() == reflect.Struct {
-		// Many[T] wrapper type
-		relField, ok := relType.FieldByName("S")
-		if ok {
-			relType = relField.Type.Elem() // Get T from []T
-			isMany = true
-		}
 	}
 
 	if relType.Kind() != reflect.Ptr {
