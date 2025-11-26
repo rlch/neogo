@@ -12,6 +12,13 @@ type Neo4jNodeMetadata struct {
 	Labels        []string
 	FieldsToProps map[string]string
 	Relationships map[string]*Neo4jRelationshipTarget
+	Schema        *SchemaMeta  // Aggregated schema (indexes + constraints)
+	RType         reflect.Type // Stored reflect.Type for delegation
+}
+
+// Type returns the reflect.Type for this node
+func (m *Neo4jNodeMetadata) Type() reflect.Type {
+	return m.RType
 }
 
 // Neo4jRelationshipTarget represents a relationship field in a node
@@ -25,31 +32,45 @@ type Neo4jRelationshipTarget struct {
 
 // ExtractNeo4jNodeMeta extracts Neo4j node metadata from a struct.
 // REGISTRATION PHASE: Uses heavy reflection, called only during type registration.
+// Deprecated: Use extractNeo4jNodeMetaFromType for new code.
 func (r *CodecRegistry) ExtractNeo4jNodeMeta(v any) (*Neo4jNodeMetadata, error) {
 	typ := reflect.TypeOf(v)
-	val := reflect.ValueOf(v)
-
-	// Unwrap pointer
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
-		val = val.Elem()
+	}
+	return r.extractNeo4jNodeMetaFromType(typ)
+}
+
+// extractNeo4jNodeMetaFromType extracts Neo4j node metadata from a reflect.Type.
+// This is the internal method that does all the work, including schema aggregation.
+// REGISTRATION PHASE: Uses heavy reflection, called only during type registration.
+func (r *CodecRegistry) extractNeo4jNodeMetaFromType(typ reflect.Type) (*Neo4jNodeMetadata, error) {
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
 	}
 	if typ.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("expected struct, got %s", typ.Kind())
 	}
+
+	// Create a zero value for walking (needed for embedded struct recursion)
+	val := reflect.New(typ).Elem()
 
 	meta := &Neo4jNodeMetadata{
 		Name:          typ.Name(),
 		Labels:        []string{},
 		FieldsToProps: make(map[string]string),
 		Relationships: make(map[string]*Neo4jRelationshipTarget),
+		RType:         typ,
 	}
 
 	// Track labels to append at the end (from anonymous fields)
 	postpendLabels := []string{}
 
+	// Collect field schema info for aggregation
+	var fieldSchemas []FieldSchemaInfo
+
 	// Walk through all fields
-	err := r.walkStructFields(typ, val, meta, &postpendLabels)
+	err := r.walkStructFieldsWithSchema(typ, val, meta, &postpendLabels, &fieldSchemas)
 	if err != nil {
 		return nil, err
 	}
@@ -61,26 +82,68 @@ func (r *CodecRegistry) ExtractNeo4jNodeMeta(v any) (*Neo4jNodeMetadata, error) 
 		return nil, fmt.Errorf("node %s has no labels", meta.Name)
 	}
 
+	// Use most specific label (first label) for schema naming
+	primaryLabel := meta.Labels[0]
+
+	// Auto-add unique constraint for ID field if present
+	if idProp, hasID := meta.FieldsToProps["ID"]; hasID {
+		fieldSchemas = append(fieldSchemas, FieldSchemaInfo{
+			DBName: idProp,
+			Constraint: &ConstraintSpec{
+				Type:     ConstraintTypeUnique,
+				Priority: 10,
+			},
+		})
+	}
+
+	// Aggregate schema from field specs
+	meta.Schema = &SchemaMeta{
+		TypeName:    meta.Name,
+		Labels:      meta.Labels,
+		IsNode:      true,
+		Indexes:     AggregateIndexes(primaryLabel, true, fieldSchemas),
+		Constraints: AggregateConstraints(primaryLabel, true, fieldSchemas),
+	}
+
 	return meta, nil
 }
 
 // walkStructFields walks through struct fields and extracts Neo4j metadata
+// Deprecated: Use walkStructFieldsWithSchema instead.
 func (r *CodecRegistry) walkStructFields(typ reflect.Type, val reflect.Value, meta *Neo4jNodeMetadata, postpendLabels *[]string) error {
+	var fieldSchemas []FieldSchemaInfo
+	return r.walkStructFieldsWithSchema(typ, val, meta, postpendLabels, &fieldSchemas)
+}
+
+// walkStructFieldsWithSchema walks through struct fields and extracts Neo4j metadata + schema info
+func (r *CodecRegistry) walkStructFieldsWithSchema(typ reflect.Type, val reflect.Value, meta *Neo4jNodeMetadata, postpendLabels *[]string, fieldSchemas *[]FieldSchemaInfo) error {
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		fieldVal := val.Field(i)
 
+		// Parse field info to get both DB name and schema
+		fieldInfo := parseFieldInfo(field)
+
 		// Extract field name mapping from neo4j tags (only for non-anonymous fields)
-		if !field.Anonymous {
+		if !field.Anonymous && !fieldInfo.IsSkip {
 			if propName, ok := r.extractFieldName(field); ok {
 				meta.FieldsToProps[field.Name] = propName
+
+				// Collect schema info for this field
+				if fieldInfo.Index != nil || fieldInfo.Constraint != nil {
+					*fieldSchemas = append(*fieldSchemas, FieldSchemaInfo{
+						DBName:     propName,
+						Index:      fieldInfo.Index,
+						Constraint: fieldInfo.Constraint,
+					})
+				}
 			}
 		}
 
 		// Handle anonymous fields (embedded structs)
 		var shouldRecurse bool
 		if field.Anonymous {
-			shouldRecurse = r.handleAnonymousField(field, meta, postpendLabels)
+			shouldRecurse = r.handleAnonymousFieldWithSchema(field, meta, postpendLabels, fieldSchemas)
 		}
 
 		// Parse neo4j tag
@@ -89,14 +152,16 @@ func (r *CodecRegistry) walkStructFields(typ reflect.Type, val reflect.Value, me
 			// If no neo4j tag but should recurse, continue recursion
 			if shouldRecurse {
 				// Recurse into embedded struct
-				if fieldVal.Kind() == reflect.Ptr {
-					if !fieldVal.IsNil() {
-						fieldVal = fieldVal.Elem()
+				embeddedVal := fieldVal
+				if embeddedVal.Kind() == reflect.Ptr {
+					if embeddedVal.IsNil() {
+						// Create a new instance for nil pointers
+						embeddedVal = reflect.New(field.Type.Elem()).Elem()
 					} else {
-						continue
+						embeddedVal = embeddedVal.Elem()
 					}
 				}
-				err := r.walkStructFields(fieldVal.Type(), fieldVal, meta, postpendLabels)
+				err := r.walkStructFieldsWithSchema(embeddedVal.Type(), embeddedVal, meta, postpendLabels, fieldSchemas)
 				if err != nil {
 					return err
 				}
@@ -112,14 +177,16 @@ func (r *CodecRegistry) walkStructFields(typ reflect.Type, val reflect.Value, me
 
 		// Handle recursion if needed
 		if shouldRecurse {
-			if fieldVal.Kind() == reflect.Ptr {
-				if !fieldVal.IsNil() {
-					fieldVal = fieldVal.Elem()
+			embeddedVal := fieldVal
+			if embeddedVal.Kind() == reflect.Ptr {
+				if embeddedVal.IsNil() {
+					// Create a new instance for nil pointers
+					embeddedVal = reflect.New(field.Type.Elem()).Elem()
 				} else {
-					continue
+					embeddedVal = embeddedVal.Elem()
 				}
 			}
-			err := r.walkStructFields(fieldVal.Type(), fieldVal, meta, postpendLabels)
+			err := r.walkStructFieldsWithSchema(embeddedVal.Type(), embeddedVal, meta, postpendLabels, fieldSchemas)
 			if err != nil {
 				return err
 			}
@@ -148,21 +215,27 @@ func (r *CodecRegistry) extractFieldName(field reflect.StructField) (string, boo
 }
 
 // handleAnonymousField handles embedded/anonymous struct fields
+// Deprecated: Use handleAnonymousFieldWithSchema instead.
 func (r *CodecRegistry) handleAnonymousField(field reflect.StructField, meta *Neo4jNodeMetadata, postpendLabels *[]string) bool {
+	var fieldSchemas []FieldSchemaInfo
+	return r.handleAnonymousFieldWithSchema(field, meta, postpendLabels, &fieldSchemas)
+}
+
+// handleAnonymousFieldWithSchema handles embedded/anonymous struct fields and collects schema info
+func (r *CodecRegistry) handleAnonymousFieldWithSchema(field reflect.StructField, meta *Neo4jNodeMetadata, postpendLabels *[]string, fieldSchemas *[]FieldSchemaInfo) bool {
 	fieldType := field.Type
 
-	// Check if it's the base Node type (special case)
+	// Check if it's the base Node type (special case - always recurse)
 	if r.isBaseNodeType(fieldType) {
-		return true // Should recurse but don't register
+		return true // Should recurse but don't extract as node
 	}
 
 	// Check if it implements INode interface
 	if r.implementsINode(fieldType) {
-		// Register the nested node and merge its metadata
-		nestedInstance := reflect.New(fieldType).Interface()
-		nestedMeta, err := r.ExtractNeo4jNodeMeta(nestedInstance)
-		if err == nil {
-			// Merge labels, fields, and relationships
+		// Try to extract the nested node metadata
+		nestedMeta, err := r.extractNeo4jNodeMetaFromType(fieldType)
+		if err == nil && len(nestedMeta.Labels) > 0 {
+			// Successfully extracted - merge labels, fields, relationships, and schema
 			meta.Labels = append(meta.Labels, nestedMeta.Labels...)
 			for k, v := range nestedMeta.FieldsToProps {
 				meta.FieldsToProps[k] = v
@@ -170,8 +243,44 @@ func (r *CodecRegistry) handleAnonymousField(field reflect.StructField, meta *Ne
 			for k, v := range nestedMeta.Relationships {
 				meta.Relationships[k] = v
 			}
+			// Merge schema from nested node (but not auto-ID constraint - that will be regenerated)
+			if nestedMeta.Schema != nil {
+				for _, idx := range nestedMeta.Schema.Indexes {
+					for _, prop := range idx.Properties {
+						*fieldSchemas = append(*fieldSchemas, FieldSchemaInfo{
+							DBName: prop.Name,
+							Index: &IndexSpec{
+								Name:     idx.Name,
+								Type:     idx.Type,
+								Priority: prop.Priority,
+								Options:  idx.Options,
+							},
+						})
+					}
+				}
+				// Don't merge constraints from nested - they'll be regenerated with correct label
+				// Only merge explicit constraints (not auto-ID)
+				for _, con := range nestedMeta.Schema.Constraints {
+					// Skip auto-generated ID constraints (they have auto-generated names)
+					if strings.HasPrefix(con.Name, "unique_") && len(con.Properties) == 1 && con.Properties[0] == "id" {
+						continue
+					}
+					for i, prop := range con.Properties {
+						*fieldSchemas = append(*fieldSchemas, FieldSchemaInfo{
+							DBName: prop,
+							Constraint: &ConstraintSpec{
+								Name:     con.Name,
+								Type:     con.Type,
+								Priority: i + 1,
+							},
+						})
+					}
+				}
+			}
+			return false // Don't recurse further, we already extracted
 		}
-		return false // Don't recurse further
+		// Extraction failed (no labels) - this is a base type, recurse to get fields
+		return true
 	}
 
 	return true // Should recurse for other anonymous fields

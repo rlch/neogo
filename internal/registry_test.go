@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"maps"
 	"reflect"
 	"testing"
 
@@ -62,156 +61,80 @@ type (
 	}
 )
 
-var (
-	simpleNodeReg = &RegisteredNode{
-		rType:         reflect.TypeOf(simpleNode{}),
-		name:          "simpleNode",
-		Labels:        []string{"Simple"},
-		fieldsToProps: map[string]string{"ID": "id"},
-	}
-	nestedLabelsNodeReg = &RegisteredNode{
-		rType:         reflect.TypeOf(nestedLabelsNode{}),
-		name:          "nestedLabelsNode",
-		Labels:        []string{"Simple", "Nested"},
-		fieldsToProps: map[string]string{"ID": "id"},
-	}
-	nestedLabelsUsingLabelNodeReg = &RegisteredNode{
-		rType:         reflect.TypeOf(nestedLabelsUsingLabelNode{}),
-		name:          "nestedLabelsUsingLabelNode",
-		Labels:        []string{"Simple", "Nested", "Label"},
-		fieldsToProps: map[string]string{"ID": "id"},
-	}
-	nodeWithPropertiesReg = &RegisteredNode{
-		rType:         reflect.TypeOf(nodeWithProperties{}),
-		name:          "nodeWithProperties",
-		Labels:        []string{"Simple"},
-		fieldsToProps: map[string]string{"ID": "id", "Name": "name"},
-	}
-	simpleRelationshipReg = &RegisteredRelationship{
-		typeName: "simpleRelationship",
-		name:     "simpleRelationship",
-		Reltype:  "SIMPLE",
-	}
-	nodeWithRelationshipReg = &RegisteredNode{
-		rType:         reflect.TypeOf(nodeWithRelationship{}),
-		name:          "nodeWithRelationship",
-		Labels:        []string{"Simple"},
-		fieldsToProps: map[string]string{"ID": "id"},
-		Relationships: map[string]*RelationshipTarget{
-			"Forward": {
-				Dir: true,
-				Rel: simpleRelationshipReg,
-			},
-			"Backward": {
-				Dir: false,
-				Rel: simpleRelationshipReg,
-			},
-			"Forwards": {
-				Dir:  true,
-				Rel:  simpleRelationshipReg,
-				Many: true,
-			},
-			"Backwards": {
-				Dir:  false,
-				Rel:  simpleRelationshipReg,
-				Many: true,
-			},
-		},
-	}
-	shorthandRelationshipReg = func(dir bool) *RegisteredRelationship {
-		r := &RegisteredRelationship{
-			Reltype: "SHORTHAND",
-		}
-		if dir {
-			r.EndNode.RegisteredNode = shorthandRelationshipNodeReg
-			r.StartNode.RegisteredNode = simpleNodeReg
-		} else {
-			r.EndNode.RegisteredNode = simpleNodeReg
-			r.StartNode.RegisteredNode = shorthandRelationshipNodeReg
-		}
-		return r
-	}
-	shorthandRelationshipNodeReg *RegisteredNode = new(RegisteredNode)
-)
-
-func init() {
-	simpleRelationshipReg.StartNode = NodeTarget{
-		Field:          "StartNode",
-		RegisteredNode: nodeWithRelationshipReg,
-	}
-	simpleRelationshipReg.EndNode = NodeTarget{
-		Field:          "EndNode",
-		RegisteredNode: nodeWithRelationshipReg,
-	}
-
-	maps.Copy(nodeWithRelationshipReg.Relationships, nodeWithRelationshipReg.Relationships)
-
-	*shorthandRelationshipNodeReg = RegisteredNode{
-		rType:         reflect.TypeOf(shorthandRelationshipNode{}),
-		name:          "shorthandRelationshipNode",
-		Labels:        []string{"Simple"},
-		fieldsToProps: map[string]string{"ID": "id"},
-		Relationships: map[string]*RelationshipTarget{
-			"Forward": {
-				Dir: true,
-				Rel: shorthandRelationshipReg(true),
-			},
-			"Backward": {
-				Dir: false,
-				Rel: shorthandRelationshipReg(false),
-			},
-			"Forwards": {
-				Dir:  true,
-				Rel:  shorthandRelationshipReg(true),
-				Many: true,
-			},
-			"Backwards": {
-				Dir:  false,
-				Rel:  shorthandRelationshipReg(false),
-				Many: true,
-			},
-		},
-	}
-
-	maps.Copy(shorthandRelationshipNodeReg.Relationships, shorthandRelationshipNodeReg.Relationships)
+// Test expectations (comparing behavior via methods)
+type nodeExpectation struct {
+	name          string
+	labels        []string
+	fieldsToProps map[string]string
+	relCount      int
 }
 
 func TestRegisterNode(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		node    INode
-		want    *RegisteredNode
+		want    nodeExpectation
 		wantErr string
 	}{
 		{
 			name: "registers a simple node",
 			node: &simpleNode{},
-			want: simpleNodeReg,
+			want: nodeExpectation{
+				name:          "simpleNode",
+				labels:        []string{"Simple"},
+				fieldsToProps: map[string]string{"ID": "id"},
+				relCount:      0,
+			},
 		},
 		{
 			name: "registers a node with nested labels",
 			node: &nestedLabelsNode{},
-			want: nestedLabelsNodeReg,
+			want: nodeExpectation{
+				name:          "nestedLabelsNode",
+				labels:        []string{"Simple", "Nested"},
+				fieldsToProps: map[string]string{"ID": "id"},
+				relCount:      0,
+			},
 		},
 		{
 			name: "registers a node with nested labels using Label type",
 			node: &nestedLabelsUsingLabelNode{},
-			want: nestedLabelsUsingLabelNodeReg,
+			want: nodeExpectation{
+				name:          "nestedLabelsUsingLabelNode",
+				labels:        []string{"Simple", "Nested", "Label"},
+				fieldsToProps: map[string]string{"ID": "id"},
+				relCount:      0,
+			},
 		},
 		{
 			name: "registers a node with properties",
 			node: &nodeWithProperties{},
-			want: nodeWithPropertiesReg,
+			want: nodeExpectation{
+				name:          "nodeWithProperties",
+				labels:        []string{"Simple"},
+				fieldsToProps: map[string]string{"ID": "id", "Name": "name"},
+				relCount:      0,
+			},
 		},
 		{
 			name: "registers a node with relationships",
 			node: &nodeWithRelationship{},
-			want: nodeWithRelationshipReg,
+			want: nodeExpectation{
+				name:          "nodeWithRelationship",
+				labels:        []string{"Simple"},
+				fieldsToProps: map[string]string{"ID": "id"},
+				relCount:      4, // Forward, Backward, Forwards, Backwards
+			},
 		},
 		{
 			name: "registers a node with shorthand relationship syntax",
 			node: &shorthandRelationshipNode{},
-			want: shorthandRelationshipNodeReg,
+			want: nodeExpectation{
+				name:          "shorthandRelationshipNode",
+				labels:        []string{"Simple"},
+				fieldsToProps: map[string]string{"ID": "id"},
+				relCount:      4, // Forward, Backward, Forwards, Backwards
+			},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -222,50 +145,112 @@ func TestRegisterNode(t *testing.T) {
 			)
 			if test.wantErr != "" {
 				require.ErrorContains(err, test.wantErr)
-			} else if err != nil {
+				return
+			}
+			if err != nil {
 				t.Fatalf("expected no error, got: %s", err)
 			}
-			require.Equal(test.want, reg)
+
+			// Compare via methods (delegation)
+			require.Equal(test.want.name, reg.Name())
+			require.Equal(test.want.labels, reg.Labels())
+			require.Equal(test.want.fieldsToProps, reg.FieldsToProps())
+			if test.want.relCount == 0 {
+				require.Nil(reg.Relationships)
+			} else {
+				require.Len(reg.Relationships, test.want.relCount)
+			}
 		})
 	}
+}
+
+func TestRegisterNodeWithRelationships(t *testing.T) {
+	require := require.New(t)
+	r := NewRegistry()
+	reg := r.RegisterNode(&nodeWithRelationship{})
+
+	// Verify relationships
+	require.NotNil(reg.Relationships)
+	require.Len(reg.Relationships, 4)
+
+	// Forward relationship
+	fwd := reg.Relationships["Forward"]
+	require.NotNil(fwd)
+	require.True(fwd.Dir)
+	require.False(fwd.Many)
+	require.Equal("SIMPLE", fwd.Rel.Reltype)
+
+	// Backward relationship
+	bwd := reg.Relationships["Backward"]
+	require.NotNil(bwd)
+	require.False(bwd.Dir)
+	require.False(bwd.Many)
+
+	// Many forward relationships
+	fwds := reg.Relationships["Forwards"]
+	require.NotNil(fwds)
+	require.True(fwds.Dir)
+	require.True(fwds.Many)
+
+	// Many backward relationships
+	bwds := reg.Relationships["Backwards"]
+	require.NotNil(bwds)
+	require.False(bwds.Dir)
+	require.True(bwds.Many)
+}
+
+func TestRegisterNodeShorthand(t *testing.T) {
+	require := require.New(t)
+	r := NewRegistry()
+	reg := r.RegisterNode(&shorthandRelationshipNode{})
+
+	// Verify shorthand relationships
+	require.NotNil(reg.Relationships)
+	require.Len(reg.Relationships, 4)
+
+	// Forward shorthand
+	fwd := reg.Relationships["Forward"]
+	require.NotNil(fwd)
+	require.True(fwd.Dir)
+	require.False(fwd.Many)
+	require.Equal("SHORTHAND", fwd.Rel.Reltype)
+
+	// Backward shorthand
+	bwd := reg.Relationships["Backward"]
+	require.NotNil(bwd)
+	require.False(bwd.Dir)
+	require.False(bwd.Many)
 }
 
 func TestGet(t *testing.T) {
 	r := NewRegistry()
 	r.RegisterTypes(&BaseOrganism{}, &ActedIn{})
+
 	t.Run("gets a node", func(t *testing.T) {
 		require := require.New(t)
 		got := r.Get(reflect.TypeOf(Human{}))
-		require.Equal(
-			&RegisteredNode{
-				name:   "Human",
-				rType:  reflect.TypeOf(Human{}),
-				Labels: []string{"Organism", "Human"},
-				fieldsToProps: map[string]string{
-					"ID":    "id",
-					"Alive": "alive",
-					"Name":  "name",
-				},
-			},
-			got,
-		)
+		require.NotNil(got)
+
+		reg := got.(*RegisteredNode)
+		require.Equal("Human", reg.Name())
+		require.Equal([]string{"Organism", "Human"}, reg.Labels())
+		require.Equal(map[string]string{
+			"ID":    "id",
+			"Alive": "alive",
+			"Name":  "name",
+		}, reg.FieldsToProps())
+		require.Equal(reflect.TypeOf(Human{}), reg.Type())
 	})
+
 	t.Run("gets a pointer to node", func(t *testing.T) {
 		require := require.New(t)
 		got := r.Get(reflect.TypeOf(&Human{}))
-		require.Equal(
-			&RegisteredNode{
-				name:   "Human",
-				rType:  reflect.TypeOf(Human{}),
-				Labels: []string{"Organism", "Human"},
-				fieldsToProps: map[string]string{
-					"ID":    "id",
-					"Alive": "alive",
-					"Name":  "name",
-				},
-			},
-			got,
-		)
+		require.NotNil(got)
+
+		reg := got.(*RegisteredNode)
+		require.Equal("Human", reg.Name())
+		require.Equal([]string{"Organism", "Human"}, reg.Labels())
+		require.Equal(reflect.TypeOf(Human{}), reg.Type())
 	})
 }
 

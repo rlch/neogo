@@ -25,17 +25,17 @@ type (
 		*RegisteredNode
 		Implementers []*RegisteredNode
 	}
+	// RegisteredNode is a thin wrapper that delegates data access to CodecRegistry.
+	// It only stores relationship graph navigation locally.
 	RegisteredNode struct {
-		name          string
-		rType         reflect.Type
-		fieldsToProps map[string]string
-
-		Labels        []string
-		Relationships map[string]*RelationshipTarget
+		name   string                          // Type name (used as key to CodecRegistry)
+		codecs *codec.CodecRegistry            // Reference to codec registry for delegation
+		Relationships map[string]*RelationshipTarget // Relationship graph (owned by Registry)
 	}
 	RegisteredRelationship struct {
 		name     string
 		typeName string // Store type name instead of reflect.Type
+		codecs   *codec.CodecRegistry // Reference to codec registry for delegation
 
 		Reltype   string
 		StartNode NodeTarget
@@ -58,32 +58,79 @@ func (r *RegisteredNode) Name() string {
 	return r.name
 }
 
+// Type returns the reflect.Type for this node (delegated to CodecRegistry)
 func (r *RegisteredNode) Type() reflect.Type {
-	return r.rType
+	if meta := r.codecs.GetNodeMeta(r.name); meta != nil {
+		return meta.Type()
+	}
+	return nil
 }
 
+// ReflectType returns the reflect.Type (for compatibility)
 func (r *RegisteredNode) ReflectType() any {
-	return r.rType
+	return r.Type()
 }
 
+// FieldsToProps returns the Go field name -> DB property name mapping (delegated)
 func (r *RegisteredNode) FieldsToProps() map[string]string {
-	return r.fieldsToProps
+	if meta := r.codecs.GetNodeMeta(r.name); meta != nil {
+		return meta.FieldsToProps
+	}
+	return nil
+}
+
+// Labels returns the Neo4j labels for this node (delegated to CodecRegistry)
+func (r *RegisteredNode) Labels() []string {
+	if meta := r.codecs.GetNodeMeta(r.name); meta != nil {
+		return meta.Labels
+	}
+	return nil
+}
+
+// Schema returns the schema metadata for this node (delegated to CodecRegistry)
+func (r *RegisteredNode) Schema() *codec.SchemaMeta {
+	if meta := r.codecs.GetNodeMeta(r.name); meta != nil {
+		return meta.Schema
+	}
+	return nil
 }
 
 func (r *RegisteredRelationship) Name() string {
 	return r.name
 }
 
+// Type returns the reflect.Type for this relationship (delegated to CodecRegistry)
 func (r *RegisteredRelationship) Type() reflect.Type {
-	// This method is deprecated and should not be used
-	// Use codec registry instead for type information
-	panic("RegisteredRelationship.Type() is deprecated - use codec registry")
+	if r.codecs == nil {
+		return nil
+	}
+	if meta := r.codecs.GetRelMeta(r.name); meta != nil {
+		return meta.ReflectType()
+	}
+	return nil
 }
 
+// FieldsToProps returns the Go field name -> DB property name mapping
+// For relationships, this is obtained from TypeMetadata in CodecRegistry
 func (r *RegisteredRelationship) FieldsToProps() map[string]string {
-	// This method is deprecated and should not be used
-	// Use codec registry instead for field mapping
-	panic("RegisteredRelationship.FieldsToProps() is deprecated - use codec registry")
+	if r.codecs == nil {
+		return nil
+	}
+	if meta := r.codecs.GetByTypeName(r.name); meta != nil {
+		return meta.FieldsMap
+	}
+	return nil
+}
+
+// Schema returns the schema metadata for this relationship (delegated to CodecRegistry)
+func (r *RegisteredRelationship) Schema() *codec.SchemaMeta {
+	if r.codecs == nil {
+		return nil
+	}
+	if meta := r.codecs.GetRelMeta(r.name); meta != nil {
+		return meta.Schema
+	}
+	return nil
 }
 
 func (r RelationshipTarget) Target() *NodeTarget {
@@ -149,17 +196,23 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 		}
 	}
 
-	// Extract metadata using zero-reflection codec system
-	nodeMeta, err := r.codecs.ExtractNeo4jNodeMeta(v)
-	if err != nil {
-		panic(fmt.Errorf("failed to extract Neo4j metadata for %s: %w", name, err))
+	// Get cached metadata from CodecRegistry (extracted during RegisterTypes)
+	nodeMeta := r.codecs.GetNodeMeta(name)
+	if nodeMeta == nil {
+		// Fallback: extract if not pre-cached (for lazy registration)
+		var err error
+		nodeMeta, err = r.codecs.ExtractNeo4jNodeMeta(v)
+		if err != nil {
+			panic(fmt.Errorf("failed to extract Neo4j metadata for %s: %w", name, err))
+		}
+		// Store in codec registry for future lookups
+		r.codecs.StoreNodeMeta(name, nodeMeta)
 	}
 
+	// Create thin wrapper - delegates data access to CodecRegistry
 	registered := &RegisteredNode{
-		rType:         vvt,
 		name:          name,
-		Labels:        nodeMeta.Labels,
-		fieldsToProps: nodeMeta.FieldsToProps,
+		codecs:        r.codecs,
 		Relationships: make(map[string]*RelationshipTarget),
 	}
 
@@ -183,6 +236,7 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 			relReg = &RegisteredRelationship{
 				name:     relTypeName,
 				typeName: relTypeName,
+				codecs:   r.codecs,
 				Reltype:  neoRel.RelType,
 			}
 
@@ -220,6 +274,7 @@ func (r *Registry) RegisterNode(v INode) *RegisteredNode {
 			relReg = &RegisteredRelationship{
 				name:     "", // Empty for shorthand relationships
 				typeName: "", // Empty for shorthand relationships
+				codecs:   r.codecs,
 				Reltype:  neoRel.RelType,
 			}
 			if neoRel.Dir {
@@ -276,20 +331,30 @@ func (r *Registry) RegisterAbstractNode(typ any, typAbs IAbstract) *RegisteredAb
 }
 
 func (r *Registry) RegisterRelationship(v IRelationship) *RegisteredRelationship {
-	// Extract metadata using codec registry (zero-reflection approach)
-	relMeta, err := r.codecs.ExtractRelationshipMeta(v)
-	if err != nil {
-		panic(err)
-	}
-
-	name := relMeta.Name
+	vv := codec.UnwindValue(reflect.ValueOf(v))
+	name := vv.Type().Name()
+	
 	if existing, ok := r.registeredTypes[name]; ok {
 		return existing.(*RegisteredRelationship)
 	}
 
+	// Get cached metadata from CodecRegistry (extracted during RegisterTypes)
+	relMeta := r.codecs.GetRelMeta(name)
+	if relMeta == nil {
+		// Fallback: extract if not pre-cached (for lazy registration)
+		var err error
+		relMeta, err = r.codecs.ExtractRelationshipMeta(v)
+		if err != nil {
+			panic(err)
+		}
+		// Store in codec registry for future lookups
+		r.codecs.StoreRelMeta(name, relMeta)
+	}
+
 	registered := &RegisteredRelationship{
 		name:     name,
-		typeName: name, // Use name instead of reflection
+		typeName: name,
+		codecs:   r.codecs,
 		Reltype:  relMeta.Type,
 	}
 	r.Relationships = append(r.Relationships, registered)
@@ -363,7 +428,7 @@ func (r *Registry) GetConcreteImplementation(nodeLabels []string) (*RegisteredNo
 	// a inheritance chain closest to the database node we're extracting from.
 Bases:
 	for _, base := range r.AbstractNodes {
-		labels := base.Labels
+		labels := base.Labels() // Use delegation method
 		if len(labels) == 0 {
 			continue
 		}
@@ -390,7 +455,7 @@ Bases:
 	}
 Impls:
 	for _, nextImpl := range abstractNode.Implementers {
-		for _, label := range nextImpl.Labels {
+		for _, label := range nextImpl.Labels() { // Use delegation method
 			if _, ok := isNodeLabel[label]; !ok {
 				continue Impls
 			}

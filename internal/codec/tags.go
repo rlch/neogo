@@ -15,6 +15,10 @@ type FieldInfo struct {
 	IsCustom bool      // Has custom codec
 	IsEmbed  bool      // Embedded struct
 	Codec    string    // Name of custom codec
+
+	// Schema metadata
+	Index      *IndexSpec      // Index specification (nil if no index)
+	Constraint *ConstraintSpec // Constraint specification (nil if no constraint)
 }
 
 // parseNeo4jTag parses a neo4j struct tag
@@ -77,6 +81,49 @@ func parseFieldInfo(field reflect.StructField) *FieldInfo {
 		case strings.HasPrefix(option, "codec:"):
 			info.IsCustom = true
 			info.Codec = strings.TrimPrefix(option, "codec:")
+
+		// Index options
+		case option == "index" ||
+			strings.HasPrefix(option, "index:") ||
+			option == "fulltext" ||
+			strings.HasPrefix(option, "fulltext:") ||
+			option == "text" ||
+			strings.HasPrefix(option, "text:") ||
+			option == "point" ||
+			strings.HasPrefix(option, "point:") ||
+			strings.HasPrefix(option, "vector:"):
+			info.Index = parseIndexSpec(option)
+
+		// Constraint options
+		case option == "unique" ||
+			strings.HasPrefix(option, "unique:") ||
+			option == "notNull" || option == "notnull" || option == "not_null" ||
+			strings.HasPrefix(option, "notNull:") || strings.HasPrefix(option, "notnull:") || strings.HasPrefix(option, "not_null:") ||
+			strings.HasPrefix(option, "nodeKey:") || strings.HasPrefix(option, "nodekey:") || strings.HasPrefix(option, "node_key:"):
+			info.Constraint = parseConstraintSpec(option)
+
+		// Priority (applies to both index and constraint)
+		case strings.HasPrefix(option, "priority:"):
+			if p, ok := parsePriority(option); ok {
+				if info.Index != nil {
+					info.Index.Priority = p
+				}
+				if info.Constraint != nil {
+					info.Constraint.Priority = p
+				}
+			}
+		}
+	}
+
+	// Apply priority after all options are parsed (in case priority comes before index/constraint)
+	for _, option := range options {
+		if p, ok := parsePriority(option); ok {
+			if info.Index != nil {
+				info.Index.Priority = p
+			}
+			if info.Constraint != nil {
+				info.Constraint.Priority = p
+			}
 		}
 	}
 
@@ -89,6 +136,11 @@ func parseFieldInfo(field reflect.StructField) *FieldInfo {
 	}
 
 	return info
+}
+
+// ParseFieldInfoExported is an exported version of parseFieldInfo for testing.
+func ParseFieldInfoExported(field reflect.StructField) *FieldInfo {
+	return parseFieldInfo(field)
 }
 
 // toSnakeCase converts CamelCase to snake_case

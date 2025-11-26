@@ -52,7 +52,7 @@ func (r *Registry) ExtractNodeLabels(node any) []string {
 	if reg == nil {
 		return nil
 	}
-	return reg.Labels
+	return reg.Labels()
 }
 
 func (r *Registry) ExtractRelationshipType(rel any) string {

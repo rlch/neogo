@@ -7,6 +7,7 @@ import (
 )
 
 // CodecRegistry manages type codecs with zero-reflection runtime.
+// It is the SINGLE SOURCE OF TRUTH for all type metadata, schema, encoders, and decoders.
 //
 // # Reflection Boundaries
 //
@@ -29,6 +30,10 @@ type CodecRegistry struct {
 	decoders map[TypePtr]Decoder       // typeptr -> decoder interface
 	metadata map[TypePtr]*TypeMetadata // typeptr -> metadata
 	compiler *Compiler                 // opcode compiler
+
+	// Neo4j-specific metadata (single source of truth)
+	nodeMeta map[string]*Neo4jNodeMetadata       // type name -> node metadata
+	relMeta  map[string]*RelationshipStructMeta  // type name -> relationship metadata
 }
 
 // TypeMetadata contains pre-computed type information
@@ -57,11 +62,14 @@ func NewCodecRegistry() *CodecRegistry {
 		decoders: make(map[TypePtr]Decoder),
 		metadata: make(map[TypePtr]*TypeMetadata),
 		compiler: NewCompiler(),
+		nodeMeta: make(map[string]*Neo4jNodeMetadata),
+		relMeta:  make(map[string]*RelationshipStructMeta),
 	}
 }
 
 // RegisterTypes generates codecs for the given types at registration time.
 // REGISTRATION PHASE: Uses heavy reflection, should only be called at startup.
+// This does ALL extraction in one pass - codec compilation AND Neo4j metadata.
 func (r *CodecRegistry) RegisterTypes(types ...any) {
 	for _, t := range types {
 		typ := reflect.TypeOf(t)
@@ -73,6 +81,7 @@ func (r *CodecRegistry) RegisterTypes(types ...any) {
 		}
 
 		typePtr := getTypePtr(typ)
+		typeName := typ.Name()
 
 		// Build type metadata
 		metadata := r.buildMetadata(typ)
@@ -84,16 +93,35 @@ func (r *CodecRegistry) RegisterTypes(types ...any) {
 		// Build encoder opcode sequence
 		op, err := r.compiler.Compile(typ)
 		if err != nil {
-			panic(fmt.Errorf("failed to compile encoder for %s: %w", typ.Name(), err))
+			panic(fmt.Errorf("failed to compile encoder for %s: %w", typeName, err))
 		}
 		r.encoders[typePtr] = &Encoder{opcodes: op}
 
 		// Build decoder
 		dec, err := r.compiler.CompileDecoder(typ)
 		if err != nil {
-			panic(fmt.Errorf("failed to compile decoder for %s: %w", typ.Name(), err))
+			panic(fmt.Errorf("failed to compile decoder for %s: %w", typeName, err))
 		}
 		r.decoders[typePtr] = dec
+
+		// Extract Neo4j-specific metadata based on type
+		// Check if type implements INode
+		if r.implementsINode(typ) || r.implementsINode(reflect.PtrTo(typ)) {
+			nodeMeta, err := r.extractNeo4jNodeMetaFromType(typ)
+			if err != nil {
+				panic(fmt.Errorf("failed to extract Neo4j node metadata for %s: %w", typeName, err))
+			}
+			r.nodeMeta[typeName] = nodeMeta
+		}
+
+		// Check if type implements IRelationship
+		if r.implementsIRelationship(typ) || r.implementsIRelationship(reflect.PtrTo(typ)) {
+			relMeta, err := r.extractRelationshipMetaFromType(typ)
+			if err != nil {
+				panic(fmt.Errorf("failed to extract relationship metadata for %s: %w", typeName, err))
+			}
+			r.relMeta[typeName] = relMeta
+		}
 	}
 }
 
@@ -290,6 +318,30 @@ func (r *CodecRegistry) GetTypeByNameLookup(name string) reflect.Type {
 		return entry.Type
 	}
 	return nil
+}
+
+// GetNodeMeta returns cached Neo4j node metadata by type name.
+// Returns nil if the type was not registered or is not a node.
+func (r *CodecRegistry) GetNodeMeta(name string) *Neo4jNodeMetadata {
+	return r.nodeMeta[name]
+}
+
+// StoreNodeMeta stores Neo4j node metadata by type name.
+// This is used for lazy registration when types are registered individually.
+func (r *CodecRegistry) StoreNodeMeta(name string, meta *Neo4jNodeMetadata) {
+	r.nodeMeta[name] = meta
+}
+
+// GetRelMeta returns cached relationship metadata by type name.
+// Returns nil if the type was not registered or is not a relationship.
+func (r *CodecRegistry) GetRelMeta(name string) *RelationshipStructMeta {
+	return r.relMeta[name]
+}
+
+// StoreRelMeta stores relationship metadata by type name.
+// This is used for lazy registration when types are registered individually.
+func (r *CodecRegistry) StoreRelMeta(name string, meta *RelationshipStructMeta) {
+	r.relMeta[name] = meta
 }
 
 var (

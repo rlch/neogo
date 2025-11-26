@@ -12,6 +12,13 @@ type RelationshipStructMeta struct {
 	Type      string // Relationship type from db tag
 	StartNode *NodeFieldMeta
 	EndNode   *NodeFieldMeta
+	Schema    *SchemaMeta  // Aggregated schema (indexes + constraints)
+	RType     reflect.Type // Stored reflect.Type for delegation
+}
+
+// ReflectType returns the reflect.Type for this relationship
+func (m *RelationshipStructMeta) ReflectType() reflect.Type {
+	return m.RType
 }
 
 // NodeFieldMeta contains metadata about a node field in a relationship
@@ -22,8 +29,19 @@ type NodeFieldMeta struct {
 
 // ExtractRelationshipMeta extracts relationship metadata from a struct type.
 // REGISTRATION PHASE: Uses heavy reflection, called only during type registration.
+// Deprecated: Use extractRelationshipMetaFromType for new code.
 func (r *CodecRegistry) ExtractRelationshipMeta(v any) (*RelationshipStructMeta, error) {
 	typ := reflect.TypeOf(v)
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	return r.extractRelationshipMetaFromType(typ)
+}
+
+// extractRelationshipMetaFromType extracts relationship metadata from a reflect.Type.
+// This is the internal method that does all the work, including schema aggregation.
+// REGISTRATION PHASE: Uses heavy reflection, called only during type registration.
+func (r *CodecRegistry) extractRelationshipMetaFromType(typ reflect.Type) (*RelationshipStructMeta, error) {
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
@@ -32,12 +50,19 @@ func (r *CodecRegistry) ExtractRelationshipMeta(v any) (*RelationshipStructMeta,
 	}
 
 	meta := &RelationshipStructMeta{
-		Name: typ.Name(),
+		Name:  typ.Name(),
+		RType: typ,
 	}
+
+	// Collect field schema info for aggregation
+	var fieldSchemas []FieldSchemaInfo
 
 	// Walk through struct fields to extract metadata
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
+
+		// Parse field info for schema
+		fieldInfo := parseFieldInfo(field)
 
 		// Parse neo4j tag
 		neo4jTag := field.Tag.Get("neo4j")
@@ -86,8 +111,16 @@ func (r *CodecRegistry) ExtractRelationshipMeta(v any) (*RelationshipStructMeta,
 					return nil, fmt.Errorf("relationship %s has multiple type definitions", meta.Name)
 				}
 				meta.Type = tagValue
+			} else if !field.Anonymous && !fieldInfo.IsSkip {
+				// Collect schema info for property fields
+				if fieldInfo.Index != nil || fieldInfo.Constraint != nil {
+					*&fieldSchemas = append(fieldSchemas, FieldSchemaInfo{
+						DBName:     fieldInfo.DBName,
+						Index:      fieldInfo.Index,
+						Constraint: fieldInfo.Constraint,
+					})
+				}
 			}
-			// Non-anonymous fields are just property mappings, ignore them here
 		}
 	}
 
@@ -95,7 +128,15 @@ func (r *CodecRegistry) ExtractRelationshipMeta(v any) (*RelationshipStructMeta,
 	if meta.Type == "" {
 		return nil, fmt.Errorf("relationship %s missing type definition in neo4j tag", meta.Name)
 	}
-	// startNode and endNode are optional - some relationships don't define explicit endpoints
+
+	// Aggregate schema using relationship type as label
+	meta.Schema = &SchemaMeta{
+		TypeName:    meta.Name,
+		RelType:     meta.Type,
+		IsNode:      false,
+		Indexes:     AggregateIndexes(meta.Type, false, fieldSchemas),
+		Constraints: AggregateConstraints(meta.Type, false, fieldSchemas),
+	}
 
 	return meta, nil
 }
