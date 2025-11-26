@@ -416,7 +416,7 @@ func (s *session) unmarshalRecords(
 		return nil
 	}
 
-	// For each binding, try zero-reflection batch decode first
+	// For each binding, use pre-compiled plan if available
 	for key, binding := range cy.Bindings {
 		// Collect values for this key from all records
 		values := make([]any, n)
@@ -428,15 +428,27 @@ func (s *session) unmarshalRecords(
 			values[i] = value
 		}
 
-		// Try zero-reflection batch decode (fast path)
-		// This handles most common cases: structs, primitives, slices
-		// Skip for abstract types which need polymorphic lookup
-		slicePtr, err := normalizeSliceBinding(binding)
-		if err == nil && !isAbstractSliceBinding(slicePtr) {
-			if err := s.reg.Codecs().DecodeMultiple(values, slicePtr); err == nil {
-				continue // Success - next binding
+		// Try using pre-compiled plan (avoids per-record reflection)
+		if plan := cy.Plans[key]; plan != nil {
+			// Use plan metadata to decide path (no reflection needed)
+			if plan.IsSlice && !plan.IsSliceAbstract && plan.Decoder != nil {
+				// Fast path: use DecodeMultiple with pre-compiled decoder
+				slicePtr, err := normalizeSliceBinding(binding)
+				if err == nil {
+					if err := s.reg.Codecs().DecodeMultiple(values, slicePtr); err == nil {
+						continue // Success - next binding
+					}
+				}
 			}
-			// DecodeMultiple failed, fall through to reflection path
+			// Fall through to reflection path for abstract/valuer types
+		} else {
+			// No plan - try zero-reflection batch decode (legacy path)
+			slicePtr, err := normalizeSliceBinding(binding)
+			if err == nil && !isAbstractSliceBinding(slicePtr) {
+				if err := s.reg.Codecs().DecodeMultiple(values, slicePtr); err == nil {
+					continue // Success - next binding
+				}
+			}
 		}
 
 		// Reflection fallback for special cases:

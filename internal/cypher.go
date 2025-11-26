@@ -35,7 +35,8 @@ func (c *cypher) Names() map[uintptr]string {
 type CompiledCypher struct {
 	Cypher     string
 	Parameters map[string]any
-	Bindings   map[string]any // name -> pointer to user's binding target
+	Bindings   map[string]any            // name -> pointer to user's binding target
+	Plans      map[string]*BindingPlan   // Pre-compiled binding plans (avoids per-record reflection)
 	IsWrite    bool
 }
 

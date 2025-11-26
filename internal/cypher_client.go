@@ -291,6 +291,10 @@ func (c *CypherRunner) Compile() (*CompiledCypher, error) {
 		Bindings:   c.bindings,
 		IsWrite:    c.isWrite,
 	}
+	// Build binding plans for zero-reflection hot path
+	if len(c.bindings) > 0 {
+		cy.Plans = BuildBindingPlans(c.bindings, c.Registry.Codecs())
+	}
 	if c.err != nil {
 		return nil, c.err
 	}
