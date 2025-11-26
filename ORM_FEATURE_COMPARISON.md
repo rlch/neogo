@@ -235,8 +235,8 @@ type AfterFinder interface { AfterFind() error }
 type Person struct {
     neogo.Node `neo4j:"Person"`
     
-    Name   string    `neo4j:"name"`
-    Movies []*Movie  `neo4j:"->"`  // Outgoing relationships
+    Name   string           `neo4j:"name"`
+    Movies neogo.Many[Movie] `neo4j:"ACTED_IN>"`  // Outgoing relationships
 }
 
 // Current: Manual pattern matching
@@ -393,9 +393,10 @@ type Person struct {
     // Skip field
     Internal string `neo4j:"-"`
     
-    // Relationships
-    Friends []*Person `neo4j:"->"`  // Outgoing relationship
-    }
+    // Relationships (using zero-cost One/Many types)
+    BestFriend neogo.One[Person]  `neo4j:"BEST_FRIEND>"`  // Single outgoing relationship
+    Friends    neogo.Many[Person] `neo4j:"FRIENDS>"`      // Multiple outgoing relationships
+}
 ```
 
 **Supported Options:**

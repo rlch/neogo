@@ -41,17 +41,17 @@ Rather than rewriting everything at once, we can:
 
 | File | Status | Notes |
 |------|--------|-------|
-| `internal/binding.go` | 🔴 TODO | 300 lines of reflection-heavy code. Main `BindValue` function called per-record |
-| `internal/binding_test.go` | 🔴 TODO | Tests for binding.go - update to test new API |
+| `internal/binding.go` | 🟢 OPTIMIZED | Reflection still used for special cases (Valuer, abstract), but fast path skips it |
+| `internal/binding_plan.go` | 🟢 NEW | Pre-compiles binding metadata at query compile time, provides zero-reflection DecodeSingle/DecodeMultiple |
+| `client_impl.go` | 🟢 OPTIMIZED | Uses BindingPlan for fast path, falls back to Bind() for special cases |
 
 ### Medium Priority (Query Building)
 
 | File | Status | Notes |
 |------|--------|-------|
-| `internal/scope.go` | 🟡 REVIEW | Uses `reflect.Value` for bindings map. May need to change to `unsafe.Pointer` or `any` |
-| `internal/cypher.go` | 🟡 REVIEW | `Bindings map[string]reflect.Value` - evaluate if can use `any` instead |
-| `internal/cypher_client.go` | 🟡 REVIEW | Uses bindings from cypher.go |
-| `client_impl.go` | 🟡 REVIEW | Calls `BindValue` - needs to adapt to new API |
+| `internal/scope.go` | ✅ DONE | Changed from `reflect.Value` to `map[string]any` (pointers) |
+| `internal/cypher.go` | ✅ DONE | `Bindings map[string]any` - pointers to user's binding targets |
+| `internal/cypher_client.go` | ✅ DONE | Uses bindings from cypher.go |
 
 ### Low Priority (Registration Only)
 
@@ -178,9 +178,48 @@ Options:
   - Added `Plans map[string]*BindingPlan` to `CompiledCypher`
   - Plans built in `CypherRunner.Compile()` via `BuildBindingPlans()`
   - `unmarshalRecords` uses plan flags instead of runtime reflection
-- [ ] Phase 6: Use plan.Decoder directly in hot path (skip BindValue)
-- [ ] Phase 7: Further simplify binding.go (future work)
-- [ ] Phase 8: Evaluate remaining reflection in query building (future work)
+- [x] Phase 6: Use plan.Decoder directly in hot path (skip BindValue)
+  - Added `DecodeSingle(value any)` method to BindingPlan
+    - Uses pre-compiled decoder directly via unsafe pointer
+    - ZERO reflection for non-abstract, non-Valuer types
+    - Falls through to Bind() for special cases
+  - Added `DecodeMultiple(values []any)` method to BindingPlan
+    - Uses pre-compiled SliceAllocator + decoder
+    - Batch decodes multiple records efficiently
+  - Updated `unmarshalRecord()` in client_impl.go:
+    - Uses `plan.DecodeSingle()` for non-slice bindings
+    - Falls back to `Bind()` only for abstract/special types
+  - Updated `unmarshalRecords()` in client_impl.go:
+    - Uses `plan.DecodeMultiple()` first for slice bindings
+    - Simplified: removed legacy path (plans always available)
+  - Updated `unmarshalRecordsFallback()`:
+    - Uses `plan.SliceAllocator` instead of `reflect.MakeSlice`
+    - Uses `plan.ElemAllocator` instead of `reflect.New` for pointer elements
+  - Added `getTargetPtr()` helper for unwrapping pointer chains
+  - **Removed legacy code**:
+    - Deleted `normalizeSliceBinding()` - replaced by plan.DecodeMultiple
+    - Deleted `isAbstractSliceBinding()` - replaced by plan.IsSliceAbstract flag
+    - Simplified `unmarshalRecords()` control flow
+- [ ] Phase 7: Add HasValuer detection at plan creation time (future work)
+  - Would allow skipping Valuer interface check per-record
+  - Low priority since Valuer is rarely used
+- [x] Phase 8: Further simplify binding.go
+  - Consolidated `computeDepth` and `computeSliceDepth` (removed duplicate)
+  - Consolidated `isAbstractTarget` to delegate to `isAbstractType`
+  - Removed redundant `rAbstract` local variable (uses package-level from registry.go)
+  - Updated comments to accurately describe reflection boundaries
+- [x] Phase 9: Evaluate remaining reflection in query building
+  - **Conclusion**: Query building reflection is ACCEPTABLE (not hot path)
+  - Added documentation headers to scope.go, binding.go, binding_plan.go
+  - Clarified reflection boundaries in comments
+  - No changes needed - query building happens once per query, not per-record
+- [x] Phase 10: Cache target pointer at plan creation time
+  - Added `CachedTargetPtr` field to BindingPlan
+  - Renamed `getTargetPtr()` to `computeTargetPtr()` - called once at plan creation
+  - `DecodeSingle()` now uses cached pointer directly - ZERO reflection per-record
+  - `DecodeMultiple()` uses cached pointer for slice header
+  - Added `TestBindingPlan_CachedTargetPtr` test suite
+  - **Result**: Eliminated `reflect.ValueOf()` calls from hot path
 
 ## Code Stats
 
@@ -188,10 +227,36 @@ Options:
 - `binding.go`: ~300 lines with heavy reflection
 - `scope.go`: Used `reflect.Value` for bindings map
 - Used `cast` library for type coercion
+- Every record decode used reflection per-field
 
-**After refactor:**
-- `binding.go`: ~400 lines but cleaner structure
+**After Phase 8-9 cleanup:**
+- `binding.go`: ~340 lines, reflection only for special cases (Valuer, abstract, slice depth)
+- `binding_plan.go`: ~270 lines, pre-compiled binding plans with accurate doc comments
 - `scope.go`: Uses `map[string]any` with `map[uintptr]string` for reverse lookup
-- Delegates to codec for struct decoding (zero reflection hot path)
-- Primitives handled with direct type matching
-- Removed dependency on `cast` library for most paths
+- `client_impl.go`: Uses BindingPlan fast path, falls back to Bind() for special cases
+- All files have clear documentation of reflection boundaries
+
+**Hot path improvements:**
+- Non-abstract, non-Valuer bindings: ZERO reflection per-record
+- Target pointer: Cached at plan creation (no `reflect.ValueOf` per-record)
+- Slice allocations: Pre-compiled allocators (per-batch, not per-record)
+- Pointer element allocations: Pre-compiled allocators (fallback path only)
+- Type checking: Plan flags instead of `reflect.Kind()`, `reflect.Implements()`
+- Decoder lookup: Pre-compiled at query compile time (not per-record)
+
+## Final Architecture
+
+```
+Query Building (reflection OK - once per query)
+    scope.go          -> Tracks bindings, generates Cypher
+    cypher.go         -> Builds query string
+    cypher_client.go  -> Compiles query, builds BindingPlans
+
+Record Decoding (zero reflection - per record)
+    binding_plan.go   -> Pre-compiled plans with flags & decoders
+    codec/decoder.go  -> Zero-reflection decoders using unsafe
+    codec/registry.go -> Decoder lookup (cached)
+
+Fallback Path (reflection - special cases only)
+    binding.go        -> Valuer, abstract nodes, slice depth mismatch
+```
