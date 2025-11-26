@@ -168,8 +168,19 @@ Options:
   - Updated `propertyIdentifier` and `valueIdentifier` with same logic
   - Fixed WHERE clause identifier to use name string instead of raw identifier
   - Delete field entry when aliasing to prevent stale lookups
-- [ ] Phase 5: Further simplify binding.go (future work)
-- [ ] Phase 6: Evaluate remaining reflection in query building (future work)
+- [x] Phase 5: BindingPlan - Pre-compile binding metadata
+  - Added `BindingPlan` struct in `internal/binding_plan.go`
+  - Pre-computes at query compile time (not per-record):
+    - IsSlice, IsAbstract, IsSliceAbstract flags
+    - SliceDepth, PointerDepth
+    - Decoder (pre-compiled from codec)
+    - SliceAllocator, ElemAllocator functions
+  - Added `Plans map[string]*BindingPlan` to `CompiledCypher`
+  - Plans built in `CypherRunner.Compile()` via `BuildBindingPlans()`
+  - `unmarshalRecords` uses plan flags instead of runtime reflection
+- [ ] Phase 6: Use plan.Decoder directly in hot path (skip BindValue)
+- [ ] Phase 7: Further simplify binding.go (future work)
+- [ ] Phase 8: Evaluate remaining reflection in query building (future work)
 
 ## Code Stats
 
