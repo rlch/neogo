@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -344,6 +345,134 @@ func ExampleDriver_streamWithParams() {
 	fmt.Printf("ns: %v\n", ns)
 	// Output: err: <nil>
 	// ns: [0 1 2 3]
+}
+
+func TestSemaphore(t *testing.T) {
+	ctx := context.Background()
+
+	getDriver := func(d Driver) *driver {
+		if mock, ok := d.(*mockDriverImpl); ok {
+			return mock.driver
+		}
+		return d.(*driver)
+	}
+
+	t.Run("panics when semaphore exhausted without release", func(t *testing.T) {
+		d, _ := newHybridDriver(t, ctx)
+		drv := getDriver(d)
+
+		poolSize := 2
+		drv.sessionSemaphore = semaphore.NewWeighted(int64(poolSize))
+
+		for i := 0; i < poolSize; i++ {
+			_ = d.ReadSession(ctx)
+		}
+
+		timeoutCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+
+		defer func() {
+			r := recover()
+			require.NotNil(t, r, "expected panic due to semaphore exhaustion")
+			assert.Contains(t, fmt.Sprint(r), "failed to acquire session semaphore")
+		}()
+
+		_ = d.ReadSession(timeoutCtx)
+		t.Fatal("expected ReadSession to panic due to semaphore exhaustion")
+	})
+
+	t.Run("no leak when session is properly closed", func(t *testing.T) {
+		d, m := newHybridDriver(t, ctx)
+		drv := getDriver(d)
+
+		poolSize := 2
+		drv.sessionSemaphore = semaphore.NewWeighted(int64(poolSize))
+
+		for i := 0; i < poolSize; i++ {
+			m.Bind(nil)
+		}
+
+		for i := 0; i < poolSize; i++ {
+			session := d.ReadSession(ctx)
+			require.NoError(t, session.Close(ctx))
+		}
+
+		m.Bind(nil)
+
+		timeoutCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+
+		session := d.ReadSession(timeoutCtx)
+		require.NotNil(t, session)
+		require.NoError(t, session.Close(ctx))
+	})
+
+	t.Run("semaphore released on context cancellation", func(t *testing.T) {
+		d, _ := newHybridDriver(t, ctx)
+		drv := getDriver(d)
+
+		poolSize := 2
+		drv.sessionSemaphore = semaphore.NewWeighted(int64(poolSize))
+
+		cancelCtx, cancel := context.WithCancel(ctx)
+
+		for i := 0; i < poolSize; i++ {
+			_ = d.ReadSession(cancelCtx)
+		}
+
+		cancel()
+		time.Sleep(10 * time.Millisecond)
+
+		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer timeoutCancel()
+
+		session := d.ReadSession(timeoutCtx)
+		require.NotNil(t, session, "session should be acquired after context cancellation released semaphore")
+	})
+
+	t.Run("semaphore released on context cancellation with explicit transaction", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("requires actual Neo4J connection")
+		}
+
+		uri, cancel := startNeo4J(ctx)
+		t.Cleanup(func() {
+			if err := cancel(ctx); err != nil {
+				t.Logf("error canceling container: %v", err)
+			}
+		})
+
+		d, err := New(uri, neo4j.BasicAuth("neo4j", "password", ""), func(cfg *Config) {
+			cfg.MaxConnectionPoolSize = 2
+		})
+		require.NoError(t, err)
+
+		cancelCtx, ctxCancel := context.WithCancel(ctx)
+
+		for i := 0; i < 2; i++ {
+			session := d.ReadSession(cancelCtx)
+			tx, err := session.BeginTransaction(cancelCtx)
+			require.NoError(t, err)
+
+			err = tx.Run(func(begin func() Query) error {
+				return begin().Cypher("RETURN 1").Run(cancelCtx)
+			})
+			require.NoError(t, err)
+
+			err = tx.Close(cancelCtx)
+			require.NoError(t, err)
+		}
+
+		ctxCancel()
+		time.Sleep(10 * time.Millisecond)
+
+		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 1*time.Second)
+		defer timeoutCancel()
+
+		session := d.ReadSession(timeoutCtx)
+		require.NotNil(t, session, "session should be acquired after context cancellation released semaphore")
+		require.NoError(t, session.Close(ctx))
+	})
 }
 
 func TestConfigOverride(t *testing.T) {

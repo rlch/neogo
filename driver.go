@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j/auth"
@@ -134,10 +135,12 @@ type (
 	session struct {
 		*driver
 		registry
-		db         neo4j.DriverWithContext
-		execConfig execConfig
-		session    neo4j.SessionWithContext
-		currentTx  neo4j.ManagedTransaction
+		db          neo4j.DriverWithContext
+		execConfig  execConfig
+		session     neo4j.SessionWithContext
+		currentTx   neo4j.ManagedTransaction
+		releaseOnce sync.Once
+		done        chan struct{}
 	}
 	transactionImpl struct {
 		session *session
@@ -198,12 +201,21 @@ func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.Ses
 		panic(fmt.Errorf("failed to acquire session semaphore: %w", err))
 	}
 	sess := d.db.NewSession(ctx, config)
-	return &session{
+	s := &session{
 		driver:   d,
 		registry: d.registry,
 		db:       d.db,
 		session:  sess,
+		done:     make(chan struct{}),
 	}
+	go func() {
+		select {
+		case <-ctx.Done():
+			s.releaseOnce.Do(s.releaseSemaphore)
+		case <-s.done:
+		}
+	}()
+	return s
 }
 
 func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) writeSession {
@@ -217,21 +229,37 @@ func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.Se
 		panic(fmt.Errorf("failed to acquire session semaphore: %w", err))
 	}
 	sess := d.db.NewSession(ctx, config)
-	return &session{
+	s := &session{
 		driver:   d,
 		registry: d.registry,
 		db:       d.db,
 		session:  sess,
+		done:     make(chan struct{}),
 	}
+	go func() {
+		select {
+		case <-ctx.Done():
+			s.releaseOnce.Do(s.releaseSemaphore)
+		case <-s.done:
+		}
+	}()
+	return s
 }
 
 func (s *session) Session() neo4j.SessionWithContext {
 	return s.session
 }
 
-func (s *session) Close(ctx context.Context, errs ...error) error {
-	sessErr := s.session.Close(ctx)
+func (s *session) releaseSemaphore() {
 	s.driver.sessionSemaphore.Release(1)
+}
+
+func (s *session) Close(ctx context.Context, errs ...error) error {
+	if s.done != nil {
+		close(s.done)
+	}
+	sessErr := s.session.Close(ctx)
+	s.releaseOnce.Do(s.releaseSemaphore)
 	if sessErr != nil {
 		errs = append(errs, sessErr)
 		return errors.Join(errs...)
