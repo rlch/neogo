@@ -160,10 +160,10 @@ type NodeTarget struct {
 
 // Name returns the node type name.
 func (t *NodeTarget) Name() string {
-	if t.internal.RegisteredNode == nil {
+	if t.internal == nil || t.internal.RegisteredNode == nil {
 		return ""
 	}
-	return t.internal.RegisteredNode.Name()
+	return t.internal.Name()
 }
 
 // RelationshipMeta contains metadata about a relationship struct.

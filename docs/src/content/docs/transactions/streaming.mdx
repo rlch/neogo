@@ -7,45 +7,61 @@ import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
 
 Streaming allows you to process query results one at a time without loading the entire result set into memory. This is essential for handling large datasets efficiently.
 
-## Stream Method
+## Basic Streaming
 
-### Basic Streaming
+### Stream Method
 
 ```go
 var person Person
 
-cy := c.Match(
-    db.Node(&person),
-).Return(&person)
-
-err := cy.Stream(ctx, session, func(result *PersonResult) error {
-    fmt.Printf("Processing: %s\n", result.Person.Name)
-    return nil
-})
-if err != nil {
-    return err
-}
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) WHERE p.active = true RETURN p`).
+    Stream(ctx, func() error {
+        // Called for each record
+        fmt.Printf("Processing: %s\n", person.Name)
+        return nil
+    }, "p", &person)
 ```
 
-### Stream vs All
+### Stream with Parameters
+
+```go
+var person Person
+
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) WHERE p.age > $minAge RETURN p`).
+    StreamWithParams(ctx, map[string]any{"minAge": 18}, func() error {
+        fmt.Printf("Adult: %s, age %d\n", person.Name, person.Age)
+        return nil
+    }, "p", &person)
+```
+
+## Stream vs Run
 
 <Tabs>
 <TabItem label="Stream (Memory Efficient)">
 ```go
 // Processes one result at a time
-err := cy.Stream(ctx, session, func(r *Result) error {
-    process(r)
-    return nil
-})
+var person Person
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) RETURN p`).
+    Stream(ctx, func() error {
+        process(person)
+        return nil
+    }, "p", &person)
 ```
 Memory usage: O(1) - constant
 </TabItem>
-<TabItem label="All (Loads Everything)">
+<TabItem label="Run (Loads Everything)">
 ```go
 // Loads all results into memory first
-results, err := cy.All(ctx, session)
-for _, r := range results {
-    process(r)
+var people []Person
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) RETURN p`).
+    Run(ctx, "p", &people)
+
+for _, p := range people {
+    process(p)
 }
 ```
 Memory usage: O(n) - linear with result size
@@ -61,17 +77,18 @@ Return an error to stop streaming:
 ```go
 var processedCount int
 
-err := cy.Stream(ctx, session, func(r *PersonResult) error {
-    if err := process(r); err != nil {
-        return fmt.Errorf("failed at record %d: %w", processedCount, err)
-    }
-    processedCount++
-    return nil
-})
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) RETURN p`).
+    Stream(ctx, func() error {
+        if err := validatePerson(person); err != nil {
+            return fmt.Errorf("failed at record %d: %w", processedCount, err)
+        }
+        processedCount++
+        return nil
+    }, "p", &person)
 
 if err != nil {
     fmt.Printf("Processed %d records before error\n", processedCount)
-    return err
 }
 ```
 
@@ -81,16 +98,17 @@ Use a sentinel error to stop early without error:
 
 ```go
 var ErrStopIteration = errors.New("stop iteration")
-
 var found *Person
 
-err := cy.Stream(ctx, session, func(r *PersonResult) error {
-    if r.Person.Email == targetEmail {
-        found = &r.Person
-        return ErrStopIteration
-    }
-    return nil
-})
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) RETURN p`).
+    Stream(ctx, func() error {
+        if person.Email == targetEmail {
+            found = &Person{Name: person.Name, Email: person.Email}
+            return ErrStopIteration
+        }
+        return nil
+    }, "p", &person)
 
 if err != nil && !errors.Is(err, ErrStopIteration) {
     return err
@@ -101,42 +119,64 @@ if found != nil {
 }
 ```
 
-## Streaming with Transactions
+## Streaming in Transactions
 
-### In Managed Transaction
+### With ReadTransaction
 
 ```go
-_, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+session := driver.ReadSession(ctx)
+defer session.Close(ctx)
+
+err := session.ReadTransaction(ctx, func(c neogo.Client) error {
     var person Person
-    cy := c.Match(db.Node(&person)).Return(&person)
-    
-    return nil, cy.Stream(ctx, tx, func(r *PersonResult) error {
-        return processInTransaction(r)
-    })
+    return c.Cypher(`MATCH (p:Person) WHERE p.active = true RETURN p`).
+        Stream(ctx, func() error {
+            return processInTransaction(person)
+        }, "p", &person)
 })
 ```
 
-### In Explicit Transaction
+## Aggregation During Streaming
+
+### Count
 
 ```go
-tx, err := session.BeginTransaction(ctx)
-if err != nil {
-    return err
-}
-defer tx.Close(ctx)
-
+var count int
 var person Person
-cy := c.Match(db.Node(&person)).Return(&person)
 
-err = cy.Stream(ctx, tx, func(r *PersonResult) error {
-    return process(r)
-})
-if err != nil {
-    tx.Rollback(ctx)
-    return err
-}
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) RETURN p`).
+    Stream(ctx, func() error {
+        count++
+        return nil
+    }, "p", &person)
 
-return tx.Commit(ctx)
+fmt.Printf("Total: %d\n", count)
+```
+
+### Custom Aggregation
+
+```go
+var (
+    totalAge int
+    count    int
+    maxAge   int
+)
+var person Person
+
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) RETURN p`).
+    Stream(ctx, func() error {
+        totalAge += person.Age
+        count++
+        if person.Age > maxAge {
+            maxAge = person.Age
+        }
+        return nil
+    }, "p", &person)
+
+avgAge := float64(totalAge) / float64(count)
+fmt.Printf("Average age: %.2f, Max age: %d\n", avgAge, maxAge)
 ```
 
 ## Batch Processing
@@ -145,19 +185,22 @@ return tx.Commit(ctx)
 
 ```go
 const batchSize = 100
-var batch []*Person
+var batch []Person
+var person Person
 
-err := cy.Stream(ctx, session, func(r *PersonResult) error {
-    batch = append(batch, &r.Person)
-    
-    if len(batch) >= batchSize {
-        if err := processBatch(batch); err != nil {
-            return err
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) RETURN p`).
+    Stream(ctx, func() error {
+        batch = append(batch, person)
+
+        if len(batch) >= batchSize {
+            if err := processBatch(batch); err != nil {
+                return err
+            }
+            batch = batch[:0]  // Reset slice
         }
-        batch = batch[:0] // Reset slice
-    }
-    return nil
-})
+        return nil
+    }, "p", &person)
 
 if err != nil {
     return err
@@ -167,80 +210,6 @@ if err != nil {
 if len(batch) > 0 {
     return processBatch(batch)
 }
-```
-
-### Parallel Batch Processing
-
-```go
-const batchSize = 100
-results := make(chan *Person, batchSize)
-errChan := make(chan error, 1)
-
-// Start processor goroutine
-go func() {
-    for person := range results {
-        if err := process(person); err != nil {
-            errChan <- err
-            return
-        }
-    }
-    errChan <- nil
-}()
-
-// Stream results
-err := cy.Stream(ctx, session, func(r *PersonResult) error {
-    select {
-    case results <- &r.Person:
-        return nil
-    case err := <-errChan:
-        return err
-    }
-})
-close(results)
-
-if err != nil {
-    return err
-}
-return <-errChan
-```
-
-## Aggregation During Streaming
-
-### Count
-
-```go
-var count int
-
-err := cy.Stream(ctx, session, func(r *PersonResult) error {
-    count++
-    return nil
-})
-
-fmt.Printf("Total: %d\n", count)
-```
-
-### Custom Aggregation
-
-```go
-var (
-    totalAge   int
-    count      int
-    maxAge     int
-    namesByAge = make(map[int][]string)
-)
-
-err := cy.Stream(ctx, session, func(r *PersonResult) error {
-    totalAge += r.Person.Age
-    count++
-    if r.Person.Age > maxAge {
-        maxAge = r.Person.Age
-    }
-    namesByAge[r.Person.Age] = append(namesByAge[r.Person.Age], r.Person.Name)
-    return nil
-})
-
-avgAge := float64(totalAge) / float64(count)
-fmt.Printf("Average age: %.2f, Max age: %d\n", avgAge, maxAge)
 ```
 
 ## Memory-Efficient Export
@@ -256,19 +225,21 @@ defer file.Close()
 
 encoder := json.NewEncoder(file)
 first := true
+var person Person
 
 file.WriteString("[")
 
-err = cy.Stream(ctx, session, func(r *PersonResult) error {
-    if !first {
-        file.WriteString(",")
-    }
-    first = false
-    return encoder.Encode(r.Person)
-})
+err = driver.Exec().
+    Cypher(`MATCH (p:Person) RETURN p`).
+    Stream(ctx, func() error {
+        if !first {
+            file.WriteString(",")
+        }
+        first = false
+        return encoder.Encode(person)
+    }, "p", &person)
 
 file.WriteString("]")
-return err
 ```
 
 ### Stream to HTTP Response
@@ -276,56 +247,55 @@ return err
 ```go
 func (h *Handler) ExportPeople(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/x-ndjson")
-    
-    session := h.driver.NewSession(r.Context(), neo4j.SessionConfig{
-        AccessMode: neo4j.AccessModeRead,
-    })
+
+    session := h.driver.ReadSession(r.Context())
     defer session.Close(r.Context())
-    
-    var person Person
-    cy := c.Match(db.Node(&person)).Return(&person)
-    
+
     encoder := json.NewEncoder(w)
-    
-    err := cy.Stream(r.Context(), session, func(result *PersonResult) error {
-        return encoder.Encode(result.Person)
+    var person Person
+
+    err := session.ReadTransaction(r.Context(), func(c neogo.Client) error {
+        return c.Cypher(`MATCH (p:Person) RETURN p`).
+            Stream(r.Context(), func() error {
+                return encoder.Encode(person)
+            }, "p", &person)
     })
-    
+
     if err != nil {
-        // Can't change status code after streaming started
         log.Printf("Stream error: %v", err)
     }
 }
 ```
 
-## Fetch Size
+## Multiple Bindings in Stream
 
-### Configure Fetch Size
-
-Control how many records are fetched at a time:
+Stream can bind multiple values per record:
 
 ```go
-session := driver.NewSession(ctx, neo4j.SessionConfig{
-    FetchSize: 1000, // Fetch 1000 records at a time
-})
-```
+var person Person
+var friendCount int64
 
-| Fetch Size | Memory | Network Calls | Use Case |
-|------------|--------|---------------|----------|
-| Small (100) | Low | More | Limited memory |
-| Medium (1000) | Medium | Balanced | Default |
-| Large (10000) | High | Fewer | High throughput |
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person)-[:KNOWS]->(f:Person)
+        WITH p, count(f) AS cnt
+        RETURN p, cnt
+    `).
+    Stream(ctx, func() error {
+        fmt.Printf("%s has %d friends\n", person.Name, friendCount)
+        return nil
+    }, "p", &person, "cnt", &friendCount)
+```
 
 ## Performance Tips
 
 <Aside type="tip" title="Streaming Guidelines">
 
 1. **Use streaming for large results**: >1000 records
-2. **Set appropriate fetch size**: Balance memory vs network
-3. **Process inline**: Avoid storing all results
-4. **Handle errors properly**: Stop streaming on critical errors
-5. **Use batching**: For downstream systems that prefer batches
-6. **Monitor memory**: Even streaming can accumulate state
+2. **Process inline**: Avoid storing all results in memory
+3. **Handle errors properly**: Stop streaming on critical errors
+4. **Use batching**: For downstream systems that prefer batches
+5. **Monitor memory**: Even streaming can accumulate state in your callback
 
 </Aside>
 
@@ -333,9 +303,8 @@ session := driver.NewSession(ctx, neo4j.SessionConfig{
 
 | Scenario | Method | Reason |
 |----------|--------|--------|
-| < 100 results | `All()` | Simple, low overhead |
+| < 100 results | `Run()` | Simple, low overhead |
 | 100-1000 results | Either | Depends on memory constraints |
 | > 1000 results | `Stream()` | Memory efficiency |
-| Single result | `Single()` | Optimized for one record |
 | Export to file | `Stream()` | Constant memory |
-| Need random access | `All()` | Must load all data |
+| Need random access | `Run()` | Must load all data |

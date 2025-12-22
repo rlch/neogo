@@ -36,16 +36,6 @@ type movieNode struct {
 func (movieNode) IsNode()         {}
 func (m movieNode) GetID() string { return m.ID }
 
-// companyNode with composite indexes
-type companyNode struct {
-	internal.Node `neo4j:"Company"`
-	TenantID      string `neo4j:"tenant_id,unique:uniq_company_tenant,priority:1"`
-	CompanyID     string `neo4j:"company_id,unique:uniq_company_tenant,priority:2"`
-}
-
-func (companyNode) IsNode()         {}
-func (c companyNode) GetID() string { return c.ID }
-
 // workedAtRel is a relationship with schema elements
 type workedAtRel struct {
 	internal.Relationship `neo4j:"WORKED_AT"`
@@ -54,15 +44,6 @@ type workedAtRel struct {
 }
 
 func (workedAtRel) IsRelationship() {}
-
-// simpleNode has only auto ID constraint (no explicit schema tags)
-type simpleNode struct {
-	internal.Node `neo4j:"SimpleNode"`
-	Name          string `neo4j:"name"`
-}
-
-func (simpleNode) IsNode()         {}
-func (s simpleNode) GetID() string { return s.ID }
 
 // =============================================================================
 // Phase 3: Schema Migration Logic Tests
@@ -162,9 +143,10 @@ func TestMigrationLogic_EmptyDatabase(t *testing.T) {
 		// Check for index action
 		var indexAction, constraintAction *neogo.MigrationAction
 		for i := range actions {
-			if actions[i].Type == neogo.MigrationCreateIndex {
+			switch actions[i].Type {
+			case neogo.MigrationCreateIndex:
 				indexAction = &actions[i]
-			} else if actions[i].Type == neogo.MigrationCreateConstraint {
+			case neogo.MigrationCreateConstraint:
 				constraintAction = &actions[i]
 			}
 		}

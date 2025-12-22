@@ -2,7 +2,6 @@ package internal
 
 import (
 	"reflect"
-	"strings"
 )
 
 const Neo4jTag = "neo4j"
@@ -75,24 +74,4 @@ func (r *Registry) ExtractRelationshipType(rel any) string {
 		return ""
 	}
 	return n.Reltype
-}
-
-// extractNeo4jFieldName extracts the Neo4j property name from a struct field tag.
-// Returns the property name and true if the field should be mapped to a Neo4j property.
-func extractNeo4jFieldName(field reflect.StructField) (string, bool) {
-	// Anonymous (embedded) fields are for labels/inheritance, not properties
-	if field.Anonymous {
-		return "", false
-	}
-
-	// Use neo4j tag for property names
-	if neo4jTag, ok := field.Tag.Lookup("neo4j"); ok && neo4jTag != "" && neo4jTag != "-" {
-		tag := strings.Split(neo4jTag, ",")[0]
-		// Skip relationship direction markers and other special values
-		if tag != "->" && tag != "<-" && tag != "startNode" && tag != "endNode" {
-			return tag, true
-		}
-	}
-
-	return "", false
 }

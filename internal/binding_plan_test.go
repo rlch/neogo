@@ -234,7 +234,7 @@ func TestBindingPlan_DecodeSingle(t *testing.T) {
 	})
 
 	t.Run("decode nil is noop", func(t *testing.T) {
-		var name string = "initial"
+		name := "initial"
 		plan := NewBindingPlan("name", &name, codecs)
 
 		err := plan.DecodeSingle(nil)

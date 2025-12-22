@@ -109,13 +109,6 @@ func (r *CodecRegistry) extractNeo4jNodeMetaFromType(typ reflect.Type) (*Neo4jNo
 	return meta, nil
 }
 
-// walkStructFields walks through struct fields and extracts Neo4j metadata
-// Deprecated: Use walkStructFieldsWithSchema instead.
-func (r *CodecRegistry) walkStructFields(typ reflect.Type, val reflect.Value, meta *Neo4jNodeMetadata, postpendLabels *[]string) error {
-	var fieldSchemas []FieldSchemaInfo
-	return r.walkStructFieldsWithSchema(typ, val, meta, postpendLabels, &fieldSchemas)
-}
-
 // walkStructFieldsWithSchema walks through struct fields and extracts Neo4j metadata + schema info
 func (r *CodecRegistry) walkStructFieldsWithSchema(typ reflect.Type, val reflect.Value, meta *Neo4jNodeMetadata, postpendLabels *[]string, fieldSchemas *[]FieldSchemaInfo) error {
 	for i := 0; i < typ.NumField(); i++ {
@@ -225,13 +218,6 @@ func (r *CodecRegistry) extractFieldName(field reflect.StructField) (string, boo
 	}
 
 	return "", false
-}
-
-// handleAnonymousField handles embedded/anonymous struct fields
-// Deprecated: Use handleAnonymousFieldWithSchema instead.
-func (r *CodecRegistry) handleAnonymousField(field reflect.StructField, meta *Neo4jNodeMetadata, postpendLabels *[]string) bool {
-	var fieldSchemas []FieldSchemaInfo
-	return r.handleAnonymousFieldWithSchema(field, meta, postpendLabels, &fieldSchemas)
 }
 
 // handleAnonymousFieldWithSchema handles embedded/anonymous struct fields and collects schema info

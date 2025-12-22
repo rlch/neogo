@@ -138,6 +138,177 @@ func TestBindValuer(t *testing.T) {
 	})
 }
 
+func TestBind(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterTypes(&BaseOrganism{})
+
+	t.Run("binds primitive to pointer", func(t *testing.T) {
+		var target string
+		err := r.Bind("hello", &target)
+		require.NoError(t, err)
+		require.Equal(t, "hello", target)
+	})
+
+	t.Run("binds node to struct pointer", func(t *testing.T) {
+		target := &Person{}
+		err := r.Bind(neo4j.Node{
+			Labels: []string{"Person"},
+			Props:  map[string]any{"name": "Alice"},
+		}, target)
+		require.NoError(t, err)
+		require.Equal(t, "Alice", target.Name)
+	})
+
+	t.Run("fails when target is not a pointer", func(t *testing.T) {
+		target := "hello"
+		err := r.Bind("world", target)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "pointer target")
+	})
+}
+
+func TestBindNil(t *testing.T) {
+	r := NewRegistry()
+
+	t.Run("nil to slice creates single element slice with zero", func(t *testing.T) {
+		var target []string
+		err := r.BindValue(nil, reflect.ValueOf(&target).Elem())
+		require.NoError(t, err)
+		require.Len(t, target, 1)
+		require.Equal(t, "", target[0])
+	})
+
+	t.Run("nil to pointer sets to nil", func(t *testing.T) {
+		target := &Person{Name: "test"}
+		targetPtr := &target
+		err := r.BindValue(nil, reflect.ValueOf(targetPtr).Elem())
+		require.NoError(t, err)
+		require.Nil(t, target)
+	})
+
+	t.Run("nil to struct sets zero value", func(t *testing.T) {
+		target := Person{Name: "test"}
+		err := r.BindValue(nil, reflect.ValueOf(&target).Elem())
+		require.NoError(t, err)
+		require.Equal(t, Person{}, target)
+	})
+
+	t.Run("nil to nested pointer slice", func(t *testing.T) {
+		var slice []*string
+		err := r.BindValue(nil, reflect.ValueOf(&slice).Elem())
+		require.NoError(t, err)
+		require.Len(t, slice, 1)
+		require.Nil(t, slice[0])
+	})
+}
+
+func TestBindSliceDepthMismatch(t *testing.T) {
+	r := NewRegistry()
+
+	t.Run("wraps slice in outer slice when depth differs by 1", func(t *testing.T) {
+		// []Person -> [][]Person (depth 1 -> depth 2)
+		input := []any{
+			neo4j.Node{Props: map[string]any{"name": "Alice"}},
+			neo4j.Node{Props: map[string]any{"name": "Bob"}},
+		}
+		var target [][]Person
+		err := r.bindSliceDepthMismatch(input, reflect.ValueOf(&target).Elem(), 1, 2)
+		require.NoError(t, err)
+		require.Len(t, target, 1)
+		require.Len(t, target[0], 2)
+		require.Equal(t, "Alice", target[0][0].Name)
+		require.Equal(t, "Bob", target[0][1].Name)
+	})
+
+	t.Run("fails when depth mismatch is greater than 1", func(t *testing.T) {
+		input := []any{"a", "b"}
+		var target [][][]string
+		err := r.bindSliceDepthMismatch(input, reflect.ValueOf(&target).Elem(), 1, 3)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot bind slice of depth 1 to slice of depth 3")
+	})
+
+	t.Run("fails when target is not a slice", func(t *testing.T) {
+		var target string
+		err := r.bindSliceDepthMismatch([]any{"a"}, reflect.ValueOf(&target).Elem(), 1, 0)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot bind slice to non-slice type")
+	})
+}
+
+func TestWrapInSlice(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterTypes(&BaseOrganism{})
+
+	t.Run("wraps single node in slice of abstract", func(t *testing.T) {
+		input := neo4j.Node{
+			Labels: []string{"Organism", "Human"},
+			Props:  map[string]any{"name": "Alice"},
+		}
+		var target []Organism
+		err := r.wrapInSlice(input, reflect.ValueOf(&target).Elem())
+		require.NoError(t, err)
+		require.Len(t, target, 1)
+		human, ok := target[0].(*Human)
+		require.True(t, ok)
+		require.Equal(t, "Alice", human.Name)
+	})
+
+	t.Run("wraps single value in pointer slice", func(t *testing.T) {
+		input := neo4j.Node{Props: map[string]any{"name": "Bob"}}
+		slice := new([]Person)
+		err := r.wrapInSlice(input, reflect.ValueOf(&slice).Elem())
+		require.NoError(t, err)
+		require.Len(t, *slice, 1)
+		require.Equal(t, "Bob", (*slice)[0].Name)
+	})
+}
+
+func TestBindSliceWithAbstractElements(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterTypes(&BaseOrganism{})
+
+	t.Run("binds slice of nodes to slice of abstract", func(t *testing.T) {
+		input := []any{
+			neo4j.Node{
+				Labels: []string{"Organism", "Human"},
+				Props:  map[string]any{"name": "Alice", "alive": true},
+			},
+			neo4j.Node{
+				Labels: []string{"Organism", "Dog"},
+				Props:  map[string]any{"borfs": true, "alive": false},
+			},
+		}
+		var target []Organism
+		err := r.bindSliceWithAbstractElements(input, reflect.ValueOf(&target).Elem())
+		require.NoError(t, err)
+		require.Len(t, target, 2)
+
+		human, ok := target[0].(*Human)
+		require.True(t, ok)
+		require.Equal(t, "Alice", human.Name)
+		require.True(t, human.Alive)
+
+		dog, ok := target[1].(*Dog)
+		require.True(t, ok)
+		require.True(t, dog.Borfs)
+		require.False(t, dog.Alive)
+	})
+
+	t.Run("handles pointer to slice", func(t *testing.T) {
+		input := []any{
+			neo4j.Node{
+				Labels: []string{"Organism", "Human"},
+				Props:  map[string]any{"name": "Bob"},
+			},
+		}
+		target := new([]Organism)
+		err := r.bindSliceWithAbstractElements(input, reflect.ValueOf(&target).Elem())
+		require.NoError(t, err)
+		require.Len(t, *target, 1)
+	})
+}
+
 func TestBindValue(t *testing.T) {
 	r := NewRegistry()
 	r.RegisterTypes(&BaseOrganism{})

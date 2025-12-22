@@ -76,7 +76,7 @@ func (c *neo4jContainer) close(ctx context.Context, t *testing.T) {
 func cleanupSchema(ctx context.Context, t *testing.T, driver neo4j.DriverWithContext) {
 	t.Helper()
 	session := driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(ctx)
+	defer func() { _ = session.Close(ctx) }()
 
 	// Drop all constraints first (some indexes are auto-created by constraints)
 	result, err := session.Run(ctx, "SHOW CONSTRAINTS YIELD name RETURN name", nil)
@@ -183,7 +183,7 @@ func TestSchemaIntegration_GetIndexes(t *testing.T) {
 		session := nc.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 		_, err := session.Run(ctx, "CREATE INDEX test_manual_idx FOR (n:TestLabel) ON (n.prop)", nil)
 		require.NoError(t, err)
-		session.Close(ctx)
+		_ = session.Close(ctx)
 
 		// Wait for index to be online
 		time.Sleep(500 * time.Millisecond)
@@ -224,7 +224,7 @@ func TestSchemaIntegration_GetConstraints(t *testing.T) {
 		session := nc.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 		_, err := session.Run(ctx, "CREATE CONSTRAINT test_manual_con FOR (n:TestLabel) REQUIRE n.prop IS UNIQUE", nil)
 		require.NoError(t, err)
-		session.Close(ctx)
+		_ = session.Close(ctx)
 
 		// Wait for constraint to be created
 		time.Sleep(500 * time.Millisecond)
@@ -438,7 +438,7 @@ func TestSchemaIntegration_NeedsMigration(t *testing.T) {
 		session := nc.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 		_, err := session.Run(ctx, "CREATE INDEX idx_SchemaTestNode_name IF NOT EXISTS FOR (n:SchemaTestNode) ON (n.name)", nil)
 		require.NoError(t, err)
-		session.Close(ctx)
+		_ = session.Close(ctx)
 
 		d, err := neogo.New(nc.boltURL, neo4j.NoAuth(), neogo.WithTypes(&schemaTestNode{}))
 		require.NoError(t, err)

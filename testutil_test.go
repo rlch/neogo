@@ -85,7 +85,7 @@ func (c *neo4jTestContainer) NewTestDriver(t *testing.T, types ...any) Driver {
 func (c *neo4jTestContainer) CleanupData(ctx context.Context, t *testing.T) {
 	t.Helper()
 	session := c.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(ctx)
+	defer func() { _ = session.Close(ctx) }()
 	_, err := session.Run(ctx, "MATCH (n) DETACH DELETE n", nil)
 	require.NoError(t, err, "failed to cleanup data")
 }

@@ -176,23 +176,26 @@ for _, con := range constraints {
 When you try to create data that violates a constraint, Neo4j returns an error:
 
 ```go
-user1 := User{Email: "test@example.com"}
-user2 := User{Email: "test@example.com"} // Same email
+// First user creates successfully
+err := driver.Exec().
+    Cypher(`CREATE (u:User {email: $email})`).
+    RunWithParams(ctx, map[string]any{"email": "test@example.com"})
 
-err := client.Exec().Create(db.Node(&user1)).Run(ctx)
-// Success
-
-err = client.Exec().Create(db.Node(&user2)).Run(ctx)
+// Second user with same email fails
+err = driver.Exec().
+    Cypher(`CREATE (u:User {email: $email})`).
+    RunWithParams(ctx, map[string]any{"email": "test@example.com"})
 // Error: Node already exists with label `User` and property `email` = 'test@example.com'
 ```
 
 Handle constraint violations appropriately:
 
 ```go
-err := client.Exec().Create(db.Node(&user)).Run(ctx)
+err := driver.Exec().
+    Cypher(`CREATE (u:User {email: $email, name: $name})`).
+    RunWithParams(ctx, map[string]any{"email": email, "name": name})
 if err != nil {
     if strings.Contains(err.Error(), "already exists") {
-        // Handle duplicate
         return ErrUserAlreadyExists
     }
     return err
@@ -204,15 +207,16 @@ if err != nil {
 Constraints work well with MERGE for upsert operations:
 
 ```go
-user := User{Email: "test@example.com", Name: "Test User"}
-
-err := client.Exec().
-    Merge(db.Node(db.Qual(&user, "u", db.Props{
-        "email": &user.Email,
-    }))).
-    OnCreate(db.SetPropValue(&user.Name, &user.Name)).
-    Return(&user).
-    Run(ctx)
+err := driver.Exec().
+    Cypher(`
+        MERGE (u:User {email: $email})
+        ON CREATE SET u.name = $name, u.createdAt = datetime()
+        ON MATCH SET u.lastSeen = datetime()
+    `).
+    RunWithParams(ctx, map[string]any{
+        "email": "test@example.com",
+        "name":  "Test User",
+    })
 ```
 
 With a unique constraint on `email`, this safely creates or matches the user.
@@ -298,4 +302,4 @@ func main() {
 
 - [Auto Migration](/schema/migration/) - Running schema migrations
 - [Indexes](/schema/indexes/) - Performance optimization
-- [Merge](/crud/merge/) - Upsert operations with constraints
+- [Cypher Queries](/crud/cypher/) - MERGE and other operations

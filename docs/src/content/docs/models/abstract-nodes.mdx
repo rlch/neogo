@@ -1,11 +1,11 @@
 ---
 title: Abstract Nodes
-description: Using abstract nodes for polymorphic queries with Implementers()
+description: Using abstract nodes for polymorphic queries
 ---
 
 import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
 
-Abstract nodes allow you to define a common interface for multiple node types, enabling polymorphic queries. This is similar to interfaces or abstract classes in object-oriented programming.
+Abstract nodes allow you to define a common interface for multiple node types, enabling polymorphic queries. This is useful when different node types share common properties.
 
 ## The Problem
 
@@ -17,24 +17,31 @@ In Neo4j, you might have multiple node types that share common properties:
 (:Product {name: "Widget", price: 99.99})
 ```
 
-All have a `name` property, but are different types. How do you query all "nameable" things?
+All have a `name` property, but are different types. How do you query all "nameable" things and deserialize them into the correct Go types?
 
 ## Defining Abstract Nodes
 
-An abstract node is a struct that implements both `db.INode` and `db.IAbstract`:
+An abstract node embeds `neogo.Abstract` and implements the `Implementers()` method:
 
 ```go
-// Abstract node interface
-type Named struct {
-    Name string `json:"name"`
+import "github.com/rlch/neogo"
+
+// Abstract node - defines shared properties
+type Named interface {
+    neogo.IAbstract
+    GetName() string
 }
 
-func (n *Named) Node() *db.NodePattern {
-    return db.Node("Named")  // Base label
+// Base struct for all Named implementers
+type NamedBase struct {
+    neogo.Abstract `neo4j:"Named"`
+    Name string `neo4j:"name"`
 }
 
-func (n *Named) Implementers() db.Implementers {
-    return db.Implementers{
+func (n NamedBase) GetName() string { return n.Name }
+
+func (n *NamedBase) Implementers() []neogo.IAbstract {
+    return []neogo.IAbstract{
         &Person{},
         &Company{},
         &Product{},
@@ -44,54 +51,63 @@ func (n *Named) Implementers() db.Implementers {
 
 ## Concrete Implementations
 
-Each concrete type embeds the abstract node:
+Each concrete type embeds the abstract base and adds its own label:
 
 ```go
 type Person struct {
-    Named        // Embeds Named
-    Age int `json:"age"`
-}
-
-func (p *Person) Node() *db.NodePattern {
-    return db.Node("Named", "Person")
+    NamedBase               // Embeds Named properties
+    neogo.Node `neo4j:"Person"`
+    Age int `neo4j:"age"`
 }
 
 type Company struct {
-    Named          // Embeds Named
-    Founded int `json:"founded"`
-}
-
-func (c *Company) Node() *db.NodePattern {
-    return db.Node("Named", "Company")
+    NamedBase               // Embeds Named properties
+    neogo.Node `neo4j:"Company"`
+    Founded int `neo4j:"founded"`
 }
 
 type Product struct {
-    Named           // Embeds Named
-    Price float64 `json:"price"`
-}
-
-func (p *Product) Node() *db.NodePattern {
-    return db.Node("Named", "Product")
+    NamedBase               // Embeds Named properties
+    neogo.Node `neo4j:"Product"`
+    Price float64 `neo4j:"price"`
 }
 ```
 
-<Aside type="caution">
-All implementers must include the abstract node's label(s) in their `Node()` method for the hierarchy to work correctly.
+<Aside type="tip">
+All implementers should include a shared label (like "Named") plus their specific label (like "Person").
 </Aside>
+
+## Registering Abstract Types
+
+Register abstract types and their implementers:
+
+```go
+driver, err := neogo.New(
+    "neo4j://localhost:7687",
+    neo4j.BasicAuth("neo4j", "password", ""),
+    neogo.WithTypes(
+        &NamedBase{},  // Register abstract
+        &Person{},     // Register implementers
+        &Company{},
+        &Product{},
+    ),
+)
+```
 
 ## Querying Abstract Nodes
 
-When you query using the abstract node type, neogo knows how to deserialize the results into the correct concrete types:
+When you query the abstract type, neogo deserializes into the correct concrete type based on labels:
 
 ```go
-var named Named
+// Query all Named nodes
+var results []Named
 
-results, err := c.Match(
-    db.Node(&named),
-).Return(&named).All(ctx, tx)
+err := driver.Exec().
+    Cypher(`MATCH (n:Named) RETURN n`).
+    Run(ctx, "n", &results)
 
-for _, result := range results {
-    switch v := result.Named.(type) {
+for _, named := range results {
+    switch v := named.(type) {
     case *Person:
         fmt.Printf("Person: %s, age %d\n", v.Name, v.Age)
     case *Company:
@@ -102,22 +118,9 @@ for _, result := range results {
 }
 ```
 
-## The IAbstract Interface
-
-```go
-type IAbstract interface {
-    INode
-    Implementers() Implementers
-}
-
-type Implementers []INode
-```
-
-The `Implementers()` method returns a slice of all concrete types that implement this abstract node.
-
 ## Label-Based Discrimination
 
-neogo uses Neo4j labels to determine which concrete type to instantiate. When reading a node:
+neogo uses Neo4j labels to determine which concrete type to instantiate:
 
 1. neogo fetches the node's labels from Neo4j
 2. It checks each implementer's labels
@@ -131,100 +134,90 @@ neogo uses Neo4j labels to determine which concrete type to instantiate. When re
 // neogo will instantiate a *Company
 ```
 
-## Nested Abstract Nodes
-
-You can create hierarchies of abstract nodes:
-
-```go
-// Base abstract
-type Entity struct {
-    ID string `json:"id"`
-}
-
-func (e *Entity) Node() *db.NodePattern {
-    return db.Node("Entity")
-}
-
-func (e *Entity) Implementers() db.Implementers {
-    return db.Implementers{
-        &LivingEntity{},  // Another abstract!
-        &Building{},
-    }
-}
-
-// Mid-level abstract
-type LivingEntity struct {
-    Entity
-    BirthDate time.Time `json:"birth_date"`
-}
-
-func (l *LivingEntity) Node() *db.NodePattern {
-    return db.Node("Entity", "LivingEntity")
-}
-
-func (l *LivingEntity) Implementers() db.Implementers {
-    return db.Implementers{
-        &Person{},
-        &Animal{},
-    }
-}
-
-// Concrete types
-type Person struct {
-    LivingEntity
-    Name string `json:"name"`
-}
-
-func (p *Person) Node() *db.NodePattern {
-    return db.Node("Entity", "LivingEntity", "Person")
-}
-
-type Animal struct {
-    LivingEntity
-    Species string `json:"species"`
-}
-
-func (a *Animal) Node() *db.NodePattern {
-    return db.Node("Entity", "LivingEntity", "Animal")
-}
-
-type Building struct {
-    Entity
-    Address string `json:"address"`
-}
-
-func (b *Building) Node() *db.NodePattern {
-    return db.Node("Entity", "Building")
-}
-```
-
 ## Abstract Nodes in Relationships
 
-Abstract nodes work seamlessly in relationship patterns:
+Abstract nodes work in relationship queries:
 
 ```go
 type Person struct {
-    Named
-    Age int `json:"age"`
-}
-
-type Owns struct{}
-
-func (o *Owns) Relationship() *db.RelationshipPattern {
-    return db.Rel("OWNS")
+    NamedBase
+    neogo.Node `neo4j:"Person"`
+    Age int `neo4j:"age"`
 }
 
 // Query: What does each person own?
 var person Person
-var owns Owns
-var owned Named  // Abstract - could be Company, Product, etc.
+var owned []Named  // Could be Company, Product, etc.
 
-cy := c.Match(
-    db.Patterns(
-        db.Node(&person),
-        db.Related(&owns, db.To, &owned),
-    ),
-).Return(&person, &owned)
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person {id: $id})-[:OWNS]->(o:Named)
+        RETURN p, collect(o) AS owned
+    `).
+    RunWithParams(ctx, map[string]any{"id": personID},
+        "p", &person,
+        "owned", &owned)
+
+// Each item in 'owned' is the correct concrete type
+for _, item := range owned {
+    switch v := item.(type) {
+    case *Company:
+        fmt.Printf("Owns company: %s\n", v.Name)
+    case *Product:
+        fmt.Printf("Owns product: %s ($%.2f)\n", v.Name, v.Price)
+    }
+}
+```
+
+## Common Patterns
+
+### Union Types
+
+```go
+// SearchResult could be any searchable entity
+type Searchable interface {
+    neogo.IAbstract
+    GetID() string
+}
+
+type SearchableBase struct {
+    neogo.Abstract `neo4j:"Searchable"`
+}
+
+func (s *SearchableBase) Implementers() []neogo.IAbstract {
+    return []neogo.IAbstract{
+        &Person{},
+        &Article{},
+        &Comment{},
+    }
+}
+```
+
+### Soft Interfaces (Auditable)
+
+```go
+// Auditable tracks creation/modification
+type Auditable interface {
+    neogo.IAbstract
+    GetCreatedAt() time.Time
+}
+
+type AuditableBase struct {
+    neogo.Abstract `neo4j:"Auditable"`
+    CreatedAt time.Time `neo4j:"created_at"`
+    UpdatedAt time.Time `neo4j:"updated_at"`
+    CreatedBy string    `neo4j:"created_by"`
+}
+
+func (a AuditableBase) GetCreatedAt() time.Time { return a.CreatedAt }
+
+func (a *AuditableBase) Implementers() []neogo.IAbstract {
+    return []neogo.IAbstract{
+        &Document{},
+        &User{},
+        &Setting{},
+    }
+}
 ```
 
 ## Best Practices
@@ -233,45 +226,7 @@ cy := c.Match(
 
 1. **Keep abstract nodes focused**: Include only truly shared properties
 2. **Use meaningful base labels**: The abstract label should describe the shared trait
-3. **Order labels consistently**: Put base labels first in `Node()` definitions
-4. **Register all implementers**: Missing implementers will cause deserialization errors
+3. **Register all implementers**: Missing implementers will cause deserialization errors
+4. **Consider using interfaces**: Go interfaces make abstract patterns more idiomatic
 
 </Aside>
-
-## Common Patterns
-
-### Union Types
-
-```go
-// SearchResult could be any searchable entity
-type SearchResult struct {
-    ID string `json:"id"`
-}
-
-func (s *SearchResult) Implementers() db.Implementers {
-    return db.Implementers{
-        &Person{},
-        &Article{},
-        &Comment{},
-    }
-}
-```
-
-### Soft Interfaces
-
-```go
-// Auditable tracks creation/modification
-type Auditable struct {
-    CreatedAt time.Time `json:"created_at"`
-    UpdatedAt time.Time `json:"updated_at"`
-    CreatedBy string    `json:"created_by"`
-}
-
-func (a *Auditable) Implementers() db.Implementers {
-    return db.Implementers{
-        &Document{},
-        &User{},
-        &Setting{},
-    }
-}
-```

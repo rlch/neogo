@@ -106,7 +106,7 @@ func (r *CodecRegistry) RegisterTypes(types ...any) {
 
 		// Extract Neo4j-specific metadata based on type
 		// Check if type implements INode
-		if r.implementsINode(typ) || r.implementsINode(reflect.PtrTo(typ)) {
+		if r.implementsINode(typ) || r.implementsINode(reflect.PointerTo(typ)) {
 			nodeMeta, err := r.extractNeo4jNodeMetaFromType(typ)
 			if err != nil {
 				panic(fmt.Errorf("failed to extract Neo4j node metadata for %s: %w", typeName, err))
@@ -115,7 +115,7 @@ func (r *CodecRegistry) RegisterTypes(types ...any) {
 		}
 
 		// Check if type implements IRelationship
-		if r.implementsIRelationship(typ) || r.implementsIRelationship(reflect.PtrTo(typ)) {
+		if r.implementsIRelationship(typ) || r.implementsIRelationship(reflect.PointerTo(typ)) {
 			relMeta, err := r.extractRelationshipMetaFromType(typ)
 			if err != nil {
 				panic(fmt.Errorf("failed to extract relationship metadata for %s: %w", typeName, err))

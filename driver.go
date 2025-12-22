@@ -1,6 +1,6 @@
-// Package neogo provides a Neo4j ORM and query builder for Go.
-// It wraps the official Neo4j Go driver with type-safe query construction,
-// automatic struct mapping, and support for nodes, relationships, and Cypher queries.
+// Package neogo provides a Neo4j ORM for Go.
+// It wraps the official Neo4j Go driver with type-safe struct mapping
+// and support for nodes, relationships, and raw Cypher queries.
 package neogo
 
 import (
@@ -15,11 +15,10 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j/config"
 	"golang.org/x/sync/semaphore"
 
-	"github.com/rlch/neogo/builder"
 	"github.com/rlch/neogo/internal"
 )
 
-// New creates a new neogo [Driver] from a [neo4j.DriverWithContext].
+// New creates a new neogo [Driver] from connection parameters.
 func New(
 	target string,
 	auth auth.TokenManager,
@@ -60,10 +59,7 @@ func New(
 }
 
 type (
-	// Driver represents a pool of connections to a neo4j server or cluster. It
-	// provides an entrypoint to a neogo [query.Client], which can be used to build
-	// cypher queries.
-	//
+	// Driver represents a pool of connections to a neo4j server or cluster.
 	// It's safe for concurrent use.
 	Driver interface {
 		// Registry returns the internal registry used by this driver.
@@ -75,46 +71,36 @@ type (
 		// Schema returns the schema interface for introspection and migration.
 		Schema() Schema
 
-		// ReadSession creates a new read-access session based on the specified session configuration.
-		ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) readSession
+		// ReadSession creates a new read-access session.
+		ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) ReadSession
 
-		// WriteSession creates a new write-access session based on the specified session configuration.
-		WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) writeSession
+		// WriteSession creates a new write-access session.
+		WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) WriteSession
 
-		// Exec creates a new transaction + session and executes the given Cypher
-		// query.
-		//
-		// The access mode is inferred from the clauses used in the query. If using
-		// Cypher() to inject a write query, one should use [WithSessionConfig] to
-		// override the access mode.
-		//
+		// Exec creates a new session and returns a Client for executing queries.
+		// The access mode is inferred from the query (CREATE, MERGE, etc. = write).
 		// The session is closed after the query is executed.
-		Exec(configurers ...func(*execConfig)) Query
+		//
+		// Example:
+		//   var person Person
+		//   err := d.Exec().
+		//       Cypher("MATCH (p:Person {name: $name}) RETURN p").
+		//       RunWithParams(ctx, map[string]any{"name": "Alice"}, "p", &person)
+		Exec(configurers ...func(*execConfig)) Client
 	}
 
-	// Expression is an interface for compiling a Cypher expression outside the context of a query.
-	Expression = builder.Expression
+	// Work is a function that executes Cypher within a Transaction.
+	Work func(c Client) error
 
-	// Query is the interface for constructing a Cypher query.
-	Query = builder.Builder
-
-	// Work is a function that allows Cypher to be executed within a Transaction.
-	Work func(start func() Query) error
-
-	// Transaction represents an explicit transaction that can be committed or rolled back.
+	// Transaction represents an explicit transaction.
 	Transaction interface {
-		// Run executes a statement on this transaction and returns a result
-		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		// Run executes work within the transaction.
 		Run(work Work) error
-		// Commit commits the transaction
-		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		// Commit commits the transaction.
 		Commit(ctx context.Context) error
-		// Rollback rolls back the transaction
-		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		// Rollback rolls back the transaction.
 		Rollback(ctx context.Context) error
-		// Close rolls back the actual transaction if it's not already committed/rolled back
-		// and closes all resources associated with this transaction
-		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		// Close rolls back if not committed and closes resources.
 		Close(ctx context.Context, joinedErrors ...error) error
 	}
 
@@ -129,23 +115,25 @@ type (
 	// Configurer is a function that configures a neogo Config.
 	Configurer func(*Config)
 
-	readSession interface {
+	// ReadSession provides read-only database access.
+	ReadSession interface {
 		// Session returns the underlying Neo4J session.
 		Session() neo4j.SessionWithContext
-		// Close closes any open resources and marks this session as unusable.
-		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		// Close closes the session.
 		Close(ctx context.Context, joinedErrors ...error) error
-		// ReadTransaction executes the given unit of work in a AccessModeRead transaction with retry logic in place.
-		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+		// ReadTransaction executes work in a read transaction with retry logic.
 		ReadTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error
+		// BeginTransaction starts an explicit transaction.
 		BeginTransaction(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (Transaction, error)
 	}
-	writeSession interface {
-		readSession
-		// ExecuteWrite executes the given unit of work in a AccessModeWrite transaction with retry logic in place.
-		// Contexts terminating too early negatively affect connection pooling and degrade the driver performance.
+
+	// WriteSession provides read-write database access.
+	WriteSession interface {
+		ReadSession
+		// WriteTransaction executes work in a write transaction with retry logic.
 		WriteTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error
 	}
+
 	execConfig struct {
 		*neo4j.SessionConfig
 		*neo4j.TransactionConfig
@@ -172,8 +160,7 @@ type (
 	}
 )
 
-// defaultConfig returns default configuration values from the neo4j driver.
-// This configuration should be maintained and updated when the neo4j driver is updated.
+// defaultConfig returns default configuration values.
 func defaultConfig() *config.Config {
 	return &config.Config{
 		MaxTransactionRetryTime:      30 * time.Second,
@@ -189,6 +176,7 @@ func defaultConfig() *config.Config {
 
 var causalConsistencyCache map[string]neo4j.Bookmarks = map[string]neo4j.Bookmarks{}
 
+// WithCausalConsistency enables causal consistency using the provided key function.
 func WithCausalConsistency(when func(ctx context.Context) string) Configurer {
 	return func(c *Config) {
 		c.CausalConsistencyKey = when
@@ -213,8 +201,7 @@ func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execC
 	}
 }
 
-// WithTypes is an option for [New] that allows you to register instances of
-// [IAbstract], [INode] and [IRelationship] to be used with [neogo].
+// WithTypes registers types (INode, IRelationship, IAbstract) with the driver.
 func WithTypes(types ...any) Configurer {
 	return func(c *Config) {
 		c.Types = append(c.Types, types...)
@@ -227,7 +214,7 @@ func (d *driver) DB() neo4j.DriverWithContext { return d.db }
 
 func (d *driver) Schema() Schema { return newSchema(d.db, d.reg) }
 
-func (d *driver) Exec(configurers ...func(*execConfig)) Query {
+func (d *driver) Exec(configurers ...func(*execConfig)) Client {
 	sessionConfig := neo4j.SessionConfig{}
 	txConfig := neo4j.TransactionConfig{}
 	config := execConfig{
@@ -266,7 +253,7 @@ func (d *driver) ensureCausalConsistency(ctx context.Context, sc *neo4j.SessionC
 	sc.Bookmarks = bookmarks
 }
 
-func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) readSession {
+func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) ReadSession {
 	config := neo4j.SessionConfig{}
 	for _, c := range configurers {
 		c(&config)
@@ -284,7 +271,7 @@ func (d *driver) ReadSession(ctx context.Context, configurers ...func(*neo4j.Ses
 	}
 }
 
-func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) writeSession {
+func (d *driver) WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) WriteSession {
 	config := neo4j.SessionConfig{}
 	for _, c := range configurers {
 		c(&config)
@@ -321,22 +308,18 @@ func (s *session) Close(ctx context.Context, errs ...error) error {
 
 func (s *session) ReadTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		return nil, work(func() Query {
-			c := s.newClient(internal.NewCypherClient(s.reg))
-			c.currentTx = tx
-			return c
-		})
+		c := s.newClient(internal.NewCypherClient(s.reg))
+		c.currentTx = tx
+		return nil, work(c)
 	}, configurers...)
 	return err
 }
 
 func (s *session) WriteTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error {
 	_, err := s.session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		return nil, work(func() Query {
-			c := s.newClient(internal.NewCypherClient(s.reg))
-			c.currentTx = tx
-			return c
-		})
+		c := s.newClient(internal.NewCypherClient(s.reg))
+		c.currentTx = tx
+		return nil, work(c)
 	}, configurers...)
 	return err
 }
@@ -350,11 +333,9 @@ func (s *session) BeginTransaction(ctx context.Context, configurers ...func(*neo
 }
 
 func (t *transactionImpl) Run(work Work) error {
-	return work(func() Query {
-		c := t.session.newClient(internal.NewCypherClient(t.session.reg))
-		c.currentTx = t.tx
-		return c
-	})
+	c := t.session.newClient(internal.NewCypherClient(t.session.reg))
+	c.currentTx = t.tx
+	return work(c)
 }
 
 func (t *transactionImpl) Commit(ctx context.Context) error {

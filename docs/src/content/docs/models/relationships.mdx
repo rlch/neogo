@@ -5,185 +5,165 @@ description: Defining relationship structs with types and properties in neogo
 
 import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
 
-Relationships connect nodes in Neo4j. In neogo, relationships are defined as Go structs that implement the `db.IRelationship` interface.
+Relationships connect nodes in Neo4j. In neogo, relationships are defined as Go structs that embed `neogo.Relationship`.
 
 ## Basic Relationship Definition
 
-To define a relationship, create a struct and implement the `Relationship()` method:
+To define a relationship, create a struct that embeds `neogo.Relationship` with a type tag:
 
 ```go
-import "github.com/rlch/neogo/db"
+import "github.com/rlch/neogo"
 
 type Knows struct {
-    Since int `json:"since"`
-}
+    neogo.Relationship `neo4j:"KNOWS"`
 
-func (k *Knows) Relationship() *db.RelationshipPattern {
-    return db.Rel("KNOWS")
+    Since int `neo4j:"since"`
 }
 ```
 
-The type passed to `db.Rel()` determines the Neo4j relationship type.
+The `neo4j:"KNOWS"` tag defines the Neo4j relationship type.
 
-## Relationship Interface
+## Relationship Base Type
 
-The `db.IRelationship` interface requires a single method:
+The `neogo.Relationship` type provides:
 
 ```go
-type IRelationship interface {
-    Relationship() *db.RelationshipPattern
-}
+type Relationship struct{}
+
+func (Relationship) IsRelationship()
 ```
+
+Relationships don't have IDs like nodes - they're identified by their start node, type, and end node.
 
 ## Properties on Relationships
 
 Like nodes, relationships can have properties:
 
 ```go
-type WorksWith struct {
-    Since      time.Time `json:"since"`
-    Department string    `json:"department"`
-    Role       string    `json:"role,omitempty"`
+type WorksAt struct {
+    neogo.Relationship `neo4j:"WORKS_AT"`
+
+    Since      time.Time `neo4j:"since"`
+    Department string    `neo4j:"department"`
+    Position   string    `neo4j:"position"`
+    Salary     *float64  `neo4j:"salary"`  // Optional
 }
-
-func (w *WorksWith) Relationship() *db.RelationshipPattern {
-    return db.Rel("WORKS_WITH")
-}
 ```
 
-## Relationship Patterns
+## Creating Relationships
 
-Relationships are used in patterns with direction specifiers:
+Create relationships with raw Cypher:
+
+```go
+// First create/match the nodes, then create the relationship
+err := driver.Exec().
+    Cypher(`
+        MATCH (a:Person {id: $aID})
+        MATCH (b:Person {id: $bID})
+        CREATE (a)-[:KNOWS {since: $since}]->(b)
+    `).
+    RunWithParams(ctx, map[string]any{
+        "aID":   "person-1",
+        "bID":   "person-2",
+        "since": 2023,
+    })
+```
+
+Create with properties from a struct:
+
+```go
+knows := Knows{Since: 2023}
+
+err := driver.Exec().
+    Cypher(`
+        MATCH (a:Person {id: $aID})
+        MATCH (b:Person {id: $bID})
+        CREATE (a)-[r:KNOWS {since: $since}]->(b)
+        RETURN r
+    `).
+    RunWithParams(ctx, map[string]any{
+        "aID":   "person-1",
+        "bID":   "person-2",
+        "since": knows.Since,
+    }, "r", &knows)
+```
+
+## Querying Relationships
+
+### Query nodes via relationships
+
+```go
+var friends []Person
+
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person {id: $id})-[:KNOWS]->(friend:Person)
+        RETURN friend
+    `).
+    RunWithParams(ctx, map[string]any{"id": "person-1"}, "friend", &friends)
+```
+
+### Query relationship properties
+
+```go
+var knows Knows
+
+err := driver.Exec().
+    Cypher(`
+        MATCH (a:Person {id: $aID})-[r:KNOWS]->(b:Person {id: $bID})
+        RETURN r
+    `).
+    RunWithParams(ctx, map[string]any{
+        "aID": "person-1",
+        "bID": "person-2",
+    }, "r", &knows)
+
+fmt.Printf("Friends since: %d\n", knows.Since)
+```
+
+### Query with both nodes and relationships
 
 ```go
 var person, friend Person
 var knows Knows
 
-// Outgoing relationship: (person)-[:KNOWS]->(friend)
-cy := c.Match(
-    db.Patterns(
-        db.Node(&person),
-        db.Related(&knows, db.To, &friend),
-    ),
-).Return(&friend)
-
-// Incoming relationship: (person)<-[:KNOWS]-(friend)
-cy := c.Match(
-    db.Patterns(
-        db.Node(&person),
-        db.Related(&knows, db.From, &friend),
-    ),
-).Return(&friend)
-
-// Undirected: (person)-[:KNOWS]-(friend)
-cy := c.Match(
-    db.Patterns(
-        db.Node(&person),
-        db.Related(&knows, db.Either, &friend),
-    ),
-).Return(&friend)
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person {id: $id})-[r:KNOWS]->(f:Person)
+        RETURN p, r, f
+        LIMIT 1
+    `).
+    RunWithParams(ctx, map[string]any{"id": "person-1"},
+        "p", &person,
+        "r", &knows,
+        "f", &friend)
 ```
 
-## Direction Constants
+## Relationship Directions
 
-neogo provides three direction constants:
+In Cypher, relationships have three possible directions:
 
-| Constant    | Direction | Cypher           |
-|-------------|-----------|------------------|
-| `db.To`     | Outgoing  | `()-[]->()`      |
-| `db.From`   | Incoming  | `()<-[]-()`      |
-| `db.Either` | Both      | `()-[]-()`       |
-
-## Using Relationships in Queries
-
-### Creating Relationships
+| Direction | Cypher | Description |
+|-----------|--------|-------------|
+| Outgoing | `-[:TYPE]->` | From start to end node |
+| Incoming | `<-[:TYPE]-` | From end to start node |
+| Either | `-[:TYPE]-` | Any direction |
 
 ```go
-var person, friend Person
-var knows Knows
+// Outgoing: who does Alice know?
+err := driver.Exec().
+    Cypher(`MATCH (a:Person {name: 'Alice'})-[:KNOWS]->(friend) RETURN friend`).
+    Run(ctx, "friend", &friends)
 
-cy := c.Create(
-    db.Patterns(
-        db.Node(&person, db.Props{"name": "Alice"}),
-        db.Related(&knows, db.To, &friend, db.Props{"name": "Bob"}),
-    ),
-)
-```
+// Incoming: who knows Alice?
+err := driver.Exec().
+    Cypher(`MATCH (a:Person {name: 'Alice'})<-[:KNOWS]-(friend) RETURN friend`).
+    Run(ctx, "friend", &friends)
 
-Generates:
-
-```cypher
-CREATE (person:Person {name: "Alice"})-[knows:KNOWS]->(friend:Person {name: "Bob"})
-```
-
-### Matching Relationships
-
-```go
-var person Person
-var knows Knows
-
-cy := c.Match(
-    db.Patterns(
-        db.Node(&person),
-        db.Related(&knows, db.To, db.Node(nil)),
-    ),
-).Return(&person, &knows)
-```
-
-Generates:
-
-```cypher
-MATCH (person:Person)-[knows:KNOWS]->()
-RETURN person, knows
-```
-
-## Inline Properties
-
-Filter relationships by properties:
-
-```go
-var person, friend Person
-var knows Knows
-
-cy := c.Match(
-    db.Patterns(
-        db.Node(&person),
-        db.Related(&knows, db.To, &friend, db.Props{"since": 2020}),
-    ),
-).Return(&friend)
-```
-
-Generates:
-
-```cypher
-MATCH (person:Person)-[knows:KNOWS {since: 2020}]->(friend:Person)
-RETURN friend
-```
-
-## Anonymous Relationships
-
-For patterns where you only care about connectivity:
-
-```go
-var person, friend Person
-
-cy := c.Match(
-    db.Patterns(
-        db.Node(&person),
-        db.Related(db.Var("KNOWS"), db.To, &friend),
-    ),
-).Return(&friend)
-```
-
-Or completely anonymous:
-
-```go
-cy := c.Match(
-    db.Patterns(
-        db.Node(&person),
-        db.Related(nil, db.To, &friend),  // Any relationship type
-    ),
-).Return(&friend)
+// Either direction
+err := driver.Exec().
+    Cypher(`MATCH (a:Person {name: 'Alice'})-[:KNOWS]-(friend) RETURN friend`).
+    Run(ctx, "friend", &friends)
 ```
 
 ## Multiple Relationship Types
@@ -191,74 +171,97 @@ cy := c.Match(
 Match multiple relationship types:
 
 ```go
-var person, other Person
-
-cy := c.Match(
-    db.Patterns(
-        db.Node(&person),
-        db.Related(db.Var("KNOWS", "FRIENDS_WITH"), db.To, &other),
-    ),
-).Return(&other)
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person)-[:KNOWS|FRIENDS_WITH]->(other:Person)
+        RETURN other
+    `).
+    Run(ctx, "other", &others)
 ```
-
-Generates:
-
-```cypher
-MATCH (person:Person)-[:KNOWS|FRIENDS_WITH]->(other:Person)
-RETURN other
-```
-
-<Aside type="note">
-When using multiple relationship types with `db.Var()`, you cannot bind properties to a struct since the relationship type is ambiguous.
-</Aside>
 
 ## Relationship Chains
 
-Create complex patterns with multiple relationships:
+Match multi-hop patterns:
 
 ```go
-var a, b, c Person
-var r1, r2 Knows
-
-cy := c.Match(
-    db.Patterns(
-        db.Node(&a),
-        db.Related(&r1, db.To, &b),
-        db.Related(&r2, db.To, &c),
-    ),
-).Return(&a, &b, &c)
+// Friends of friends
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person {id: $id})-[:KNOWS]->()-[:KNOWS]->(fof:Person)
+        WHERE fof.id <> $id
+        RETURN DISTINCT fof
+    `).
+    RunWithParams(ctx, map[string]any{"id": "person-1"}, "fof", &friendsOfFriends)
 ```
 
-Generates:
-
-```cypher
-MATCH (a:Person)-[r1:KNOWS]->(b:Person)-[r2:KNOWS]->(c:Person)
-RETURN a, b, c
-```
-
-## Accessing Relationship Properties
-
-Use `db.Qual()` to access relationship properties:
+## Variable-Length Paths
 
 ```go
-var person, friend Person
-var knows Knows
-
-cy := c.Match(
-    db.Patterns(
-        db.Node(&person),
-        db.Related(&knows, db.To, &friend),
-    ),
-).Return(
-    db.Qual(&person, "name"),
-    db.Qual(&knows, "since"),
-    db.Qual(&friend, "name"),
-)
+// 1 to 3 hops
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person {id: $id})-[:KNOWS*1..3]->(connected:Person)
+        RETURN DISTINCT connected
+    `).
+    RunWithParams(ctx, map[string]any{"id": "person-1"}, "connected", &connected)
 ```
 
-Generates:
+## Updating Relationships
 
-```cypher
-MATCH (person:Person)-[knows:KNOWS]->(friend:Person)
-RETURN person.name, knows.since, friend.name
+```go
+err := driver.Exec().
+    Cypher(`
+        MATCH (a:Person {id: $aID})-[r:KNOWS]->(b:Person {id: $bID})
+        SET r.since = $since, r.strength = $strength
+    `).
+    RunWithParams(ctx, map[string]any{
+        "aID":      "person-1",
+        "bID":      "person-2",
+        "since":    2020,
+        "strength": 10,
+    })
 ```
+
+## Deleting Relationships
+
+```go
+// Delete specific relationship
+err := driver.Exec().
+    Cypher(`
+        MATCH (a:Person {id: $aID})-[r:KNOWS]->(b:Person {id: $bID})
+        DELETE r
+    `).
+    RunWithParams(ctx, map[string]any{
+        "aID": "person-1",
+        "bID": "person-2",
+    })
+
+// Delete all relationships of a type from a node
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person {id: $id})-[r:KNOWS]-()
+        DELETE r
+    `).
+    RunWithParams(ctx, map[string]any{"id": "person-1"})
+```
+
+## Schema Tags for Relationships
+
+Add indexes and constraints to relationship properties:
+
+```go
+type WorksAt struct {
+    neogo.Relationship `neo4j:"WORKS_AT"`
+
+    EmployeeID string `neo4j:"employee_id,unique"`  // Unique on relationship
+    StartDate  string `neo4j:"start_date,index"`   // Index for fast lookups
+}
+```
+
+## Best Practices
+
+1. **Use meaningful relationship types**: `KNOWS`, `WORKS_AT`, `CREATED` are better than generic names
+2. **Add properties for metadata**: Timestamps, weights, etc.
+3. **Use MERGE for idempotent creates**: Prevents duplicate relationships
+4. **Consider direction**: Choose the direction that makes semantic sense
+5. **Index frequently filtered properties**: Especially for WHERE clauses on relationship properties

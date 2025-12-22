@@ -13,7 +13,199 @@ This page provides a comprehensive reference for neogo's public API.
   For detailed Go documentation, see the [pkg.go.dev reference](https://pkg.go.dev/github.com/rlch/neogo).
 </Aside>
 
-## Core Types
+## Driver
+
+### neogo.New
+
+Creates a new neogo Driver from connection parameters.
+
+```go
+func New(
+    target string,
+    auth auth.TokenManager,
+    configurers ...Configurer,
+) (Driver, error)
+```
+
+Example:
+```go
+driver, err := neogo.New(
+    "neo4j://localhost:7687",
+    neo4j.BasicAuth("neo4j", "password", ""),
+    neogo.WithTypes(&Person{}, &Movie{}),
+)
+```
+
+### Driver Interface
+
+```go
+type Driver interface {
+    // Registry returns the internal registry used by this driver.
+    Registry() *neogo.Registry
+
+    // DB returns the underlying neo4j driver.
+    DB() neo4j.DriverWithContext
+
+    // Schema returns the schema interface for introspection and migration.
+    Schema() Schema
+
+    // ReadSession creates a new read-access session.
+    ReadSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) ReadSession
+
+    // WriteSession creates a new write-access session.
+    WriteSession(ctx context.Context, configurers ...func(*neo4j.SessionConfig)) WriteSession
+
+    // Exec creates a new session and returns a Client for executing queries.
+    Exec(configurers ...func(*execConfig)) Client
+}
+```
+
+## Client Interface
+
+The query interface returned by `Driver.Exec()`.
+
+```go
+type Client interface {
+    // Cypher sets the Cypher query string and returns a Runner for execution.
+    Cypher(query string) Runner
+}
+```
+
+## Runner Interface
+
+Executes Cypher queries with bindings.
+
+```go
+type Runner interface {
+    // Print prints the query to stdout for debugging.
+    Print() Runner
+
+    // Run executes the query with bindings.
+    // Bindings should be pairs of (name string, target any).
+    Run(ctx context.Context, bindings ...any) error
+
+    // RunWithParams executes the query with parameters and bindings.
+    RunWithParams(ctx context.Context, params map[string]any, bindings ...any) error
+
+    // Stream executes the query and streams results one-by-one.
+    // Bindings should be pairs of (name string, target any).
+    Stream(ctx context.Context, sink func() error, bindings ...any) error
+
+    // StreamWithParams executes the query with parameters and streams results.
+    StreamWithParams(ctx context.Context, params map[string]any, sink func() error, bindings ...any) error
+}
+```
+
+### Usage Examples
+
+```go
+// Run without params, no return
+err := driver.Exec().Cypher(`CREATE (n:Node)`).Run(ctx)
+
+// Run without params, with bindings
+var person Person
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) RETURN p LIMIT 1`).
+    Run(ctx, "p", &person)
+
+// RunWithParams
+var person Person
+err := driver.Exec().
+    Cypher(`MATCH (p:Person {id: $id}) RETURN p`).
+    RunWithParams(ctx, map[string]any{"id": "123"}, "p", &person)
+
+// Stream
+var person Person
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) RETURN p`).
+    Stream(ctx, func() error {
+        fmt.Println(person.Name)
+        return nil
+    }, "p", &person)
+
+// StreamWithParams
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) WHERE p.age > $minAge RETURN p`).
+    StreamWithParams(ctx, map[string]any{"minAge": 18}, func() error {
+        fmt.Println(person.Name)
+        return nil
+    }, "p", &person)
+```
+
+## Sessions
+
+### ReadSession Interface
+
+```go
+type ReadSession interface {
+    // Session returns the underlying Neo4J session.
+    Session() neo4j.SessionWithContext
+    
+    // Close closes the session.
+    Close(ctx context.Context, joinedErrors ...error) error
+    
+    // ReadTransaction executes work in a read transaction with retry logic.
+    ReadTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error
+    
+    // BeginTransaction starts an explicit transaction.
+    BeginTransaction(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (Transaction, error)
+}
+```
+
+### WriteSession Interface
+
+```go
+type WriteSession interface {
+    ReadSession
+    
+    // WriteTransaction executes work in a write transaction with retry logic.
+    WriteTransaction(ctx context.Context, work Work, configurers ...func(*neo4j.TransactionConfig)) error
+}
+```
+
+### Work Function
+
+```go
+type Work func(c Client) error
+```
+
+## Transaction Interface
+
+```go
+type Transaction interface {
+    // Run executes work within the transaction.
+    Run(work Work) error
+    
+    // Commit commits the transaction.
+    Commit(ctx context.Context) error
+    
+    // Rollback rolls back the transaction.
+    Rollback(ctx context.Context) error
+    
+    // Close rolls back if not committed and closes resources.
+    Close(ctx context.Context, joinedErrors ...error) error
+}
+```
+
+## Configuration
+
+### Configurer Functions
+
+```go
+// WithTypes registers types (INode, IRelationship, IAbstract) with the driver.
+func WithTypes(types ...any) Configurer
+
+// WithCausalConsistency enables causal consistency using the provided key function.
+func WithCausalConsistency(when func(ctx context.Context) string) Configurer
+
+// WithTxConfig configures the transaction used by Exec().
+func WithTxConfig(configurers ...func(*neo4j.TransactionConfig)) func(ec *execConfig)
+
+// WithSessionConfig configures the session used by Exec().
+func WithSessionConfig(configurers ...func(*neo4j.SessionConfig)) func(ec *execConfig)
+```
+
+## Entity Types
 
 ### neogo.Node
 
@@ -21,11 +213,14 @@ Embedded in structs to define Neo4j nodes.
 
 ```go
 type Node struct {
-    ID string
+    ID string `neo4j:"id"`
 }
 
 // Methods
-func (n *Node) GenerateID()  // Generates a UUID for the node
+func (n *Node) IsNode()
+func (n Node) GetID() string
+func (n *Node) SetID(id any)
+func (n *Node) GenerateID()  // Generates a ULID for the node
 ```
 
 ### neogo.Relationship
@@ -33,337 +228,44 @@ func (n *Node) GenerateID()  // Generates a UUID for the node
 Embedded in structs to define Neo4j relationships.
 
 ```go
-type Relationship struct {
-    // Internal fields
-}
+type Relationship struct{}
+
+func (Relationship) IsRelationship()
 ```
 
-### neogo.INode
-
-Interface that all node types implement.
+### neogo.INode Interface
 
 ```go
 type INode interface {
+    IsNode()
     GetID() string
-    SetID(string)
 }
 ```
 
-## Client
-
-### neogo.New
-
-Creates a new neogo client from a Neo4j driver.
+### neogo.IRelationship Interface
 
 ```go
-func New(driver neo4j.DriverWithContext) *Client
+type IRelationship interface {
+    IsRelationship()
+}
 ```
 
-### Client.Exec
-
-Starts a new query builder.
+## Schema Interface
 
 ```go
-func (c *Client) Exec() *QueryBuilder
-```
-
-### Client.WithTx
-
-Returns a client that uses a specific transaction.
-
-```go
-func (c *Client) WithTx(tx neo4j.ManagedTransaction) *Client
-```
-
-## Query Builder
-
-### Pattern Functions
-
-#### db.Node
-
-Creates a node pattern.
-
-```go
-func Node(node INode) Pattern
-```
-
-#### db.Path
-
-Creates a path pattern with nodes and relationships.
-
-```go
-func Path(start INode, segments ...PathSegment) Pattern
-```
-
-#### db.To
-
-Creates an outgoing relationship segment.
-
-```go
-func To(rel IRelationship, node INode) PathSegment
-```
-
-#### db.From
-
-Creates an incoming relationship segment.
-
-```go
-func From(rel IRelationship, node INode) PathSegment
-```
-
-#### db.Either
-
-Creates an undirected relationship segment.
-
-```go
-func Either(rel IRelationship, node INode) PathSegment
-```
-
-### Clause Methods
-
-#### Match
-
-```go
-func (q *QueryBuilder) Match(patterns ...Pattern) *QueryBuilder
-```
-
-#### OptionalMatch
-
-```go
-func (q *QueryBuilder) OptionalMatch(patterns ...Pattern) *QueryBuilder
-```
-
-#### Where
-
-```go
-func (q *QueryBuilder) Where(conditions ...Condition) *QueryBuilder
-```
-
-#### Create
-
-```go
-func (q *QueryBuilder) Create(patterns ...Pattern) *QueryBuilder
-```
-
-#### Merge
-
-```go
-func (q *QueryBuilder) Merge(pattern Pattern) *QueryBuilder
-```
-
-#### Set
-
-```go
-func (q *QueryBuilder) Set(setters ...Setter) *QueryBuilder
-```
-
-#### Remove
-
-```go
-func (q *QueryBuilder) Remove(removers ...Remover) *QueryBuilder
-```
-
-#### Delete
-
-```go
-func (q *QueryBuilder) Delete(items ...any) *QueryBuilder
-```
-
-#### DetachDelete
-
-```go
-func (q *QueryBuilder) DetachDelete(items ...any) *QueryBuilder
-```
-
-#### Return
-
-```go
-func (q *QueryBuilder) Return(items ...any) *QueryBuilder
-```
-
-#### ReturnDistinct
-
-```go
-func (q *QueryBuilder) ReturnDistinct(items ...any) *QueryBuilder
-```
-
-#### OrderBy
-
-```go
-func (q *QueryBuilder) OrderBy(orders ...Order) *QueryBuilder
-```
-
-#### Skip
-
-```go
-func (q *QueryBuilder) Skip(n int) *QueryBuilder
-```
-
-#### Limit
-
-```go
-func (q *QueryBuilder) Limit(n int) *QueryBuilder
-```
-
-#### With
-
-```go
-func (q *QueryBuilder) With(items ...any) *QueryBuilder
-```
-
-#### Unwind
-
-```go
-func (q *QueryBuilder) Unwind(list any, as string) *QueryBuilder
-```
-
-### Condition Functions
-
-#### db.Cond
-
-Creates a comparison condition.
-
-```go
-func Cond(prop any, operator string, value any) Condition
-```
-
-#### db.And
-
-Combines conditions with AND.
-
-```go
-func And(conditions ...Condition) Condition
-```
-
-#### db.Or
-
-Combines conditions with OR.
-
-```go
-func Or(conditions ...Condition) Condition
-```
-
-#### db.Not
-
-Negates a condition.
-
-```go
-func Not(condition Condition) Condition
-```
-
-#### db.IsNull
-
-Checks if a property is null.
-
-```go
-func IsNull(prop any) Condition
-```
-
-#### db.IsNotNull
-
-Checks if a property is not null.
-
-```go
-func IsNotNull(prop any) Condition
-```
-
-### Setter Functions
-
-#### db.SetPropValue
-
-Sets a property to a literal value.
-
-```go
-func SetPropValue(prop any, value any) Setter
-```
-
-#### db.SetProp
-
-Sets a property to another property's value.
-
-```go
-func SetProp(prop any, fromProp any) Setter
-```
-
-#### db.SetProps
-
-Replaces all properties.
-
-```go
-func SetProps(node any, props any) Setter
-```
-
-#### db.SetPropsAdd
-
-Adds/updates properties (merge).
-
-```go
-func SetPropsAdd(node any, props any) Setter
-```
-
-### Order Functions
-
-#### db.Asc
-
-Orders ascending.
-
-```go
-func Asc(prop any) Order
-```
-
-#### db.Desc
-
-Orders descending.
-
-```go
-func Desc(prop any) Order
-```
-
-### Aggregation Functions
-
-```go
-func Count(item any) Aggregation
-func Sum(prop any) Aggregation
-func Avg(prop any) Aggregation
-func Min(prop any) Aggregation
-func Max(prop any) Aggregation
-func Collect(item any) Aggregation
-```
-
-### Utility Functions
-
-#### db.Qual
-
-Qualifies a variable for result collection.
-
-```go
-func Qual(dest any, varName string) any
-```
-
-### Execution Methods
-
-#### Run
-
-Executes the query.
-
-```go
-func (q *QueryBuilder) Run(ctx context.Context) error
-```
-
-#### Print
-
-Prints the generated Cypher (for debugging).
-
-```go
-func (q *QueryBuilder) Print() *QueryBuilder
-```
-
-#### Cypher
-
-Returns the generated Cypher and parameters.
-
-```go
-func (q *QueryBuilder) Cypher() (string, map[string]any)
+type Schema interface {
+    // GetIndexes returns all indexes in the database.
+    GetIndexes(ctx context.Context) ([]IndexInfo, error)
+    
+    // GetConstraints returns all constraints in the database.
+    GetConstraints(ctx context.Context) ([]ConstraintInfo, error)
+    
+    // AutoMigrate creates indexes and constraints from registered types.
+    AutoMigrate(ctx context.Context) ([]MigrationAction, error)
+    
+    // NeedsMigration checks if any indexes/constraints are missing.
+    NeedsMigration(ctx context.Context) (bool, error)
+}
 ```
 
 ## Struct Tags
@@ -394,5 +296,18 @@ type Person struct {
 
     Name      string    `neo4j:"name"`
     BirthDate time.Time `neo4j:"birth_date"`
+}
+```
+
+### Schema Tags
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    Email string `neo4j:"email,unique"`           // Unique constraint
+    Name  string `neo4j:"name,index"`             // Range index
+    Bio   string `neo4j:"bio,fulltext"`           // Fulltext index
+    Age   int    `neo4j:"age,notNull"`            // Not null constraint
 }
 ```

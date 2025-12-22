@@ -230,7 +230,7 @@ The `Driver` interface provides these methods:
 ```go
 type Driver interface {
     // Registry returns the type registry
-    Registry() *internal.Registry
+    Registry() *neogo.Registry
 
     // DB returns the underlying neo4j driver
     DB() neo4j.DriverWithContext

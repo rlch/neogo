@@ -7,146 +7,175 @@ import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
 
 neogo uses Go struct tags to control how fields are serialized to Neo4j properties and how schema elements like indexes and constraints are created.
 
-## Property Tags
+## The `neo4j` Tag
 
-### The `json` Tag
+The primary tag for neogo is `neo4j`. It's used both on embedded types (for labels/types) and on fields (for property names and schema).
 
-The primary tag for property mapping is `json`, following Go conventions:
+### On Embedded Types
+
+Defines labels for nodes and types for relationships:
+
+```go
+// Single label
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+}
+
+// Multiple labels
+type Employee struct {
+    neogo.Node `neo4j:"Person,Employee"`
+}
+
+// Relationship type
+type Knows struct {
+    neogo.Relationship `neo4j:"KNOWS"`
+}
+```
+
+### On Fields
+
+Maps struct fields to Neo4j properties:
 
 ```go
 type Person struct {
-    // Maps to "id" property
-    ID string `json:"id"`
-    
-    // Maps to "full_name" property
-    FullName string `json:"full_name"`
-    
-    // Omit if zero value
-    Nickname string `json:"nickname,omitempty"`
-    
-    // Never serialize to Neo4j
-    Internal string `json:"-"`
+    neogo.Node `neo4j:"Person"`
+
+    // Maps to "name" property
+    Name string `neo4j:"name"`
+
+    // Maps to "birth_date" property
+    BirthDate time.Time `neo4j:"birth_date"`
+
+    // Skip this field
+    Internal string `neo4j:"-"`
 }
 ```
 
-#### Options
+## Property Tag Options
 
-| Option | Description |
-|--------|-------------|
-| `json:"name"` | Property name in Neo4j |
-| `json:"name,omitempty"` | Omit if zero value |
-| `json:"-"` | Never include in queries |
-| `json:",omitempty"` | Use field name, omit if empty |
+| Tag | Description |
+|-----|-------------|
+| `neo4j:"name"` | Property name in Neo4j |
+| `neo4j:"-"` | Skip this field |
+| `neo4j:"name,index"` | Add range index |
+| `neo4j:"name,unique"` | Add unique constraint |
+| `neo4j:"name,notNull"` | Add not-null constraint |
+| `neo4j:"name,fulltext"` | Add fulltext index |
+| `neo4j:"name,text"` | Add text index |
+| `neo4j:"name,point"` | Add point index |
 
-### The `neo4j` Tag
+## Schema Tags
 
-For Neo4j-specific behavior:
+### Index Tags
 
 ```go
 type Person struct {
-    // Primary key field
-    ID string `json:"id" neo4j:"id"`
-    
-    // Skip in certain operations
-    Computed string `json:"computed" neo4j:"readonly"`
+    neogo.Node `neo4j:"Person"`
+
+    // Range index (default)
+    Email string `neo4j:"email,index"`
+
+    // Text index for prefix/suffix/contains queries
+    Bio string `neo4j:"bio,text"`
+
+    // Fulltext index for text search
+    Description string `neo4j:"description,fulltext"`
+
+    // Point index for spatial queries
+    Location string `neo4j:"location,point"`
 }
 ```
 
-## Index Tags
+#### Index Types
 
-Define indexes using the `index` tag:
+| Tag | Neo4j Index Type | Use Case |
+|-----|------------------|----------|
+| `index` | Range | Equality, range queries (default) |
+| `text` | Text | String prefix/suffix/contains |
+| `fulltext` | Fulltext | Full-text search |
+| `point` | Point | Spatial/geographic queries |
+
+### Constraint Tags
 
 ```go
 type Person struct {
-    Email string `json:"email" index:"Person,unique"`
-    Name  string `json:"name" index:"Person"`
-    Age   int    `json:"age" index:"Person,range"`
+    neogo.Node `neo4j:"Person"`
+
+    // Unique constraint
+    Email string `neo4j:"email,unique"`
+
+    // Not null constraint
+    Name string `neo4j:"name,notNull"`
+
+    // Both constraints
+    SSN string `neo4j:"ssn,unique,notNull"`
 }
 ```
 
-### Index Types
+#### Constraint Types
 
-| Tag Value | Index Type | Use Case |
-|-----------|-----------|----------|
-| `index:"Label"` | Range index | General purpose |
-| `index:"Label,unique"` | Unique constraint | Enforcing uniqueness |
-| `index:"Label,text"` | Text index | Full-text search |
-| `index:"Label,point"` | Point index | Spatial queries |
-| `index:"Label,range"` | Range index (explicit) | Numeric ranges |
+| Tag | Neo4j Constraint | Description |
+|-----|------------------|-------------|
+| `unique` | Uniqueness | Property must be unique |
+| `notNull` | Not Null | Property must exist |
+| `nodeKey` | Node Key | Unique + Not Null (composite) |
 
-### Composite Indexes
+### Composite Indexes/Constraints
 
-For multi-property indexes, use the same index name:
+Use a named index for composite indexes:
 
 ```go
 type Person struct {
-    FirstName string `json:"first_name" index:"Person_name"`
-    LastName  string `json:"last_name" index:"Person_name"`
+    neogo.Node `neo4j:"Person"`
+
+    // Composite index: idx_Person_first_name_last_name
+    FirstName string `neo4j:"first_name,index:idx_Person_name,priority:1"`
+    LastName  string `neo4j:"last_name,index:idx_Person_name,priority:2"`
+
+    // Composite unique constraint
+    TenantID string `neo4j:"tenant_id,unique:unique_Person_tenant,priority:1"`
+    PersonID string `neo4j:"person_id,unique:unique_Person_tenant,priority:2"`
 }
 ```
 
-This creates a composite index on both properties.
+The `priority` option controls the order of properties in composite indexes.
 
-## Constraint Tags
-
-Define constraints using the `constraint` tag:
-
-```go
-type Person struct {
-    ID    string `json:"id" constraint:"Person,unique"`
-    Email string `json:"email" constraint:"Person,unique"`
-}
-```
-
-### Constraint Types
-
-| Tag Value | Constraint Type | Description |
-|-----------|-----------------|-------------|
-| `constraint:"Label,unique"` | Uniqueness | Property must be unique |
-| `constraint:"Label,exists"` | Existence | Property must exist (Enterprise) |
-| `constraint:"Label,key"` | Node Key | Unique + Exists (Enterprise) |
-
-## Relationship Field Tags
-
-For relationship structs:
-
-```go
-type WorksAt struct {
-    Since    time.Time `json:"since"`
-    Position string    `json:"position"`
-    Salary   float64   `json:"salary,omitempty"`
-}
-
-func (w *WorksAt) Relationship() *db.RelationshipPattern {
-    return db.Rel("WORKS_AT")
-}
-```
-
-Relationship constraints:
-
-```go
-type WorksAt struct {
-    Since time.Time `json:"since" constraint:"WORKS_AT,exists"`
-}
-```
-
-## Type Support
+## Type Mapping
 
 ### Supported Go Types
 
 | Go Type | Neo4j Type | Notes |
 |---------|------------|-------|
 | `string` | String | Direct mapping |
-| `int`, `int64` | Integer | Direct mapping |
-| `float64` | Float | Direct mapping |
+| `int`, `int8`, `int16`, `int32`, `int64` | Integer | Direct mapping |
+| `uint`, `uint8`, `uint16`, `uint32`, `uint64` | Integer | Direct mapping |
+| `float32`, `float64` | Float | Direct mapping |
 | `bool` | Boolean | Direct mapping |
 | `time.Time` | DateTime | Automatic conversion |
+| `[]byte` | ByteArray | Direct mapping |
 | `[]T` | List | Where T is supported |
 | `map[string]T` | Map | Where T is supported |
 
+### Pointer Types
+
+Pointer types indicate optional properties:
+
+```go
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    // Required - will be empty string if missing
+    Name string `neo4j:"name"`
+
+    // Optional - nil if not present
+    Nickname *string `neo4j:"nickname"`
+    Age      *int    `neo4j:"age"`
+}
+```
+
 ### Custom Types
 
-Implement `neo4j.Valuer` and `neo4j.Scanner` for custom serialization:
+Types that implement the `Valuer` interface can customize serialization:
 
 ```go
 type Status string
@@ -158,85 +187,81 @@ const (
 
 // Status is automatically serialized as a string
 type User struct {
-    Status Status `json:"status"`
+    neogo.Node `neo4j:"User"`
+    Status Status `neo4j:"status"`
 }
 ```
 
-### Pointer Types
+## Embedded Structs
 
-Pointer types indicate optional properties:
-
-```go
-type Person struct {
-    // Required - will error if missing
-    Name string `json:"name"`
-    
-    // Optional - nil if not present
-    Nickname *string `json:"nickname"`
-    Age      *int    `json:"age"`
-}
-```
-
-## Embedded Struct Tags
-
-Embedded structs inherit their fields' tags:
+Embedded structs inherit their fields:
 
 ```go
 type Timestamps struct {
-    CreatedAt time.Time `json:"created_at"`
-    UpdatedAt time.Time `json:"updated_at"`
+    CreatedAt time.Time `neo4j:"created_at"`
+    UpdatedAt time.Time `neo4j:"updated_at"`
 }
 
 type Person struct {
-    Timestamps          // All Timestamps fields included
-    Name string `json:"name"`
+    neogo.Node `neo4j:"Person"`
+    Timestamps               // Embeds CreatedAt, UpdatedAt
+    Name string `neo4j:"name"`
 }
 
-// Person has: created_at, updated_at, name properties
+// Person has: id, created_at, updated_at, name properties
 ```
 
 <Aside type="caution">
 If embedded struct fields conflict with parent fields, the parent field takes precedence.
 </Aside>
 
-## Tag Combinations
-
-Common tag combinations:
+## Complete Example
 
 ```go
 type User struct {
-    // Unique identifier with constraint
-    ID string `json:"id" constraint:"User,unique"`
-    
-    // Indexed for fast lookups
-    Email string `json:"email" index:"User,unique"`
-    
-    // Optional indexed field
-    Phone *string `json:"phone,omitempty" index:"User"`
-    
-    // Computed, never set by application
-    Score float64 `json:"score" neo4j:"readonly"`
-    
-    // Internal only
-    PasswordHash string `json:"-"`
+    neogo.Node `neo4j:"User"`
+
+    // Unique identifier (auto-indexed via Node.ID)
+    // ID string is inherited from neogo.Node
+
+    // Indexed for fast lookups with unique constraint
+    Email string `neo4j:"email,unique"`
+
+    // Required field with index
+    Name string `neo4j:"name,notNull,index"`
+
+    // Fulltext searchable
+    Bio string `neo4j:"bio,fulltext"`
+
+    // Optional field
+    Phone *string `neo4j:"phone"`
+
+    // Composite index with priority
+    FirstName string `neo4j:"first_name,index:idx_User_fullname,priority:1"`
+    LastName  string `neo4j:"last_name,index:idx_User_fullname,priority:2"`
+
+    // Skip internal field
+    PasswordHash string `neo4j:"-"`
 }
 ```
 
-## Migration Behavior
+## Auto-Migration
 
-When using schema auto-migration:
-
-1. **Indexes** are created if they don't exist
-2. **Constraints** are created if they don't exist
-3. **Changes** to existing indexes/constraints require manual migration
+Schema tags are applied when you run auto-migration:
 
 ```go
-// Run migration to sync schema
-err := neogo.AutoMigrate(ctx, driver,
-    &Person{},
-    &Company{},
-    &WorksAt{},
+// Register types
+driver, err := neogo.New(
+    "neo4j://localhost:7687",
+    neo4j.BasicAuth("neo4j", "password", ""),
+    neogo.WithTypes(&User{}),
 )
+
+// Create indexes/constraints from tags
+actions, err := driver.Schema().AutoMigrate(ctx)
+for _, action := range actions {
+    fmt.Printf("Applied: %s\n", action.Description)
+}
 ```
 
 <Aside type="note">
@@ -245,8 +270,8 @@ Auto-migration only adds schema elements. It never removes indexes or constraint
 
 ## Best Practices
 
-1. **Always use `json` tags**: Explicit property names prevent issues with Go naming
-2. **Use `omitempty` for optional fields**: Reduces storage and query complexity  
-3. **Index frequently queried properties**: Especially for `WHERE` clauses
-4. **Use constraints for data integrity**: Prevent duplicate IDs, emails, etc.
-5. **Consider pointer types for optional data**: Distinguishes "not set" from "empty"
+1. **Always use explicit tags**: Explicit property names prevent issues with Go naming changes
+2. **Add schema tags**: Define indexes/constraints at the type level
+3. **Use pointer types for optional fields**: Distinguishes "not set" from "empty"
+4. **Use `neo4j:"-"` for computed/internal fields**: Keep internal data out of Neo4j
+5. **Consider composite indexes**: For frequently combined WHERE clauses

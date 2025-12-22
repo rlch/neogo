@@ -8,29 +8,9 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/semaphore"
 
-	"github.com/rlch/neogo/builder"
-	"github.com/rlch/neogo/db"
 	"github.com/rlch/neogo/internal"
 )
-
-// newTestDriver creates a Driver from a neo4j.DriverWithContext for testing
-func newTestDriver(neo4jDriver neo4j.DriverWithContext) Driver {
-	return &driver{
-		reg:              internal.NewRegistry(),
-		db:               neo4jDriver,
-		sessionSemaphore: semaphore.NewWeighted(100),
-	}
-}
-
-type Person struct {
-	Node `neo4j:"Person"`
-
-	Name    string `neo4j:"name"`
-	Surname string `neo4j:"surname"`
-	Age     int    `neo4j:"age"`
-}
 
 func TestDriver(t *testing.T) {
 	ctx := context.Background()
@@ -49,7 +29,7 @@ func TestDriver(t *testing.T) {
 		Run(ctx)
 	require.NoError(t, err, "failed to create test nodes")
 
-	var count int
+	var count int64
 
 	// Now try to delete and return count
 	err = d.Exec().
@@ -57,11 +37,11 @@ func TestDriver(t *testing.T) {
 		MATCH (n:TestNode {id: "test-123"})-[:HAS_CHILD]->(c:TestChild)
 		WITH count(n) AS cnt, n, c
 		DETACH DELETE n, c
+		RETURN cnt
 		`).
-		Return(db.Qual(&count, "cnt")).
-		Run(ctx)
+		Run(ctx, "cnt", &count)
 	require.NoError(t, err, "failed to delete test nodes")
-	assert.Equal(t, 1, count)
+	assert.Equal(t, int64(1), count)
 }
 
 func ExampleDriver() {
@@ -69,34 +49,42 @@ func ExampleDriver() {
 	// Always use mock for examples to avoid connection dependencies
 	m := NewMock()
 	m.Bind(map[string]any{
-		"person": Person{
-			Node:    internal.Node{ID: "some-unique-id"},
-			Name:    "Spongebob",
-			Surname: "Squarepants",
-			Age:     20,
+		"person": neo4j.Node{
+			Props: map[string]any{
+				"id":      "some-unique-id",
+				"name":    "Spongebob",
+				"surname": "Squarepants",
+				"age":     int64(20),
+			},
 		},
 	})
 	d := m
 
-	person := Person{
-		Name:    "Spongebob",
-		Surname: "Squarepants",
+	type Person struct {
+		internal.Node `neo4j:"Person"`
+		Name          string `neo4j:"name"`
+		Surname       string `neo4j:"surname"`
+		Age           int64  `neo4j:"age"`
 	}
-	person.ID = "some-unique-id"
+
+	var person Person
 	err := d.Exec().
-		Create(db.Node(&person)).
-		Set(db.SetPropValue(&person.Age, 20)).
-		Return(&person).
-		Print().
-		Run(ctx)
+		Cypher(`
+			CREATE (person:Person {id: $id, name: $name, surname: $surname})
+			SET person.age = $age
+			RETURN person
+		`).
+		RunWithParams(ctx, map[string]any{
+			"id":      "some-unique-id",
+			"name":    "Spongebob",
+			"surname": "Squarepants",
+			"age":     int64(20),
+		}, "person", &person)
 	fmt.Printf("err: %v\n", err)
-	fmt.Printf("person: %v\n", person)
+	fmt.Printf("person: %s %s, age %d\n", person.Name, person.Surname, person.Age)
 	// Output:
-	// CREATE (person:Person {id: $person_id, name: $person_name, surname: $person_surname})
-	// SET person.age = $v1
-	// RETURN person
 	// err: <nil>
-	// person: {{some-unique-id} Spongebob Squarepants 20}
+	// person: Spongebob Squarepants, age 20
 }
 
 func ExampleDriver_readSession() {
@@ -105,32 +93,32 @@ func ExampleDriver_readSession() {
 	m := NewMock()
 	records := make([]map[string]any, 11)
 	for i := range records {
-		records[i] = map[string]any{"i": i}
+		records[i] = map[string]any{"i": int64(i)}
 	}
 	m.BindRecords(records)
 	records2x := make([]map[string]any, 11)
 	for i := range records2x {
-		records2x[i] = map[string]any{"i * 2": i * 2}
+		records2x[i] = map[string]any{"i2": int64(i * 2)}
 	}
 	m.BindRecords(records2x)
 	d := m
 
-	var ns, nsTimes2 []int
+	var ns, nsTimes2 []int64
 	session := d.ReadSession(ctx)
 	defer func() {
 		if err := session.Close(ctx); err != nil {
 			panic(err)
 		}
 	}()
-	err := session.ReadTransaction(ctx, func(begin func() Query) error {
-		if err := begin().
-			Unwind("range(0, 10)", "i").
-			Return(db.Qual(&ns, "i")).Run(ctx); err != nil {
+	err := session.ReadTransaction(ctx, func(c Client) error {
+		if err := c.
+			Cypher("UNWIND range(0, 10) AS i RETURN i").
+			Run(ctx, "i", &ns); err != nil {
 			return err
 		}
-		if err := begin().
-			Unwind(&ns, "i").
-			Return(db.Qual(&nsTimes2, "i * 2")).Run(ctx); err != nil {
+		if err := c.
+			Cypher("UNWIND $ns AS i RETURN i * 2 AS i2").
+			RunWithParams(ctx, map[string]any{"ns": ns}, "i2", &nsTimes2); err != nil {
 			return err
 		}
 		return nil
@@ -144,25 +132,21 @@ func ExampleDriver_readSession() {
 	// nsTimes2: [0 2 4 6 8 10 12 14 16 18 20]
 }
 
-// Note: ExampleDriver_writeSession was removed because it requires complex
-// Neo4j transaction behavior that's difficult to mock properly.
-// See TestWriteSession for actual write session testing.
-
 func ExampleDriver_runWithParams() {
 	ctx := context.Background()
 	// Always use mock for examples to avoid connection dependencies
 	m := NewMock()
 	m.Bind(map[string]any{
-		"$ns": []int{1, 2, 3},
+		"ns": []any{int64(1), int64(2), int64(3)},
 	})
 	d := m
 
-	var ns []int
+	var ns []int64
 	err := d.Exec().
-		Return(db.Qual(&ns, "$ns")).
-		RunWithParams(ctx, map[string]interface{}{
-			"ns": []int{1, 2, 3},
-		})
+		Cypher("RETURN $ns AS ns").
+		RunWithParams(ctx, map[string]any{
+			"ns": []int64{1, 2, 3},
+		}, "ns", &ns)
 
 	fmt.Printf("err: %v\n", err)
 	fmt.Printf("ns: %v\n", ns)
@@ -178,39 +162,184 @@ func ExampleDriver_streamWithParams() {
 	m := NewMock()
 	records := make([]map[string]any, n+1)
 	for i := range records {
-		records[i] = map[string]any{"i": i}
+		records[i] = map[string]any{"i": int64(i)}
 	}
 	m.BindRecords(records)
 	d := m
 
-	ns := []int{}
+	ns := []int64{}
 	session := d.ReadSession(ctx)
 	defer func() {
 		if err := session.Close(ctx); err != nil {
 			panic(err)
 		}
 	}()
-	err := session.ReadTransaction(ctx, func(begin func() Query) error {
-		var num int
-		params := map[string]interface{}{
+	err := session.ReadTransaction(ctx, func(c Client) error {
+		var num int64
+		params := map[string]any{
 			"total": n,
 		}
-		return begin().
-			Unwind("range(0, $total)", "i").
-			Return(db.Qual(&num, "i")).
-			StreamWithParams(ctx, params, func(r builder.Result) error {
-				for i := 0; r.Next(ctx); i++ {
-					if err := r.Read(); err != nil {
-						return err
-					}
-					ns = append(ns, num)
-				}
+		return c.
+			Cypher("UNWIND range(0, $total) AS i RETURN i").
+			StreamWithParams(ctx, params, func() error {
+				ns = append(ns, num)
 				return nil
-			})
+			}, "i", &num)
 	})
 
 	fmt.Printf("err: %v\n", err)
 	fmt.Printf("ns: %v\n", ns)
 	// Output: err: <nil>
 	// ns: [0 1 2 3]
+}
+
+func TestWriteSession(t *testing.T) {
+	ctx := context.Background()
+	m := NewMock()
+	m.Bind(map[string]any{"n": int64(1)})
+
+	var n int64
+	session := m.WriteSession(ctx)
+	defer func() {
+		require.NoError(t, session.Close(ctx))
+	}()
+
+	err := session.WriteTransaction(ctx, func(c Client) error {
+		return c.Cypher("RETURN 1 AS n").Run(ctx, "n", &n)
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), n)
+}
+
+func TestBeginTransaction(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("commit transaction", func(t *testing.T) {
+		m := NewMock()
+		m.Bind(map[string]any{"n": int64(42)})
+
+		session := m.WriteSession(ctx)
+		defer func() { _ = session.Close(ctx) }()
+
+		tx, err := session.BeginTransaction(ctx)
+		require.NoError(t, err)
+
+		var n int64
+		err = tx.Run(func(c Client) error {
+			return c.Cypher("RETURN 42 AS n").Run(ctx, "n", &n)
+		})
+		require.NoError(t, err)
+		assert.Equal(t, int64(42), n)
+
+		err = tx.Commit(ctx)
+		require.NoError(t, err)
+
+		err = tx.Close(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("rollback transaction", func(t *testing.T) {
+		m := NewMock()
+		m.Bind(map[string]any{"n": int64(1)})
+
+		session := m.WriteSession(ctx)
+		defer func() { _ = session.Close(ctx) }()
+
+		tx, err := session.BeginTransaction(ctx)
+		require.NoError(t, err)
+
+		var n int64
+		err = tx.Run(func(c Client) error {
+			return c.Cypher("RETURN 1 AS n").Run(ctx, "n", &n)
+		})
+		require.NoError(t, err)
+
+		err = tx.Rollback(ctx)
+		require.NoError(t, err)
+
+		err = tx.Close(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("close with joined errors", func(t *testing.T) {
+		m := NewMock()
+		m.Bind(map[string]any{"n": int64(1)})
+
+		session := m.WriteSession(ctx)
+		defer func() { _ = session.Close(ctx) }()
+
+		tx, err := session.BeginTransaction(ctx)
+		require.NoError(t, err)
+
+		// Simulate an error that occurred during transaction work
+		workErr := fmt.Errorf("work failed")
+		err = tx.Close(ctx, workErr)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "work failed")
+	})
+}
+
+func TestWithCausalConsistency(t *testing.T) {
+	cfg := &Config{}
+	WithCausalConsistency(func(ctx context.Context) string {
+		return "user-123"
+	})(cfg)
+
+	require.NotNil(t, cfg.CausalConsistencyKey)
+	key := cfg.CausalConsistencyKey(context.Background())
+	assert.Equal(t, "user-123", key)
+}
+
+func TestWithTxConfig(t *testing.T) {
+	ec := &execConfig{
+		TransactionConfig: &neo4j.TransactionConfig{},
+	}
+	WithTxConfig(func(tc *neo4j.TransactionConfig) {
+		tc.Timeout = 5000
+	})(ec)
+
+	assert.Equal(t, 5000*1, int(ec.Timeout))
+}
+
+func TestWithSessionConfig(t *testing.T) {
+	ec := &execConfig{
+		SessionConfig: &neo4j.SessionConfig{},
+	}
+	WithSessionConfig(func(sc *neo4j.SessionConfig) {
+		sc.DatabaseName = "test-db"
+	})(ec)
+
+	assert.Equal(t, "test-db", ec.DatabaseName)
+}
+
+func TestDriverDB(t *testing.T) {
+	m := NewMock()
+	db := m.DB()
+	require.NotNil(t, db)
+}
+
+func TestSessionClose(t *testing.T) {
+	ctx := context.Background()
+	m := NewMock()
+	m.Bind(map[string]any{"n": int64(1)})
+
+	session := m.ReadSession(ctx)
+
+	// Close with no errors
+	err := session.Close(ctx)
+	require.NoError(t, err)
+}
+
+func TestSessionCloseWithError(t *testing.T) {
+	ctx := context.Background()
+	m := NewMock()
+	m.Bind(map[string]any{"n": int64(1)})
+
+	session := m.ReadSession(ctx)
+
+	// Close with joined errors
+	workErr := fmt.Errorf("some error")
+	err := session.Close(ctx, workErr)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "some error")
 }

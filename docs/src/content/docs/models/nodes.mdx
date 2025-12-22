@@ -5,92 +5,98 @@ description: Defining node structs with labels and properties in neogo
 
 import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
 
-Nodes are the fundamental building blocks of a Neo4j graph. In neogo, you define nodes as Go structs that implement the `db.INode` interface.
+Nodes are the fundamental building blocks of a Neo4j graph. In neogo, you define nodes as Go structs that embed `neogo.Node`.
 
 ## Basic Node Definition
 
-To define a node, create a struct and implement the `Node()` method which returns a `*db.NodePattern`:
+To define a node, create a struct that embeds `neogo.Node` with a label tag:
 
 ```go
-import "github.com/rlch/neogo/db"
+import "github.com/rlch/neogo"
 
 type Person struct {
-    ID   string `json:"id"`
-    Name string `json:"name"`
-    Age  int    `json:"age"`
-}
+    neogo.Node `neo4j:"Person"`
 
-func (p *Person) Node() *db.NodePattern {
-    return db.Node("Person")
+    Name string `neo4j:"name"`
+    Age  int    `neo4j:"age"`
 }
 ```
 
-The label passed to `db.Node()` determines the Neo4j label for this node type.
+The `neo4j:"Person"` tag on the embedded type defines the Neo4j label for this node.
 
-## Node Interface
+## Node Base Type
 
-The `db.INode` interface requires a single method:
+The `neogo.Node` type provides:
 
 ```go
-type INode interface {
-    Node() *db.NodePattern
+type Node struct {
+    ID string `neo4j:"id"`
 }
+
+func (n *Node) IsNode()
+func (n Node) GetID() string
+func (n *Node) SetID(id any)
+func (n *Node) GenerateID()  // Generates a ULID
 ```
 
-This method defines the label(s) for the node when used in Cypher queries.
+Use `GenerateID()` to create unique IDs:
+
+```go
+person := Person{Name: "Alice", Age: 30}
+person.GenerateID()  // person.ID is now a ULID like "01J5ABCD..."
+```
 
 ## Properties with Tags
 
-Use the `json` tag to map struct fields to Neo4j properties. The `neo4j` tag provides additional control:
+Use the `neo4j` tag to map struct fields to Neo4j properties:
 
 ```go
 type Person struct {
-    // Maps to "id" property
-    ID string `json:"id"`
-    
-    // Maps to "full_name" property
-    Name string `json:"full_name"`
-    
-    // Ignored in Neo4j operations
-    Internal string `json:"-"`
-    
-    // Optional property (won't error if missing)
-    Nickname *string `json:"nickname,omitempty"`
+    neogo.Node `neo4j:"Person"`
+
+    // Maps to "name" property
+    Name string `neo4j:"name"`
+
+    // Maps to "birth_date" property
+    BirthDate time.Time `neo4j:"birth_date"`
+
+    // Skipped - not stored in Neo4j
+    Internal string `neo4j:"-"`
+
+    // Optional property (pointer type)
+    Nickname *string `neo4j:"nickname"`
 }
 ```
 
 ## Multiple Labels
 
-A node can have multiple labels by chaining them:
+A node can have multiple labels by listing them in the tag:
 
 ```go
-func (e *Employee) Node() *db.NodePattern {
-    return db.Node("Person", "Employee")
+type Employee struct {
+    neogo.Node `neo4j:"Person,Employee"`
+
+    Name       string `neo4j:"name"`
+    EmployeeID string `neo4j:"employee_id"`
 }
 ```
 
-This generates nodes with both `:Person` and `:Employee` labels.
+This creates nodes with both `:Person` and `:Employee` labels.
 
-## Embedded Structs for Label Inheritance
+## Label Inheritance via Embedding
 
-You can use Go's struct embedding to create label hierarchies:
+Use Go's struct embedding for label hierarchies:
 
 ```go
 type Person struct {
-    Name string `json:"name"`
-}
-
-func (p *Person) Node() *db.NodePattern {
-    return db.Node("Person")
+    neogo.Node `neo4j:"Person"`
+    Name string `neo4j:"name"`
 }
 
 type Employee struct {
-    Person           // Embeds Person's fields
-    EmployeeID string `json:"employee_id"`
-}
-
-func (e *Employee) Node() *db.NodePattern {
-    return db.Node("Person", "Employee")
+    Person                          // Inherits Node and Person label
+    neogo.Node `neo4j:"Employee"` // Adds Employee label
+    EmployeeID string `neo4j:"employee_id"`
 }
 ```
 
@@ -100,100 +106,97 @@ Embedding allows you to query for all `Person` nodes while getting both `Person`
 
 ## Using Nodes in Queries
 
-Once defined, nodes can be used with `db.Node()` in pattern matching:
+Write raw Cypher with your node labels and bind results to your structs:
 
 ```go
 var person Person
 
-cy := c.Match(
-    db.Node(&person),
-).Return(&person)
+// Query a single node
+err := driver.Exec().
+    Cypher(`MATCH (p:Person {name: $name}) RETURN p`).
+    RunWithParams(ctx, map[string]any{"name": "Alice"}, "p", &person)
+
+// Query multiple nodes
+var people []Person
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) WHERE p.age > $minAge RETURN p`).
+    RunWithParams(ctx, map[string]any{"minAge": 18}, "p", &people)
 ```
 
-This generates:
+## Creating Nodes
 
-```cypher
-MATCH (person:Person)
-RETURN person
-```
-
-## Binding Variables
-
-You can bind a node to a specific variable name:
+Create nodes with Cypher and parameters:
 
 ```go
-var person Person
+person := Person{Name: "Alice", Age: 30}
+person.GenerateID()
 
-cy := c.Match(
-    db.Node(db.Bind(&person, "p")),
-).Return(&person)
+err := driver.Exec().
+    Cypher(`CREATE (p:Person {id: $id, name: $name, age: $age})`).
+    RunWithParams(ctx, map[string]any{
+        "id":   person.ID,
+        "name": person.Name,
+        "age":  person.Age,
+    })
 ```
 
-This generates:
-
-```cypher
-MATCH (p:Person)
-RETURN p
-```
-
-## Inline Properties
-
-Filter nodes by properties directly in the pattern:
+Or create and return:
 
 ```go
-var person Person
-
-cy := c.Match(
-    db.Node(&person, db.Props{"name": "Alice"}),
-).Return(&person)
+err := driver.Exec().
+    Cypher(`
+        CREATE (p:Person {id: $id, name: $name, age: $age})
+        RETURN p
+    `).
+    RunWithParams(ctx, map[string]any{
+        "id":   person.ID,
+        "name": person.Name,
+        "age":  person.Age,
+    }, "p", &person)
 ```
 
-This generates:
+## Querying Properties
 
-```cypher
-MATCH (person:Person {name: "Alice"})
-RETURN person
-```
-
-## Qualified References
-
-Access node properties using `db.Qual()`:
+Query specific properties:
 
 ```go
-var person Person
+var name string
+var age int64
 
-cy := c.Match(
-    db.Node(&person),
-).Return(
-    db.Qual(&person, "name"),
-    db.Qual(&person, "age"),
-)
+err := driver.Exec().
+    Cypher(`MATCH (p:Person {id: $id}) RETURN p.name, p.age`).
+    RunWithParams(ctx, map[string]any{"id": "person-123"},
+        "p.name", &name,
+        "p.age", &age)
 ```
 
-This generates:
+## Schema Tags
 
-```cypher
-MATCH (person:Person)
-RETURN person.name, person.age
-```
-
-## Anonymous Nodes
-
-For patterns where you don't need to capture the node:
+Add indexes and constraints via tags:
 
 ```go
-cy := c.Match(
-    db.Node(db.Var("Person")),
-).Return(db.Lit("count(*)"))
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    Email string `neo4j:"email,unique"`     // Unique constraint
+    Name  string `neo4j:"name,index"`       // Range index
+    Bio   string `neo4j:"bio,fulltext"`     // Fulltext index
+    Age   int    `neo4j:"age,notNull"`      // Not null constraint
+}
 ```
 
-Or use an empty label for truly anonymous nodes:
+Then auto-migrate:
 
 ```go
-cy := c.Match(
-    db.Patterns(
-        db.Node(&person),
-        db.Related(db.Node(nil), db.To),  // Anonymous connected node
-    ),
-).Return(&person)
+actions, err := driver.Schema().AutoMigrate(ctx)
 ```
+
+See [Schema Migration](/schema/migration/) for details.
+
+## Best Practices
+
+1. **Always embed `neogo.Node`**: Provides ID management and interface compliance
+2. **Use explicit tags**: Explicit property names prevent issues with Go naming changes
+3. **Generate IDs before create**: Use `GenerateID()` for unique identifiers
+4. **Register types**: Use `neogo.WithTypes()` when creating the driver
+5. **Add schema tags**: Define indexes/constraints at the type level

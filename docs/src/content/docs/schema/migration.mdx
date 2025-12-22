@@ -175,7 +175,6 @@ import (
 type User struct {
     neogo.Node `neo4j:"User"`
 
-    ID       string `neo4j:"id,unique"`
     Email    string `neo4j:"email,unique"`
     Username string `neo4j:"username,index"`
     Bio      string `neo4j:"bio,fulltext:user_bio_search"`
@@ -184,7 +183,6 @@ type User struct {
 type Post struct {
     neogo.Node `neo4j:"Post"`
 
-    ID        string `neo4j:"id,unique"`
     Title     string `neo4j:"title,index"`
     Content   string `neo4j:"content,fulltext:post_content_search"`
     CreatedAt int64  `neo4j:"created_at,index"`

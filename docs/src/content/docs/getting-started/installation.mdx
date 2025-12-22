@@ -25,33 +25,25 @@ import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 2. **Import neogo in your code**
 
    ```go
-   import (
-       "github.com/rlch/neogo"
-       "github.com/rlch/neogo/db"
-   )
+   import "github.com/rlch/neogo"
    ```
 
-3. **Set up the Neo4j driver**
-
-   neogo works with the official Neo4j Go driver. First, create a driver connection:
+3. **Create a neogo driver**
 
    ```go
-   import "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+   import (
+       "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+       "github.com/rlch/neogo"
+   )
 
-   driver, err := neo4j.NewDriverWithContext(
+   driver, err := neogo.New(
        "neo4j://localhost:7687",
        neo4j.BasicAuth("neo4j", "password", ""),
    )
    if err != nil {
        log.Fatal(err)
    }
-   defer driver.Close(ctx)
-   ```
-
-4. **Create a neogo client**
-
-   ```go
-   client := neogo.New(driver)
+   defer driver.DB().Close(ctx)
    ```
 
 </Steps>
@@ -70,7 +62,6 @@ import (
 
     "github.com/neo4j/neo4j-go-driver/v5/neo4j"
     "github.com/rlch/neogo"
-    "github.com/rlch/neogo/db"
 )
 
 type Person struct {
@@ -81,34 +72,77 @@ type Person struct {
 func main() {
     ctx := context.Background()
 
-    driver, err := neo4j.NewDriverWithContext(
+    driver, err := neogo.New(
         "neo4j://localhost:7687",
         neo4j.BasicAuth("neo4j", "password", ""),
+        neogo.WithTypes(&Person{}),
     )
     if err != nil {
         log.Fatal(err)
     }
-    defer driver.Close(ctx)
+    defer driver.DB().Close(ctx)
 
-    client := neogo.New(driver)
-
-    person := Person{Name: "Test"}
-    person.GenerateID()
-
-    // Create and immediately delete (just testing connection)
-    err = client.Exec().
-        Create(db.Node(&person)).
-        Return(&person).
-        Run(ctx)
-    
+    // Create a test node
+    err = driver.Exec().
+        Cypher(`CREATE (p:Person {id: $id, name: $name})`).
+        RunWithParams(ctx, map[string]any{
+            "id":   "test-123",
+            "name": "Test User",
+        })
     if err != nil {
         log.Fatal(err)
     }
 
-    fmt.Printf("Successfully created: %+v\n", person)
+    // Query it back
+    var person Person
+    err = driver.Exec().
+        Cypher(`MATCH (p:Person {id: $id}) RETURN p`).
+        RunWithParams(ctx, map[string]any{"id": "test-123"}, "p", &person)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Printf("Successfully queried: %+v\n", person)
+
+    // Clean up
+    err = driver.Exec().
+        Cypher(`MATCH (p:Person {id: $id}) DELETE p`).
+        RunWithParams(ctx, map[string]any{"id": "test-123"})
+    if err != nil {
+        log.Fatal(err)
+    }
 }
+```
+
+## Configuration Options
+
+### Register Types
+
+Register your node and relationship types for schema management:
+
+```go
+driver, err := neogo.New(
+    "neo4j://localhost:7687",
+    neo4j.BasicAuth("neo4j", "password", ""),
+    neogo.WithTypes(&Person{}, &Movie{}, &ActedIn{}),
+)
+```
+
+### Causal Consistency
+
+Enable causal consistency for distributed reads:
+
+```go
+driver, err := neogo.New(
+    "neo4j://localhost:7687",
+    neo4j.BasicAuth("neo4j", "password", ""),
+    neogo.WithCausalConsistency(func(ctx context.Context) string {
+        // Return a key that identifies the causal chain (e.g., user ID)
+        return getUserID(ctx)
+    }),
+)
 ```
 
 ## Next Steps
 
-Now that you have neogo installed, check out the [Quick Start](/getting-started/quick-start/) guide to start building queries.
+Now that you have neogo installed, check out the [Quick Start](/getting-started/quick-start/) guide to start writing queries.

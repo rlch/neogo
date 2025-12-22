@@ -114,7 +114,7 @@ func (r *CodecRegistry) extractRelationshipMetaFromType(typ reflect.Type) (*Rela
 			} else if !field.Anonymous && !fieldInfo.IsSkip {
 				// Collect schema info for property fields
 				if fieldInfo.Index != nil || fieldInfo.Constraint != nil {
-					*&fieldSchemas = append(fieldSchemas, FieldSchemaInfo{
+					fieldSchemas = append(fieldSchemas, FieldSchemaInfo{
 						DBName:     fieldInfo.DBName,
 						Index:      fieldInfo.Index,
 						Constraint: fieldInfo.Constraint,

@@ -57,6 +57,12 @@ type (
 		*mockNeo4jSessionWithContext
 		neo4j.ManagedTransaction
 	}
+	mockNeo4jExplicitTransaction struct {
+		*mockNeo4jSessionWithContext
+		neo4j.ExplicitTransaction
+		committed  bool
+		rolledBack bool
+	}
 	mockNeo4jResultWithContext struct {
 		neo4j.ResultWithContext
 		records []*neo4j.Record
@@ -66,11 +72,12 @@ type (
 )
 
 var (
-	_ mockDriver               = (*mockDriverImpl)(nil)
-	_ neo4j.DriverWithContext  = (*mockNeo4jDriverWithContext)(nil)
-	_ neo4j.SessionWithContext = (*mockNeo4jSessionWithContext)(nil)
-	_ neo4j.ManagedTransaction = (*mockNeo4jManagedTransaction)(nil)
-	_ neo4j.ResultWithContext  = (*mockNeo4jResultWithContext)(nil)
+	_ mockDriver                = (*mockDriverImpl)(nil)
+	_ neo4j.DriverWithContext   = (*mockNeo4jDriverWithContext)(nil)
+	_ neo4j.SessionWithContext  = (*mockNeo4jSessionWithContext)(nil)
+	_ neo4j.ManagedTransaction  = (*mockNeo4jManagedTransaction)(nil)
+	_ neo4j.ExplicitTransaction = (*mockNeo4jExplicitTransaction)(nil)
+	_ neo4j.ResultWithContext   = (*mockNeo4jResultWithContext)(nil)
 )
 
 func (d *mockBindings) Bind(m map[string]any) {
@@ -134,7 +141,7 @@ func (s *mockNeo4jSessionWithContext) LastBookmarks() neo4j.Bookmarks {
 }
 
 func (s *mockNeo4jSessionWithContext) BeginTransaction(ctx context.Context, configurers ...func(*neo4j.TransactionConfig)) (neo4j.ExplicitTransaction, error) {
-	panic(errors.New("not implemented"))
+	return &mockNeo4jExplicitTransaction{mockNeo4jSessionWithContext: s}, nil
 }
 
 func (s *mockNeo4jSessionWithContext) ExecuteRead(ctx context.Context, work neo4j.ManagedTransactionWork, configurers ...func(*neo4j.TransactionConfig)) (any, error) {
@@ -158,7 +165,7 @@ func (s *mockNeo4jSessionWithContext) Run(ctx context.Context, cypher string, pa
 		var i int
 		for k, v := range m {
 			rec.Keys[i] = k
-			if _, ok := v.(INode); ok {
+			if _, ok := v.(internal.INode); ok {
 				meta, err := s.Codecs().ExtractNeo4jNodeMeta(v)
 				if err != nil {
 					return nil, err
@@ -171,7 +178,7 @@ func (s *mockNeo4jSessionWithContext) Run(ctx context.Context, cypher string, pa
 					Labels: meta.Labels,
 					Props:  props,
 				}
-			} else if _, ok := v.(IRelationship); ok {
+			} else if _, ok := v.(internal.IRelationship); ok {
 				meta, err := s.Codecs().ExtractRelationshipMeta(v)
 				if err != nil {
 					return nil, err
@@ -282,4 +289,23 @@ func (r *mockNeo4jResultWithContext) Consume(ctx context.Context) (neo4j.ResultS
 
 func (r *mockNeo4jResultWithContext) IsOpen() bool {
 	return true
+}
+
+// ExplicitTransaction implementation
+func (t *mockNeo4jExplicitTransaction) Run(ctx context.Context, cypher string, params map[string]any) (neo4j.ResultWithContext, error) {
+	return t.mockNeo4jSessionWithContext.Run(ctx, cypher, params)
+}
+
+func (t *mockNeo4jExplicitTransaction) Commit(ctx context.Context) error {
+	t.committed = true
+	return nil
+}
+
+func (t *mockNeo4jExplicitTransaction) Rollback(ctx context.Context) error {
+	t.rolledBack = true
+	return nil
+}
+
+func (t *mockNeo4jExplicitTransaction) Close(ctx context.Context) error {
+	return nil
 }

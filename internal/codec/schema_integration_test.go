@@ -60,9 +60,10 @@ func TestAutoIDConstraint(t *testing.T) {
 		for i := range meta.Schema.Constraints {
 			con := &meta.Schema.Constraints[i]
 			if len(con.Properties) > 0 {
-				if con.Properties[0] == "id" {
+				switch con.Properties[0] {
+				case "id":
 					idConstraint = con
-				} else if con.Properties[0] == "email" {
+				case "email":
 					emailConstraint = con
 				}
 			}

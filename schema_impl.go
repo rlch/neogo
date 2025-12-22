@@ -28,7 +28,7 @@ func newSchema(db neo4j.DriverWithContext, registry *internal.Registry) Schema {
 // GetIndexes returns all indexes from the database.
 func (s *schemaImpl) GetIndexes(ctx context.Context) ([]IndexInfo, error) {
 	session := s.db.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
-	defer session.Close(ctx)
+	defer func() { _ = session.Close(ctx) }()
 
 	result, err := session.Run(ctx,
 		`SHOW INDEXES YIELD name, type, entityType, labelsOrTypes, properties, state, options
@@ -89,7 +89,7 @@ func (s *schemaImpl) GetIndexes(ctx context.Context) ([]IndexInfo, error) {
 // GetConstraints returns all constraints from the database.
 func (s *schemaImpl) GetConstraints(ctx context.Context) ([]ConstraintInfo, error) {
 	session := s.db.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
-	defer session.Close(ctx)
+	defer func() { _ = session.Close(ctx) }()
 
 	result, err := session.Run(ctx,
 		`SHOW CONSTRAINTS YIELD name, type, entityType, labelsOrTypes, properties`,
@@ -153,7 +153,7 @@ func (s *schemaImpl) AutoMigrate(ctx context.Context, types ...any) ([]Migration
 
 	// Execute each action
 	session := s.db.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(ctx)
+	defer func() { _ = session.Close(ctx) }()
 
 	var executed []MigrationAction
 	for _, action := range actions {

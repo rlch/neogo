@@ -4,32 +4,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-`neogo` is a Golang ORM for Neo4J that creates idiomatic & fluent Cypher queries. It provides type-safe query building with automatic marshalling/unmarshalling between Go structs and Neo4J nodes/relationships.
+`neogo` is a lightweight Golang ORM for Neo4j that provides raw Cypher query execution with type-safe result binding. Unlike traditional ORMs with fluent query builders, neogo takes a minimalist approach: you write raw Cypher queries and neogo handles marshalling/unmarshalling between Go structs and Neo4j.
 
 ## Architecture
 
 ### Core Components
 
-- **Driver** (`driver.go`): Main entry point, wraps neo4j.DriverWithContext and provides query execution
-- **Entity System** (`entity.go`): Node and relationship definitions with INode/IAbstract interfaces
-- **Query Builder** (`query/`): Fluent API for building Cypher queries
-- **DB Package** (`db/`): Building blocks for Cypher clauses (patterns, expressions, variables)
-- **Internal** (`internal/`): Core compilation logic, scope management, parameter handling
+- **Driver** (`driver.go`): Main entry point, wraps neo4j.DriverWithContext with sessions and transactions
+- **Client** (`client_impl.go`): Query interface returned by `Driver.Exec()`, provides `Cypher()` method
+- **Entity System** (`entity.go`): Node and relationship definitions with INode/IRelationship interfaces
+- **Registry** (`registry.go`): Type registration for nodes and relationships
+- **Schema** (`schema.go`, `schema_impl.go`): Index and constraint management from struct tags
 
-### Key Architecture Patterns
+### Internal Components
 
-1. **Type-Safe Query Building**: Uses Go generics and interfaces to ensure compile-time safety
-2. **Fluent API**: Chainable methods for building complex Cypher queries
-3. **Automatic Parameter Injection**: Converts Go values to Neo4J parameters automatically
-4. **Abstract Node Support**: Allows multiple concrete implementations of abstract node types
-5. **Scope-based Variable Management**: Automatic variable qualification and naming in complex queries
+- **internal/codec/**: Zero-reflection encoding/decoding system with opcode-based compilation
+- **internal/binding.go**: Result binding from Neo4j records to Go structs
+- **internal/binding_plan.go**: Pre-compiled binding metadata for zero-reflection hot path
+- **internal/cypher.go**: Cypher query compilation with parameter handling
+- **internal/registry.go**: Type metadata and Neo4j label/relationship type extraction
+
+### Key Design Principles
+
+1. **Raw Cypher**: Users write raw Cypher queries, neogo doesn't generate Cypher
+2. **Type-Safe Binding**: Result binding is name/pointer pairs: `Run(ctx, "name", &target, "name2", &target2)`
+3. **Zero-Reflection Hot Path**: Pre-compiled codecs and binding plans avoid reflection during query execution
+4. **Schema from Tags**: Indexes/constraints defined via struct tags, applied with AutoMigrate
+
+### API Pattern
+
+```go
+// The main pattern: Cypher() returns Runner, then Run/RunWithParams/Stream/StreamWithParams
+driver.Exec().
+    Cypher(`MATCH (p:Person {id: $id}) RETURN p`).
+    RunWithParams(ctx, map[string]any{"id": "123"}, "p", &person)
+
+// Bindings are variadic name/pointer pairs
+Run(ctx, "name1", &binding1, "name2", &binding2)
+RunWithParams(ctx, params, "name1", &binding1, "name2", &binding2)
+Stream(ctx, sinkFunc, "name1", &binding1)
+StreamWithParams(ctx, params, sinkFunc, "name1", &binding1)
+```
 
 ### Entity System
 
-- **Node**: Base struct for Neo4J nodes with ID, labels via struct tags
-- **Relationship**: Base struct for Neo4J relationships with type via struct tags
-- **Abstract**: Interface for nodes with multiple concrete implementations
-- **Registry**: Manages mappings between abstract interfaces and concrete types
+- **Node**: Base struct for Neo4j nodes with auto-ID generation via ULID
+- **Relationship**: Base struct for Neo4j relationships
+- **Abstract**: Interface for polymorphic nodes with multiple concrete implementations
+- **One/Many**: Zero-cost phantom types for relationship cardinality in schema
 
 ## Development Commands
 
@@ -42,11 +64,8 @@ go test ./...
 # Run tests with coverage
 go test -cover ./...
 
-# Run specific test package
-go test ./internal/tests
-
-# Run single test file
-go test ./internal/tests/match_test.go
+# Run short tests only (skip integration tests)
+go test -short ./...
 ```
 
 ### Building
@@ -55,8 +74,8 @@ go test ./internal/tests/match_test.go
 # Build the module
 go build ./...
 
-# Compile without running
-go build -o neogo
+# Verify module dependencies
+go mod tidy
 ```
 
 ### Linting & Formatting
@@ -67,37 +86,45 @@ go fmt ./...
 
 # Vet code
 go vet ./...
+
+# Run golangci-lint (if installed)
+golangci-lint run
 ```
 
 ## Test Structure
 
-- `internal/tests/`: Comprehensive test suite covering all Cypher clause types
-- Tests are organized by Cypher clause (match, create, set, etc.)
-- `common.go` provides shared test utilities and Neo4J container setup
-- Uses testcontainers-go for integration testing with real Neo4J instances
+- Root level `*_test.go` files: Driver, client, mock, schema, registry tests
+- `internal/codec/*_test.go`: Codec system tests
+- Uses testcontainers-go for integration tests with real Neo4j instances
+- Tests are marked with `testing.Short()` to skip integration tests in CI
 
 ## Key Files to Understand
 
-- `driver.go`: Main API entry points and interfaces
-- `entity.go`: Core entity types and constructors
-- `internal/cypher.go`: Query compilation and execution logic
-- `internal/scope.go`: Variable scoping and parameter management
-- `db/patterns.go`: Node and relationship pattern builders
-- `query/client.go`: Fluent query building API
+- `driver.go`: Driver interface, session/transaction management
+- `client_impl.go`: Client/Runner interfaces, query execution logic
+- `entity.go`: Node, Relationship, Abstract base types
+- `schema.go`, `schema_impl.go`: Schema interface and migration implementation
+- `internal/binding.go`, `internal/binding_plan.go`: Result binding system
+- `internal/codec/`: Zero-reflection codec system
+
+## What Was Removed (Simplification)
+
+The codebase was recently simplified by removing:
+- `builder/` directory (fluent query builder interfaces)
+- `db/` directory (Node, Patterns, Var, Qual, Props, Cond, Where DSL)
+- `internal/tests/` (builder tests)
+- `internal/cypher.go` write* methods (Cypher generation)
+- `internal/scope.go` variable tracking
+- `internal/patterns.go` pattern builder
+- `internal/option.go` builder options
 
 ## Development Notes
 
 - Uses Neo4J Go driver v5
-- Requires Go 1.22+
-- Heavily tested with full coverage of Neo4J documentation examples
+- Requires Go 1.21+
 - API is experimental and subject to change before v1.0
-
-## Codec System (internal/codec)
-
-Handles encoding/decoding of Go structs to/from Neo4J data. Zero-reflection hot path architecture.
 
 ## Communication Guidelines
 
 - Never write throwaway markdown documents
 - Prefer communicating in chat window
-

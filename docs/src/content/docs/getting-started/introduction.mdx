@@ -1,13 +1,13 @@
 ---
 title: Introduction
-description: Learn about neogo - a Golang ORM for Neo4j
+description: Learn about neogo - a lightweight Golang ORM for Neo4j
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 # Introduction to neogo
 
-**neogo** is a Golang ORM for Neo4j that creates idiomatic and fluent Cypher queries. It was designed to make writing Cypher as simple as possible, providing a safety-net and reducing boilerplate by leveraging canonical representations of nodes and relationships as Go structs.
+**neogo** is a lightweight Golang ORM for Neo4j that lets you write raw Cypher queries with type-safe result binding. Instead of a complex query builder, neogo provides a thin layer over the official Neo4j Go driver focused on marshalling/unmarshalling between Go structs and Neo4j.
 
 <Aside type="caution" title="Experimental API">
   The neogo API is still in an experimental phase. Expect minor changes and additions until the first release.
@@ -15,57 +15,65 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Why neogo?
 
-Working with Neo4j in Go traditionally involves writing raw Cypher queries as strings, manually handling parameter binding, and writing boilerplate code to marshal/unmarshal data between Go structs and Neo4j types. neogo solves these problems by providing:
+Working with Neo4j in Go traditionally involves:
+- Writing raw Cypher queries as strings ✓
+- Manually extracting results from records
+- Writing boilerplate code to marshal/unmarshal data
+- Managing parameter binding carefully
 
-- **Hands-free marshalling/unmarshalling** between Go and Neo4j
-- **No dynamic property, variable, or label qualification** necessary
-- **Readable, interoperable Cypher queries** that you can inspect and debug
-- **Abstract nodes** with multiple concrete implementers
-- **Automatic & explicit variable qualification**, node/relationship label patterns, and parameter injection
-- **Heavily tested** with full coverage of Neo4j docs examples
+neogo keeps the parts that work (raw Cypher) and automates the tedious parts:
+
+- **Automatic marshalling/unmarshalling** - Results bind directly to Go structs
+- **Named result binding** - Simple `"name", &pointer` pairs map Cypher RETURN items
+- **Schema from struct tags** - Define indexes/constraints once on your types
+- **Session/transaction helpers** - Convenient wrappers with causal consistency support
+- **Zero-reflection hot path** - Pre-compiled codecs for high performance
 
 ## Key Concepts
 
 ### Nodes
 
-In neogo, Neo4j nodes are represented as Go structs that embed `neogo.Node`:
+Neo4j nodes are represented as Go structs embedding `neogo.Node`:
 
 ```go
-type Person struct {
-	neogo.Node `neo4j:"Person"`
+import "github.com/rlch/neogo"
 
-	Name    string `neo4j:"name"`
-	Surname string `neo4j:"surname"`
-	Age     int    `neo4j:"age"`
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    Name    string `neo4j:"name"`
+    Surname string `neo4j:"surname"`
+    Age     int    `neo4j:"age"`
 }
 ```
 
 ### Relationships
 
-Relationships are similarly defined by embedding `neogo.Relationship`:
+Relationships embed `neogo.Relationship`:
 
 ```go
 type FriendsWith struct {
-	neogo.Relationship `neo4j:"FRIENDS_WITH"`
+    neogo.Relationship `neo4j:"FRIENDS_WITH"`
 
-	Since time.Time `neo4j:"since"`
+    Since time.Time `neo4j:"since"`
 }
 ```
 
-### Fluent Query Building
+### Query Execution
 
-neogo provides a chainable API for building Cypher queries:
+Write raw Cypher and bind results:
 
 ```go
-err := d.Exec().
-	Match(db.Node(&person)).
-	Where(db.Cond(&person.Age, ">", 18)).
-	Return(&person).
-	Run(ctx)
+var person Person
+err := driver.Exec().
+    Cypher(`MATCH (p:Person {name: $name}) RETURN p`).
+    RunWithParams(ctx, map[string]any{"name": "Alice"}, "p", &person)
 ```
+
+The bindings are `"name", &pointer` pairs that map Cypher RETURN columns to Go variables.
 
 ## Next Steps
 
 - [Installation](/getting-started/installation/) - Add neogo to your project
-- [Quick Start](/getting-started/quick-start/) - Build your first query
-- [Defining Nodes](/guides/nodes/) - Learn about node definitions in depth
+- [Quick Start](/getting-started/quick-start/) - Write your first queries
+- [Defining Nodes](/models/nodes/) - Learn about node definitions in depth

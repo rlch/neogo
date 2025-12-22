@@ -1,103 +1,135 @@
 ---
-title: Raw Cypher
-description: Writing raw Cypher queries with type-safe result binding
+title: Cypher Queries
+description: Execute raw Cypher queries with type-safe result binding
 ---
 
 import { Aside, Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
-# Raw Cypher
+# Cypher Queries
 
-The `Cypher()` method is the **primary way** to interact with neogo. It allows you to write raw Cypher queries while still benefiting from type-safe result binding via `Return()`.
-
-<Aside type="tip" title="Recommended Approach">
-  For most real-world queries, `Cypher()` combined with `Return(db.Qual())` is the recommended approach. It gives you the full power of Cypher while neogo handles parameter injection and result mapping.
-</Aside>
+neogo uses raw Cypher queries for all database operations. You write the Cypher you know, pass parameters safely, and bind results to Go variables.
 
 ## Basic Pattern
 
 <Steps>
 
 1. **Write your Cypher query** using `Cypher()`
-2. **Bind results** using `Return(db.Qual(&variable, "expression"))`
-3. **Pass parameters** using `RunWithParams(ctx, map[string]any{...})`
+2. **Pass parameters** (if any) with a `map[string]any`
+3. **Bind results** with `"name", &pointer` pairs
 
 </Steps>
-
-```go
-var users []*User
-
-err := driver.Exec().
-    Cypher(`
-        MATCH (u:User)-[:FRIENDS_WITH]->(friend:User)
-        WHERE u.age > $minAge
-        WITH u, count(friend) AS friendCount
-    `).
-    Return(db.Qual(&users, "u")).
-    RunWithParams(ctx, map[string]any{
-        "minAge": 18,
-    })
-```
-
-## Result Binding with db.Qual
-
-`db.Qual(&target, "expression")` binds a Cypher expression to a Go variable:
-
-### Binding Nodes
 
 ```go
 var person Person
 
 err := driver.Exec().
-    Cypher(`MATCH (p:Person {id: $id})`).
-    Return(db.Qual(&person, "p")).
-    RunWithParams(ctx, map[string]any{"id": "user-123"})
+    Cypher(`MATCH (p:Person {id: $id}) RETURN p`).
+    RunWithParams(ctx, map[string]any{"id": "user-123"}, "p", &person)
 ```
 
-### Binding Properties
+## Execution Methods
+
+### Run (No Results)
+
+For queries that don't return data:
+
+```go
+err := driver.Exec().
+    Cypher(`CREATE (p:Person {name: $name, age: $age})`).
+    RunWithParams(ctx, map[string]any{
+        "name": "Alice",
+        "age":  30,
+    })
+```
+
+### Run with Bindings
+
+For queries that return data, add `"name", &pointer` pairs after params:
+
+```go
+var person Person
+err := driver.Exec().
+    Cypher(`MATCH (p:Person {id: $id}) RETURN p`).
+    RunWithParams(ctx, map[string]any{"id": "123"}, "p", &person)
+```
+
+### Run without Params
+
+If you have no parameters, use `Run()`:
+
+```go
+var people []Person
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) RETURN p`).
+    Run(ctx, "p", &people)
+```
+
+## Result Binding
+
+### Binding to Struct
+
+```go
+var person Person
+
+err := driver.Exec().
+    Cypher(`MATCH (p:Person {id: $id}) RETURN p`).
+    RunWithParams(ctx, map[string]any{"id": "123"}, "p", &person)
+```
+
+### Binding to Slice
+
+When multiple records are returned, bind to a slice:
+
+```go
+var people []Person
+
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) WHERE p.age > $minAge RETURN p`).
+    RunWithParams(ctx, map[string]any{"minAge": 18}, "p", &people)
+```
+
+### Binding Primitives
+
+You can bind any type that matches the returned value:
 
 ```go
 var name string
-var age int
+var age int64
 
 err := driver.Exec().
-    Cypher(`MATCH (p:Person {id: $id})`).
-    Return(
-        db.Qual(&name, "p.name"),
-        db.Qual(&age, "p.age"),
-    ).
-    RunWithParams(ctx, map[string]any{"id": "user-123"})
+    Cypher(`MATCH (p:Person {id: $id}) RETURN p.name, p.age`).
+    RunWithParams(ctx, map[string]any{"id": "123"}, 
+        "p.name", &name, 
+        "p.age", &age)
 ```
 
-### Binding Collections
+### Multiple Bindings
+
+Bind multiple RETURN values:
 
 ```go
-var users []*User
+var person Person
+var friendCount int64
+var friendNames []string
 
 err := driver.Exec().
-    Cypher(`MATCH (u:User) WHERE u.active = true`).
-    Return(db.Qual(&users, "u")).
-    Run(ctx)
+    Cypher(`
+        MATCH (p:Person {id: $id})-[:KNOWS]->(f:Person)
+        WITH p, count(f) AS cnt, collect(f.name) AS names
+        RETURN p, cnt, names
+    `).
+    RunWithParams(ctx, map[string]any{"id": "123"},
+        "p", &person,
+        "cnt", &friendCount,
+        "names", &friendNames)
 ```
 
-### Binding Aggregations
+### Binding Maps/Structs
+
+Bind computed maps to struct types:
 
 ```go
-var count int64
-var avgAge float64
-
-err := driver.Exec().
-    Cypher(`MATCH (u:User)`).
-    Return(
-        db.Qual(&count, "count(u)"),
-        db.Qual(&avgAge, "avg(u.age)"),
-    ).
-    Run(ctx)
-```
-
-### Binding Complex Expressions
-
-```go
-var result []struct {
+var result struct {
     UserID   string `json:"userID"`
     Name     string `json:"name"`
     FriendCount int `json:"friendCount"`
@@ -105,50 +137,27 @@ var result []struct {
 
 err := driver.Exec().
     Cypher(`
-        MATCH (u:User)-[:FRIENDS_WITH]->(f)
-        WITH u, count(f) AS cnt
-        WITH {userID: u.id, name: u.name, friendCount: cnt} AS data
+        MATCH (u:User {id: $id})-[:KNOWS]->(f)
+        WITH {userID: u.id, name: u.name, friendCount: count(f)} AS data
+        RETURN data
     `).
-    Return(db.Qual(&result, "data")).
-    Run(ctx)
+    RunWithParams(ctx, map[string]any{"id": "123"}, "data", &result)
 ```
 
 ## Parameter Injection
 
-### Using RunWithParams
-
-Pass parameters as a map:
+Always use parameters for dynamic values:
 
 ```go
+// ✅ Good - prevents injection
 err := driver.Exec().
-    Cypher(`
-        MATCH (u:User {id: $userID})
-        SET u.lastLogin = $timestamp
-    `).
-    RunWithParams(ctx, map[string]any{
-        "userID":    "user-123",
-        "timestamp": time.Now(),
-    })
-```
+    Cypher(`MATCH (u:User {id: $id}) RETURN u`).
+    RunWithParams(ctx, map[string]any{"id": userID}, "u", &user)
 
-### Using UNWIND for Batch Operations
-
-```go
-var results []Answer
-
+// ❌ Bad - injection risk
 err := driver.Exec().
-    Cypher(`
-        UNWIND $inputs AS input
-        MATCH (u:User {id: input.userID})-[r:ANSWERED]->(q:Question {id: input.questionID})
-        WITH input, properties(r) AS answer
-    `).
-    Return(db.Qual(&results, "answer")).
-    RunWithParams(ctx, map[string]any{
-        "inputs": []map[string]any{
-            {"userID": "user-1", "questionID": "q-1"},
-            {"userID": "user-2", "questionID": "q-2"},
-        },
-    })
+    Cypher(fmt.Sprintf(`MATCH (u:User {id: '%s'}) RETURN u`, userID)).
+    Run(ctx, "u", &user)
 ```
 
 ### Nested Parameters
@@ -157,7 +166,6 @@ err := driver.Exec().
 err := driver.Exec().
     Cypher(`
         MERGE (gu:User {id: $input.groupUserID})
-        ON CREATE SET gu.createdAt = datetime()
         WITH gu
         UNWIND $input.userIDs AS userID
         MERGE (u:User {id: userID})
@@ -166,168 +174,153 @@ err := driver.Exec().
     RunWithParams(ctx, map[string]any{
         "input": map[string]any{
             "groupUserID": "group-1",
-            "userIDs":     []string{"user-1", "user-2", "user-3"},
+            "userIDs":     []string{"user-1", "user-2"},
         },
     })
 ```
 
-## Combining Cypher with Builder Methods
-
-You can chain `Cypher()` with other builder methods:
-
-### Cypher + Return
+### UNWIND for Batch Operations
 
 ```go
-var years []*Year
-
-err := driver.Exec().
-    Cypher(`
-        MATCH (c:Curriculum {id: $curriculumID})-[:HAS]->(:Strand)-[:INCLUDES]->(s:Skill)
-        MATCH (n:Network)-[:INCLUDES]->(s)
-        MATCH (n)-[:STUDIED_IN]->(y:Year)
-    `).
-    Return(db.Return(db.Qual(&years, "y"), db.Distinct, db.OrderBy("order", true))).
-    RunWithParams(ctx, map[string]any{"curriculumID": curriculumID})
-```
-
-### Cypher + WITH Clause in Return
-
-```go
-var regions []*Region
-
-err := driver.Exec().
-    Cypher(`
-        UNWIND $userIDs AS userID
-        OPTIONAL MATCH (:User {id:userID})-[:STUDIES_IN|TEACHES_IN]->(r:Region)
-        WITH {userID: userID, region: properties(r)} AS data
-    `).
-    Return(db.Qual(&regions, "data")).
-    RunWithParams(ctx, map[string]any{
-        "userIDs": userIDs,
-    })
-```
-
-## Transactions with Cypher
-
-### Within WriteTransaction
-
-```go
-session := driver.WriteSession(ctx)
-defer session.Close(ctx)
-
-err := session.WriteTransaction(ctx, func(begin func() Query) error {
-    var curriculumID string
-    
-    if err := begin().
-        Cypher(`
-            MATCH (:User {id: $userID})-[r:STUDIES]->(c:Curriculum)
-            WITH c.id AS curriculumID, r
-            DELETE r
-            WITH curriculumID
-        `).
-        Return(db.Qual(&curriculumID, "curriculumID")).
-        RunWithParams(ctx, map[string]any{
-            "userID": userID,
-        }); err != nil {
-        return err
-    }
-    
-    // Use curriculumID in next query...
-    return nil
-})
-```
-
-## Complex Real-World Examples
-
-### User Migration with APOC
-
-```go
-var userUUID string
-
-err := driver.Exec().
-    Cypher(`
-        MATCH (u:User {id: $userID})
-        OPTIONAL MATCH (nu:User {id: $newID})
-        CALL apoc.do.when(
-            nu IS NOT NULL,
-            "
-            CALL apoc.refactor.mergeNodes([nu, u], {properties: 'discard'}) YIELD node
-            DETACH DELETE u
-            RETURN nu.uuid AS userUUID
-            ",
-            "SET u.id = newID RETURN u.uuid AS userUUID",
-            {u: u, nu: nu, newID: $newID}
-        ) YIELD value
-        WITH value.userUUID AS userUUID
-    `).
-    Return(db.Qual(&userUUID, "userUUID")).
-    RunWithParams(ctx, map[string]any{
-        "userID": oldUserID,
-        "newID":  newUserID,
-    })
-```
-
-### Batch Processing with CALL Subqueries
-
-```go
-var answers []map[string]any
+inputs := []map[string]any{
+    {"userID": "user-1", "name": "Alice"},
+    {"userID": "user-2", "name": "Bob"},
+}
 
 err := driver.Exec().
     Cypher(`
         UNWIND $inputs AS input
-        OPTIONAL CALL {
-            WITH input
-            OPTIONAL MATCH (:User {id:input.userID})-[r:ANSWERED]->(:Question {id:input.questionID})
-            WHERE r.clearedAt IS NULL
-            RETURN properties(r) AS answerEdge 
-            ORDER BY datetime(r.createdAt) DESC 
-            LIMIT 1
-        }
-        WITH input, answerEdge
+        CREATE (u:User {id: input.userID, name: input.name})
     `).
-    Return(db.Qual(&answers, "answerEdge")).
-    RunWithParams(ctx, map[string]any{
-        "inputs": inputs,
-    })
+    RunWithParams(ctx, map[string]any{"inputs": inputs})
 ```
 
-### Dynamic Query Building
+## Streaming Results
+
+For large result sets, use streaming to process one record at a time:
 
 ```go
-query := `MATCH (u:User)`
+var person Person
 
-if input.RegionID != nil {
-    query += `
-        MATCH (u)-[:STUDIES_IN]->(:Region {id: $regionID})`
-}
-if input.YearID != nil {
-    query += `
-        MATCH (u)-[:STUDIES_IN]->(:Year {id: $yearID})`
-}
-
-var users []*User
 err := driver.Exec().
-    Cypher(query).
-    Return(db.Qual(&users, "u")).
-    RunWithParams(ctx, map[string]any{
-        "regionID": input.RegionID,
-        "yearID":   input.YearID,
-    })
+    Cypher(`MATCH (p:Person) WHERE p.active = true RETURN p`).
+    Stream(ctx, func() error {
+        // Called for each record
+        fmt.Printf("Processing: %s\n", person.Name)
+        return nil
+    }, "p", &person)
 ```
 
-## When to Use Cypher() vs Builder Methods
+### Streaming with Parameters
 
-| Use `Cypher()` | Use Builder Methods |
-|----------------|---------------------|
-| Complex queries with subqueries | Simple CRUD operations |
-| APOC procedures | Basic MATCH/CREATE/MERGE |
-| Queries with CASE expressions | When type inference helps |
-| Performance-critical batch operations | Learning/prototyping |
-| Existing Cypher you want to reuse | When IDE autocomplete is valuable |
+```go
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) WHERE p.age > $minAge RETURN p`).
+    StreamWithParams(ctx, map[string]any{"minAge": 18}, func() error {
+        processAdult(person)
+        return nil
+    }, "p", &person)
+```
 
 <Aside type="tip">
-  In production codebases, `Cypher()` is typically used for 90%+ of queries because it provides full control over the Cypher syntax while neogo handles the tedious parts (parameter binding, result mapping).
+  Use `Stream` for large result sets to avoid loading everything into memory.
 </Aside>
+
+## Debugging
+
+### Print Query
+
+Use `.Print()` to see the query that will be executed:
+
+```go
+err := driver.Exec().
+    Cypher(`MATCH (p:Person) WHERE p.age > $minAge RETURN p`).
+    Print().  // Prints Cypher to stdout
+    RunWithParams(ctx, map[string]any{"minAge": 18}, "p", &people)
+```
+
+## Common Patterns
+
+### CRUD Operations
+
+```go
+// Create
+err := driver.Exec().
+    Cypher(`CREATE (p:Person {id: $id, name: $name})`).
+    RunWithParams(ctx, map[string]any{"id": id, "name": name})
+
+// Read
+var person Person
+err := driver.Exec().
+    Cypher(`MATCH (p:Person {id: $id}) RETURN p`).
+    RunWithParams(ctx, map[string]any{"id": id}, "p", &person)
+
+// Update
+err := driver.Exec().
+    Cypher(`MATCH (p:Person {id: $id}) SET p.name = $name`).
+    RunWithParams(ctx, map[string]any{"id": id, "name": newName})
+
+// Delete
+err := driver.Exec().
+    Cypher(`MATCH (p:Person {id: $id}) DETACH DELETE p`).
+    RunWithParams(ctx, map[string]any{"id": id})
+```
+
+### Upsert with MERGE
+
+```go
+err := driver.Exec().
+    Cypher(`
+        MERGE (p:Person {id: $id})
+        ON CREATE SET p.name = $name, p.createdAt = datetime()
+        ON MATCH SET p.lastSeen = datetime()
+    `).
+    RunWithParams(ctx, map[string]any{"id": id, "name": name})
+```
+
+### Relationship Operations
+
+```go
+// Create relationship
+err := driver.Exec().
+    Cypher(`
+        MATCH (a:Person {id: $aID})
+        MATCH (b:Person {id: $bID})
+        CREATE (a)-[:KNOWS {since: $since}]->(b)
+    `).
+    RunWithParams(ctx, map[string]any{
+        "aID": "person-1",
+        "bID": "person-2",
+        "since": 2023,
+    })
+
+// Query with relationships
+var friends []Person
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person {id: $id})-[:KNOWS]->(friend:Person)
+        RETURN friend
+    `).
+    RunWithParams(ctx, map[string]any{"id": "person-1"}, "friend", &friends)
+```
+
+### Aggregation
+
+```go
+var stats struct {
+    Total   int64   `json:"total"`
+    AvgAge  float64 `json:"avgAge"`
+    MaxAge  int64   `json:"maxAge"`
+}
+
+err := driver.Exec().
+    Cypher(`
+        MATCH (p:Person)
+        WITH count(p) AS total, avg(p.age) AS avgAge, max(p.age) AS maxAge
+        RETURN {total: total, avgAge: avgAge, maxAge: maxAge} AS stats
+    `).
+    Run(ctx, "stats", &stats)
+```
 
 ## Best Practices
 
@@ -340,29 +333,16 @@ err := driver.Exec().
    `)
    ```
 
-2. **Always use parameters** for user input (prevents injection):
-   ```go
-   // ✅ Good
-   Cypher(`MATCH (u:User {id: $id})`).RunWithParams(ctx, map[string]any{"id": userID})
-   
-   // ❌ Bad - SQL injection risk
-   Cypher(fmt.Sprintf(`MATCH (u:User {id: '%s'})`, userID)).Run(ctx)
-   ```
+2. **Always use parameters** for user input (prevents injection)
 
-3. **Use struct tags for complex result mapping**:
-   ```go
-   var result []struct {
-       UserID string `json:"userID"`
-       Count  int    `json:"count"`
-   }
-   ```
+3. **Use UNWIND for batch operations** instead of multiple queries
 
-4. **Leverage UNWIND for batch operations** instead of multiple queries
+4. **Use WITH to control variable scope** in complex queries
 
-5. **Use WITH to control variable scope** in complex queries
+5. **Stream large results** to avoid memory issues
 
 ## See Also
 
-- [Query (MATCH)](/crud/query/) - Using the fluent builder for simple queries
-- [Transactions](/transactions/transactions/) - Managing transactions
+- [Sessions & Transactions](/transactions/sessions/) - Managing sessions
 - [Streaming](/transactions/streaming/) - Processing large result sets
+- [Schema Management](/schema/migration/) - Indexes and constraints

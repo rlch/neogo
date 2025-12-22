@@ -1,9 +1,9 @@
 ---
 title: neogo
-description: A Golang ORM for Neo4j which creates idiomatic & fluent Cypher
+description: A lightweight Golang ORM for Neo4j with raw Cypher queries
 template: splash
 hero:
-  tagline: A type-safe Golang ORM for Neo4j that generates idiomatic Cypher queries.
+  tagline: Write raw Cypher queries with type-safe result binding to Go structs.
   image:
     file: ../../assets/logo.png
   actions:
@@ -25,73 +25,71 @@ import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 ## Why neogo?
 
 <CardGrid stagger>
-	<Card title="Type-Safe Queries" icon="approve-check">
-		Write Cypher queries with full Go type safety. Struct fields become properties, embedded types define labels.
+	<Card title="Raw Cypher" icon="rocket">
+		Write the Cypher you know. No query builder to learn, no DSL to fight with. Full Neo4j power.
 	</Card>
-	<Card title="Zero Boilerplate" icon="rocket">
-		Automatic marshalling between Go structs and Neo4j nodes/relationships. No manual parameter binding.
+	<Card title="Type-Safe Binding" icon="approve-check">
+		Bind query results directly to Go structs. Automatic marshalling handles the rest.
 	</Card>
-	<Card title="Fluent API" icon="pencil">
-		Chainable methods that mirror Cypher clauses. Generate readable, debuggable queries.
+	<Card title="Zero Boilerplate" icon="pencil">
+		Define nodes and relationships as structs. Schema management via struct tags.
 	</Card>
-	<Card title="Full Cypher Support" icon="puzzle">
-		MATCH, CREATE, MERGE, SET, DELETE, WITH, UNWIND, UNION, and more. Variable-length paths and pattern predicates included.
+	<Card title="High Performance" icon="puzzle">
+		Zero-reflection hot path with pre-compiled codecs. Efficient streaming for large result sets.
 	</Card>
 </CardGrid>
 
 ## Quick Example
 
 ```go
-type Person struct {
-	neogo.Node `neo4j:"Person"`
+import "github.com/rlch/neogo"
 
-	Name string `neo4j:"name"`
-	Age  int    `neo4j:"age"`
+type Person struct {
+    neogo.Node `neo4j:"Person"`
+
+    Name string `neo4j:"name"`
+    Age  int    `neo4j:"age"`
 }
 
 func main() {
-	driver, _ := neogo.New(
-		"neo4j://localhost:7687",
-		neo4j.BasicAuth("neo4j", "password", ""),
-		neogo.WithTypes(&Person{}),
-	)
+    driver, _ := neogo.New(
+        "neo4j://localhost:7687",
+        neo4j.BasicAuth("neo4j", "password", ""),
+        neogo.WithTypes(&Person{}),
+    )
+    defer driver.DB().Close(ctx)
 
-	// Query with raw Cypher + type-safe result binding
-	var people []*Person
-	
-	err := driver.Exec().
-		Cypher(`
-			MATCH (p:Person)-[:KNOWS]->(friend:Person)
-			WHERE p.age > $minAge
-			WITH p, count(friend) AS friendCount
-			WHERE friendCount > 5
-		`).
-		Return(db.Qual(&people, "p")).
-		RunWithParams(ctx, map[string]any{
-			"minAge": 21,
-		})
+    // Write raw Cypher, bind results to Go types
+    var people []Person
+    err := driver.Exec().
+        Cypher(`
+            MATCH (p:Person)
+            WHERE p.age > $minAge
+            RETURN p
+        `).
+        RunWithParams(ctx, map[string]any{"minAge": 21}, "p", &people)
 }
 ```
 
-**The pattern:** Write expressive Cypher, bind results to Go types with `db.Qual()`, pass parameters safely with `RunWithParams()`.
+**The pattern:** Write Cypher, pass parameters, bind results with name/pointer pairs.
 
 ## Features
 
 <CardGrid>
 	<Card title="Raw Cypher Queries" icon="rocket">
-		Write expressive Cypher with type-safe result binding. The recommended approach.
+		Full Cypher support with parameterized queries and type-safe result binding.
 		
-		[Learn more →](/crud/cypher/)
+		[Learn more →](/getting-started/quick-start/)
 	</Card>
 	<Card title="Declaring Models" icon="document">
-		Define nodes, relationships, and abstract types with struct tags.
+		Define nodes and relationships as Go structs with struct tags.
 		
 		[Learn more →](/models/overview/)
 	</Card>
-	<Card title="Fluent Builder" icon="pencil">
-		Build simple queries programmatically when you prefer.
+	<Card title="Sessions & Transactions" icon="setting">
+		Read/write sessions, managed transactions, and explicit transaction control.
 		
-		[Learn more →](/crud/query/)
+		[Learn more →](/transactions/sessions/)
 	</Card>
 	<Card title="Schema Management" icon="setting">
 		Auto-migrate indexes and constraints from struct tags.
@@ -107,14 +105,11 @@ go get github.com/rlch/neogo
 ```
 
 ```go
-import (
-	"github.com/rlch/neogo"
-	"github.com/rlch/neogo/db"
-)
+import "github.com/rlch/neogo"
 ```
 
 ## Next Steps
 
 - **[Introduction](/getting-started/introduction/)** - Learn the core concepts
-- **[Quick Start](/getting-started/quick-start/)** - Build your first query
+- **[Quick Start](/getting-started/quick-start/)** - Write your first queries
 - **[Declaring Models](/models/overview/)** - Define your graph schema

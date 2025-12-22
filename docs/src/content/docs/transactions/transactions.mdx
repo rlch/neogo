@@ -13,63 +13,48 @@ Neo4j supports three transaction types:
 
 | Type | Use Case | Retry | Rollback |
 |------|----------|-------|----------|
-| Auto-commit | Simple queries | No | No |
+| Auto-commit | Simple queries via `Exec()` | No | No |
 | Managed | Most operations | Yes | Automatic |
 | Explicit | Fine control | Manual | Manual |
 
-## Managed Transactions
+## Managed Transactions (Recommended)
 
-### ExecuteRead
+### ReadTransaction
 
 For read-only transactions with automatic retry:
 
 ```go
-session := driver.NewSession(ctx, neo4j.SessionConfig{
-    AccessMode: neo4j.AccessModeRead,
-})
+session := driver.ReadSession(ctx)
 defer session.Close(ctx)
 
-result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-    var person Person
-    cy := c.Match(
-        db.Node(&person, db.Props{"name": "Alice"}),
-    ).Return(&person)
-    
-    return cy.Single(ctx, tx)
+err := session.ReadTransaction(ctx, func(c neogo.Client) error {
+    var people []Person
+    return c.Cypher(`MATCH (p:Person) WHERE p.active = true RETURN p`).
+        Run(ctx, "p", &people)
 })
-if err != nil {
-    return err
-}
-
-person := result.(*PersonResult)
 ```
 
-### ExecuteWrite
+### WriteTransaction
 
 For write transactions with automatic retry:
 
 ```go
-session := driver.NewSession(ctx, neo4j.SessionConfig{
-    AccessMode: neo4j.AccessModeWrite,
-})
+session := driver.WriteSession(ctx)
 defer session.Close(ctx)
 
-result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-    var person Person
-    
-    cy := c.Create(
-        db.Node(&person, db.Props{
-            "name": "Alice",
-            "email": "alice@example.com",
-        }),
-    ).Return(&person)
-    
-    return cy.Single(ctx, tx)
+err := session.WriteTransaction(ctx, func(c neogo.Client) error {
+    return c.Cypher(`
+        CREATE (p:Person {id: $id, name: $name, email: $email})
+    `).RunWithParams(ctx, map[string]any{
+        "id":    "person-123",
+        "name":  "Alice",
+        "email": "alice@example.com",
+    })
 })
 ```
 
 <Aside type="tip">
-Use `ExecuteRead` and `ExecuteWrite` for most operations. They handle retries for transient failures automatically.
+Use `ReadTransaction` and `WriteTransaction` for most operations. They handle retries for transient failures automatically.
 </Aside>
 
 ## Multiple Operations in a Transaction
@@ -77,51 +62,32 @@ Use `ExecuteRead` and `ExecuteWrite` for most operations. They handle retries fo
 ### Atomic Operations
 
 ```go
-result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-    var alice, bob Person
-    var knows Knows
-    
+session := driver.WriteSession(ctx)
+defer session.Close(ctx)
+
+err := session.WriteTransaction(ctx, func(c neogo.Client) error {
     // Create Alice
-    cy1 := c.Create(
-        db.Node(&alice, db.Props{"name": "Alice"}),
-    ).Return(&alice)
-    
-    r1, err := cy1.Single(ctx, tx)
-    if err != nil {
-        return nil, err // Transaction will rollback
+    if err := c.Cypher(`CREATE (p:Person {id: 'alice', name: 'Alice'})`).
+        Run(ctx); err != nil {
+        return err  // Transaction will rollback
     }
-    
+
     // Create Bob
-    cy2 := c.Create(
-        db.Node(&bob, db.Props{"name": "Bob"}),
-    ).Return(&bob)
-    
-    r2, err := cy2.Single(ctx, tx)
-    if err != nil {
-        return nil, err // Transaction will rollback
+    if err := c.Cypher(`CREATE (p:Person {id: 'bob', name: 'Bob'})`).
+        Run(ctx); err != nil {
+        return err  // Transaction will rollback
     }
-    
+
     // Create relationship
-    cy3 := c.Match(
-        db.Node(&alice, db.Props{"name": "Alice"}),
-    ).Match(
-        db.Node(&bob, db.Props{"name": "Bob"}),
-    ).Create(
-        db.Patterns(
-            db.Node(&alice),
-            db.Related(&knows, db.To, &bob),
-        ),
-    ).Return(&knows)
-    
-    _, err = cy3.Single(ctx, tx)
-    if err != nil {
-        return nil, err // Transaction will rollback
+    if err := c.Cypher(`
+        MATCH (a:Person {id: 'alice'})
+        MATCH (b:Person {id: 'bob'})
+        CREATE (a)-[:KNOWS]->(b)
+    `).Run(ctx); err != nil {
+        return err  // Transaction will rollback
     }
-    
-    return map[string]any{
-        "alice": r1.Alice,
-        "bob":   r2.Bob,
-    }, nil
+
+    return nil
 })
 ```
 
@@ -130,9 +96,7 @@ result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any,
 For fine-grained control:
 
 ```go
-session := driver.NewSession(ctx, neo4j.SessionConfig{
-    AccessMode: neo4j.AccessModeWrite,
-})
+session := driver.WriteSession(ctx)
 defer session.Close(ctx)
 
 tx, err := session.BeginTransaction(ctx)
@@ -140,37 +104,53 @@ if err != nil {
     return err
 }
 
-// Ensure cleanup
-defer func() {
-    if err != nil {
-        tx.Rollback(ctx)
-    }
-}()
-
 // Operation 1
-var person Person
-cy1 := c.Create(
-    db.Node(&person, db.Props{"name": "Alice"}),
-).Return(&person)
-_, err = cy1.Single(ctx, tx)
+err = tx.Run(func(c neogo.Client) error {
+    return c.Cypher(`CREATE (p:Person {name: $name})`).
+        RunWithParams(ctx, map[string]any{"name": "Alice"})
+})
 if err != nil {
+    tx.Rollback(ctx)
     return err
 }
 
 // Operation 2
-cy2 := c.Match(
-    db.Node(&person, db.Props{"name": "Alice"}),
-).Set(
-    db.SetPropValue(&person, "verified", true),
-)
-_, err = cy2.Run(ctx, tx)
+err = tx.Run(func(c neogo.Client) error {
+    return c.Cypher(`
+        MATCH (p:Person {name: 'Alice'})
+        SET p.verified = true
+    `).Run(ctx)
+})
 if err != nil {
+    tx.Rollback(ctx)
     return err
 }
 
 // Commit
-err = tx.Commit(ctx)
-return err
+if err := tx.Commit(ctx); err != nil {
+    return err
+}
+
+tx.Close(ctx)
+```
+
+### Simplified Error Handling
+
+Use `Close` with joined errors:
+
+```go
+tx, err := session.BeginTransaction(ctx)
+if err != nil {
+    return err
+}
+
+workErr := tx.Run(func(c neogo.Client) error {
+    // Do work...
+    return nil
+})
+
+// Close will rollback if not committed, and join any errors
+return tx.Close(ctx, workErr)
 ```
 
 ## Transaction Configuration
@@ -178,20 +158,24 @@ return err
 ### Timeout
 
 ```go
-result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-    // ...
-}, neo4j.WithTxTimeout(30*time.Second))
+err := session.WriteTransaction(ctx, func(c neogo.Client) error {
+    return c.Cypher(`...`).Run(ctx)
+}, func(tc *neo4j.TransactionConfig) {
+    tc.Timeout = 30 * time.Second
+})
 ```
 
 ### Metadata
 
 ```go
-result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-    // ...
-}, neo4j.WithTxMetadata(map[string]any{
-    "app": "myapp",
-    "user": userID,
-}))
+err := session.WriteTransaction(ctx, func(c neogo.Client) error {
+    return c.Cypher(`...`).Run(ctx)
+}, func(tc *neo4j.TransactionConfig) {
+    tc.Metadata = map[string]any{
+        "app":  "myapp",
+        "user": userID,
+    }
+})
 ```
 
 ## Error Handling
@@ -203,9 +187,9 @@ Managed transactions automatically retry on:
 - Service unavailability
 
 ```go
-result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+err := session.WriteTransaction(ctx, func(c neogo.Client) error {
     // This will be retried on transient failures
-    return doWork(tx)
+    return c.Cypher(`...`).Run(ctx)
 })
 ```
 
@@ -214,37 +198,14 @@ result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any,
 Return errors to stop retries:
 
 ```go
-result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+err := session.WriteTransaction(ctx, func(c neogo.Client) error {
     // Validate input first
     if !isValid(input) {
         // This error won't be retried
-        return nil, fmt.Errorf("invalid input: %v", input)
+        return fmt.Errorf("invalid input: %v", input)
     }
-    
-    return doWork(tx)
-})
-```
 
-### Constraint Violations
-
-```go
-result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-    var person Person
-    cy := c.Create(
-        db.Node(&person, db.Props{"email": email}),
-    ).Return(&person)
-    
-    r, err := cy.Single(ctx, tx)
-    if err != nil {
-        if neo4j.IsNeo4jError(err) {
-            neo4jErr := err.(*neo4j.Neo4jError)
-            if strings.Contains(neo4jErr.Code, "ConstraintValidation") {
-                return nil, fmt.Errorf("email already exists")
-            }
-        }
-        return nil, err
-    }
-    return r, nil
+    return c.Cypher(`...`).RunWithParams(ctx, map[string]any{...})
 })
 ```
 
@@ -253,71 +214,46 @@ result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any,
 ### Read-Modify-Write
 
 ```go
-result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-    var account Account
-    
+err := session.WriteTransaction(ctx, func(c neogo.Client) error {
     // Read current balance
-    cy1 := c.Match(
-        db.Node(&account, db.Props{"id": accountID}),
-    ).Return(&account)
-    
-    r, err := cy1.Single(ctx, tx)
-    if err != nil {
-        return nil, err
+    var balance int64
+    if err := c.Cypher(`
+        MATCH (a:Account {id: $id})
+        RETURN a.balance
+    `).RunWithParams(ctx, map[string]any{"id": accountID}, "a.balance", &balance); err != nil {
+        return err
     }
-    
+
     // Check balance
-    if r.Account.Balance < amount {
-        return nil, fmt.Errorf("insufficient funds")
+    if balance < amount {
+        return fmt.Errorf("insufficient funds")
     }
-    
+
     // Update balance
-    cy2 := c.Match(
-        db.Node(&account, db.Props{"id": accountID}),
-    ).Set(
-        db.SetPropValue(&account, "balance", r.Account.Balance - amount),
-    ).Return(&account)
-    
-    return cy2.Single(ctx, tx)
+    return c.Cypher(`
+        MATCH (a:Account {id: $id})
+        SET a.balance = $newBalance
+    `).RunWithParams(ctx, map[string]any{
+        "id":         accountID,
+        "newBalance": balance - amount,
+    })
 })
 ```
 
-### Conditional Create (Check-Then-Act)
+### Upsert Pattern
 
 ```go
-result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-    var user User
-    
-    // Check if exists
-    cy1 := c.Match(
-        db.Node(&user, db.Props{"email": email}),
-    ).Return(&user)
-    
-    existing, err := cy1.Single(ctx, tx)
-    if err == nil {
-        // User exists
-        return existing, nil
-    }
-    
-    if !errors.Is(err, neogo.ErrNotFound) {
-        return nil, err
-    }
-    
-    // Create new user
-    cy2 := c.Create(
-        db.Node(&user, db.Props{
-            "email": email,
-            "name":  name,
-        }),
-    ).Return(&user)
-    
-    return cy2.Single(ctx, tx)
+err := session.WriteTransaction(ctx, func(c neogo.Client) error {
+    return c.Cypher(`
+        MERGE (u:User {email: $email})
+        ON CREATE SET u.id = $id, u.createdAt = datetime()
+        ON MATCH SET u.lastLogin = datetime()
+    `).RunWithParams(ctx, map[string]any{
+        "id":    newID,
+        "email": email,
+    })
 })
 ```
-
-<Aside type="note">
-For idempotent creates, prefer `MERGE` over check-then-create patterns.
-</Aside>
 
 ## Best Practices
 
@@ -336,11 +272,11 @@ For idempotent creates, prefer `MERGE` over check-then-create patterns.
 
 ```go
 // ❌ Bad: External call in transaction
-result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+err := session.WriteTransaction(ctx, func(c neogo.Client) error {
     // Don't do this - HTTP call inside transaction
     resp, err := http.Get("https://api.example.com/data")
     if err != nil {
-        return nil, err
+        return err
     }
     // ...
 })
@@ -351,8 +287,10 @@ if err != nil {
     return err
 }
 
-result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+err = session.WriteTransaction(ctx, func(c neogo.Client) error {
     // Use data from external call
-    return createNode(tx, resp.Data)
+    return c.Cypher(`...`).RunWithParams(ctx, map[string]any{
+        "data": resp.Data,
+    })
 })
 ```

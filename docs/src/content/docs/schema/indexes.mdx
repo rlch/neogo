@@ -121,14 +121,13 @@ CREATE FULLTEXT INDEX doc_search IF NOT EXISTS FOR (n:Document) ON EACH [n.title
 var doc Document
 var score float64
 
-err := client.Exec().
-    Call("db.index.fulltext.queryNodes('doc_search', 'search terms')").
-    Yield(
-        db.Qual(&doc, "node"),
-        db.Qual(&score, "score"),
-    ).
-    Return(&doc, &score).
-    Run(ctx)
+err := driver.Exec().
+    Cypher(`
+        CALL db.index.fulltext.queryNodes('doc_search', 'search terms')
+        YIELD node, score
+        RETURN node, score
+    `).
+    Run(ctx, "node", &doc, "score", &score)
 ```
 
 ## Vector Indexes
@@ -168,17 +167,15 @@ queryVector := []float64{0.1, 0.2, ...} // Your query vector
 var node any
 var score float64
 
-err := client.Exec().
-    Call(fmt.Sprintf(
-        "db.index.vector.queryNodes('my_embeddings', 10, %v)",
-        queryVector,
-    )).
-    Yield(
-        db.Qual(&node, "node"),
-        db.Qual(&score, "score"),
-    ).
-    Return(&node, &score).
-    Run(ctx)
+err := driver.Exec().
+    Cypher(`
+        CALL db.index.vector.queryNodes('my_embeddings', 10, $vector)
+        YIELD node, score
+        RETURN node, score
+    `).
+    RunWithParams(ctx, map[string]any{"vector": queryVector}, 
+        "node", &node, 
+        "score", &score)
 ```
 
 ## Composite Indexes

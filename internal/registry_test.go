@@ -403,9 +403,10 @@ func TestRegisteredNodeSchema(t *testing.T) {
 		// Find constraints by property
 		var emailConstraint, idConstraint *codec.ConstraintDef
 		for i := range schema.Constraints {
-			if schema.Constraints[i].Properties[0] == "email" {
+			switch schema.Constraints[i].Properties[0] {
+			case "email":
 				emailConstraint = &schema.Constraints[i]
-			} else if schema.Constraints[i].Properties[0] == "id" {
+			case "id":
 				idConstraint = &schema.Constraints[i]
 			}
 		}

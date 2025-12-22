@@ -57,26 +57,9 @@ export default defineConfig({
 								],
 							},
 							{
-								label: 'CRUD',
+								label: 'Cypher Queries',
 								items: [
-									{ label: 'Raw Cypher', slug: 'crud/cypher', badge: { text: 'Recommended', variant: 'success' } },
-									{ label: 'Create', slug: 'crud/create' },
-									{ label: 'Query (MATCH)', slug: 'crud/query' },
-									{ label: 'Update (SET)', slug: 'crud/update' },
-									{ label: 'Delete', slug: 'crud/delete' },
-									{ label: 'Merge (Upsert)', slug: 'crud/merge' },
-								],
-							},
-							{
-								label: 'Advanced Queries',
-								items: [
-									{ label: 'WHERE Clauses', slug: 'advanced/where' },
-									{ label: 'Patterns & Paths', slug: 'advanced/patterns' },
-									{ label: 'WITH & Subqueries', slug: 'advanced/with' },
-									{ label: 'RETURN & Projections', slug: 'advanced/return' },
-									{ label: 'UNION', slug: 'advanced/union' },
-									{ label: 'UNWIND', slug: 'advanced/unwind' },
-									{ label: 'CALL & Procedures', slug: 'advanced/call' },
+									{ label: 'Writing Queries', slug: 'crud/cypher' },
 								],
 							},
 							{

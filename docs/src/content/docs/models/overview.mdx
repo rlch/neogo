@@ -87,8 +87,8 @@ driver, err := neogo.New(
 | Struct with `neogo.Relationship` | Relationship |
 | `neo4j` tag on embedded type | Label / Relationship Type |
 | `neo4j` tag on fields | Property name |
-| Field without tag | Property with snake_case name |
-| Field with `neo4j:"-"` | Ignored |
+| Field without tag | Skipped |
+| Field with `neo4j:"-"` | Skipped |
 
 ## Type Mapping
 
@@ -103,6 +103,23 @@ driver, err := neogo.New(
 | `[]T` | List |
 | `map[string]any` | Map |
 | `*T` (pointer) | Nullable property |
+
+## Node ID
+
+The base `neogo.Node` type includes an `ID` field:
+
+```go
+type Node struct {
+    ID string `neo4j:"id"`
+}
+```
+
+You can generate ULIDs with `GenerateID()`:
+
+```go
+person := Person{Name: "Alice"}
+person.GenerateID()  // Sets ID to a new ULID
+```
 
 ## Next Steps
 
