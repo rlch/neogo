@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/goccy/go-json"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
 	"github.com/rlch/neogo/internal"
@@ -262,7 +261,7 @@ func (c *runnerImpl) run(
 	if err != nil {
 		return nil, fmt.Errorf("cannot compile cypher: %w", err)
 	}
-	canonicalizedParams, err := canonicalizeParams(cy.Parameters)
+	canonicalizedParams, err := c.registry.canonicalizeParams(cy.Parameters)
 	if err != nil {
 		return nil, fmt.Errorf("cannot serialize parameters: %w", err)
 	}
@@ -317,7 +316,7 @@ func (c *runnerImpl) StreamWithParams(ctx context.Context, params map[string]any
 	if err != nil {
 		return fmt.Errorf("cannot compile cypher: %w", err)
 	}
-	canonicalizedParams, err := canonicalizeParams(cy.Parameters)
+	canonicalizedParams, err := c.registry.canonicalizeParams(cy.Parameters)
 	if err != nil {
 		return fmt.Errorf("cannot serialize parameters: %w", err)
 	}
@@ -533,43 +532,3 @@ func (c *runnerImpl) executeTransaction(
 	return
 }
 
-func canonicalizeParams(params map[string]any) (map[string]any, error) {
-	canon := make(map[string]any, len(params))
-	if len(params) == 0 {
-		return canon, nil
-	}
-	for k, v := range params {
-		if v == nil {
-			canon[k] = nil
-		}
-		vv := reflect.ValueOf(v)
-		for vv.Kind() == reflect.Ptr {
-			vv = vv.Elem()
-		}
-		switch vv.Kind() {
-		case reflect.Slice:
-			bytes, err := json.Marshal(v)
-			if err != nil {
-				return nil, fmt.Errorf("cannot marshal slice: %w", err)
-			}
-			var js []any
-			if err := json.Unmarshal(bytes, &js); err != nil {
-				return nil, fmt.Errorf("cannot unmarshal slice: %w", err)
-			}
-			canon[k] = js
-		case reflect.Map, reflect.Struct:
-			bytes, err := json.Marshal(v)
-			if err != nil {
-				return nil, fmt.Errorf("cannot marshal map: %w", err)
-			}
-			var js any
-			if err := json.Unmarshal(bytes, &js); err != nil {
-				return nil, fmt.Errorf("cannot unmarshal map: %w", err)
-			}
-			canon[k] = js
-		default:
-			canon[k] = v
-		}
-	}
-	return canon, nil
-}

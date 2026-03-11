@@ -880,7 +880,7 @@ func TestResultImpl(t *testing.T) {
 				Return(n).
 				Compile()
 			assert.NoError(t, err)
-			params, err := canonicalizeParams(cy.Parameters)
+			params, err := (&registry{}).canonicalizeParams(cy.Parameters)
 			assert.NoError(t, err)
 
 			r := runnerImpl{session: session}

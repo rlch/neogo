@@ -49,6 +49,12 @@ func New(
 	if len(cfg.Types) > 0 {
 		d.registerTypes(cfg.Types...)
 	}
+	for _, h := range cfg.MarshalHooks {
+		d.registerMarshalHook(h)
+	}
+	for _, h := range cfg.UnmarshalHooks {
+		d.registerUnmarshalHook(h)
+	}
 
 	return &d, nil
 }
